@@ -446,3 +446,29 @@ Changes since the copy:
   API so it is never encrypted; with older or unreadable versions, or when
   `/send` answers `M_UNRECOGNIZED`, it uses `PUT /redact` as before.
   `Client.redactEventWithMetadata` (MatrixRTC) still uses `/redact`.
+- Encrypted history shared on invite (T3.2, Matrix v1.19 MSC4268):
+  `lib/encryption/room_key_bundle.dart` (`Encryption.roomKeyBundle`).
+  `Room.invite(userId, shareHistory: true)` invites, then bundles the room's
+  Megolm sessions marked `shared_history: true` (MSC3061: `KeyManager` marks
+  a new outbound session when the room is `shared` or `world_readable`, so
+  sessions started under `invited` or `joined`, and every session from
+  before this change, never leave), encrypts the bundle as an attachment
+  (`encryptFile`), uploads it and sends `m.room_key_bundle` over Olm to the
+  invitee's devices whose `encryptToDevice` holds (`Client.shareKeysWith`,
+  never blocked). Nothing is uploaded or sent when the room's
+  `m.room.history_visibility` is `joined` or absent, the invitee is banned,
+  or there is no device or no session to share. The invitee reads the
+  stable and the unstable (`io.element.msc4268.room_key_bundle`) types, only
+  over Olm and from a known, unblocked device of the sender (signed by its
+  master key when the sender has one), keeps it until the sync is through
+  and takes it in once it joins, only if the sender is who invited it (seen
+  while the invite was active); leaving drops it. The download (the
+  authenticated media path when the server has it) stops past 10 MiB before
+  anything is decrypted, the SHA-256 must match, and every session must be a
+  Megolm session of that room whose key gives its `session_id`, or nothing
+  is imported. An import never replaces a session received directly
+  (`m.room_key`, empty forwarding chain) or one known from as early an
+  index, claims the key of the known device the session's Curve25519 key
+  belongs to (as T3.1b does for `m.room_key`), and adds the bundle sender's
+  Curve25519 key to the forwarding chain. `onImported`, `onRejected` and
+  `lastImport` tell the app. Pending bundles and inviters live in memory.

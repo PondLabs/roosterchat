@@ -653,7 +653,7 @@ void main() {
         await invitee.encryption!.keyManager.setInboundGroupSession(
           _roomId,
           sessionId,
-          inviter.identityKey!,
+          inviter.identityKey,
           {
             'algorithm': AlgorithmTypes.megolmV1AesSha2,
             'room_id': _roomId,
@@ -677,7 +677,7 @@ void main() {
         await invitee.encryption!.keyManager.setInboundGroupSession(
           _roomId,
           sessionId,
-          inviter.identityKey!,
+          inviter.identityKey,
           {
             ...forwarded,
             'forwarding_curve25519_key_chain': ['somebody'],
