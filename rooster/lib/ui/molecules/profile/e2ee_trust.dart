@@ -146,8 +146,14 @@ abstract final class E2eeTrustResolver {
       (u) => u.id != me,
     );
     if (others.isEmpty) return E2eeTrust.unverified;
-    return combine(
+    final trust = combine(
         others.map((u) => forUser(room.client, u.id, identities: identities)));
+    // Members not loaded yet (lazy loading) get the keys too: the room is
+    // only verified once every one of them is known.
+    if (trust == E2eeTrust.verified && !room.participantListComplete) {
+      return E2eeTrust.unverified;
+    }
+    return trust;
   }
 }
 
