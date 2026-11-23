@@ -9601,6 +9601,46 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelServerAdminConfirmLockTitle": "Lock account",
+  "@labelServerAdminConfirmLockTitle": {
+    "description": "Title of the confirmation dialog before a server administrator locks an account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminConfirmLock": "Lock {user}? All of their sessions will stop working until an administrator unlocks the account.",
+  "@messageServerAdminConfirmLock": {
+    "description": "Question in the confirmation dialog before locking a user's account; user is the Matrix ID",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "promptServerAdminLock": "Lock",
+  "@promptServerAdminLock": {
+    "description": "Button that confirms locking an account in the server administration tools",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminConfirmSuspendTitle": "Suspend account",
+  "@labelServerAdminConfirmSuspendTitle": {
+    "description": "Title of the confirmation dialog before a server administrator suspends an account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminConfirmSuspend": "Suspend {user}? They will still be able to read, but won't be able to send messages, join rooms or change their profile.",
+  "@messageServerAdminConfirmSuspend": {
+    "description": "Question in the confirmation dialog before suspending a user's account; user is the Matrix ID",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "promptServerAdminSuspend": "Suspend",
+  "@promptServerAdminSuspend": {
+    "description": "Button that confirms suspending an account in the server administration tools",
+    "type": "text",
+    "placeholders": {}
+  },
   "messageServerAdminForbidden": "Only administrators of your server can do this.",
   "@messageServerAdminForbidden": {
     "description": "Shown in the server administration tools when the server refuses because the user is not one of its administrators",

@@ -10,7 +10,9 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart' as intl;
 import 'package:rooster/client/matrix/components/social_admin/matrix_server_admin.dart';
 import 'package:rooster/generated/intl/messages_all.dart';
+import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/pages/settings/categories/account/account_state/server_admin_panel.dart';
+import 'package:rooster/utils/common_strings.dart';
 
 import '../matrix_room_directory/fakes.dart';
 
@@ -80,7 +82,8 @@ void main() {
   bool switchValue(WidgetTester tester, Key key) =>
       tester.widget<SwitchListTile>(find.byKey(key)).value;
 
-  testWidgets('looks up, then locks and unsuspends with PUT', (tester) async {
+  testWidgets('looks up, then locks after confirmation and unsuspends with PUT',
+      (tester) async {
     final server = AdminServer();
     final script = await pumpPanel(tester, server);
     await lookUp(tester, target);
@@ -90,12 +93,27 @@ void main() {
       'GET /_matrix/client/v1/admin/lock/$encoded',
       'GET /_matrix/client/v1/admin/suspend/$encoded',
     ]);
+    expect(find.byKey(ServerAdminPanel.resultUserKey), findsOneWidget);
+    expect(
+        tester
+            .widget<Text>(find.descendant(
+                of: find.byKey(ServerAdminPanel.resultUserKey),
+                matching: find.byType(Text)))
+            .data,
+        target);
     expect(find.textContaining('10.0.0.7'), findsOneWidget);
     expect(switchValue(tester, ServerAdminPanel.lockedKey), isFalse);
     expect(switchValue(tester, ServerAdminPanel.suspendedKey), isTrue);
 
     await tester.tap(find.byKey(ServerAdminPanel.lockedKey));
     await settle(tester);
+    expect(script.where('PUT', lockPath), isEmpty);
+    await tester.tap(find.descendant(
+        of: find.byType(ConfirmationDialogWidget),
+        matching: find.text(ServerAdminPanel.promptServerAdminLock)));
+    await settle(tester);
+
+    // Turning suspension off sends PUT without a lock/suspend confirmation.
     await tester.tap(find.byKey(ServerAdminPanel.suspendedKey));
     await settle(tester);
 
@@ -108,6 +126,70 @@ void main() {
     expect(switchValue(tester, ServerAdminPanel.lockedKey), isTrue);
     expect(switchValue(tester, ServerAdminPanel.suspendedKey), isFalse);
     expect(find.byKey(ServerAdminPanel.noticeKey), findsNothing);
+  });
+
+  // Review c1-2: locking or suspending another account asks first, naming
+  // the account; one stray tap sends nothing.
+  testWidgets(
+      'c1-2: one tap on Locked or Suspended sends no PUT before a confirmation',
+      (tester) async {
+    final server = AdminServer()..suspended = false;
+    final script = await pumpPanel(tester, server);
+    await lookUp(tester, target);
+
+    await tester.tap(find.byKey(ServerAdminPanel.lockedKey));
+    await settle(tester);
+    expect(script.where('PUT', lockPath), isEmpty);
+    expect(
+        find.byType(Dialog, skipOffstage: false).evaluate().isNotEmpty ||
+            find.byType(AlertDialog).evaluate().isNotEmpty,
+        isTrue);
+    expect(find.textContaining(target), findsWidgets);
+    expect(script.where('PUT', suspendPath), isEmpty);
+
+    // Cancelling leaves the switch untouched and sends nothing.
+    await tester.tap(find.descendant(
+        of: find.byType(ConfirmationDialogWidget),
+        matching: find.text(CommonStrings.promptCancel)));
+    await settle(tester);
+    expect(script.where('PUT', lockPath), isEmpty);
+    expect(switchValue(tester, ServerAdminPanel.lockedKey), isFalse);
+
+    // Suspending also asks first, naming the account, and only sends on confirm.
+    await tester.tap(find.byKey(ServerAdminPanel.suspendedKey));
+    await settle(tester);
+    expect(script.where('PUT', suspendPath), isEmpty);
+    expect(
+        find.byType(Dialog, skipOffstage: false).evaluate().isNotEmpty ||
+            find.byType(AlertDialog).evaluate().isNotEmpty,
+        isTrue);
+    expect(find.textContaining(target), findsWidgets);
+
+    await tester.tap(find.descendant(
+        of: find.byType(ConfirmationDialogWidget),
+        matching: find.text(ServerAdminPanel.promptServerAdminSuspend)));
+    await settle(tester);
+    expect(script.where('PUT', suspendPath).map((r) => r.body), [
+      {'suspended': true}
+    ]);
+    expect(switchValue(tester, ServerAdminPanel.suspendedKey), isTrue);
+  });
+
+  testWidgets('c1-2: editing the user field clears the previous lookup result',
+      (tester) async {
+    final server = AdminServer();
+    await pumpPanel(tester, server);
+    await lookUp(tester, target);
+    expect(find.byKey(ServerAdminPanel.resultUserKey), findsOneWidget);
+    expect(find.byKey(ServerAdminPanel.lockedKey), findsOneWidget);
+    expect(find.byKey(ServerAdminPanel.suspendedKey), findsOneWidget);
+
+    await tester.enterText(
+        find.byKey(ServerAdminPanel.userFieldKey), '@carol:example.org');
+    await tester.pump();
+    expect(find.byKey(ServerAdminPanel.resultUserKey), findsNothing);
+    expect(find.byKey(ServerAdminPanel.lockedKey), findsNothing);
+    expect(find.byKey(ServerAdminPanel.suspendedKey), findsNothing);
   });
 
   for (final locale in ['en', 'pt']) {
@@ -136,6 +218,10 @@ void main() {
     final script = await pumpPanel(tester, server);
     await lookUp(tester, target);
     await tester.tap(find.byKey(ServerAdminPanel.lockedKey));
+    await settle(tester);
+    await tester.tap(find.descendant(
+        of: find.byType(ConfirmationDialogWidget),
+        matching: find.text(ServerAdminPanel.promptServerAdminLock)));
     await settle(tester);
 
     expect(script.where('PUT', lockPath), hasLength(1));

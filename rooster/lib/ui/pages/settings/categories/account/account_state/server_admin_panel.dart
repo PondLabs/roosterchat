@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:rooster/client/matrix/components/social_admin/matrix_server_admin.dart';
 import 'package:rooster/debug/log.dart';
+import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/user_profile/user_device_list_view.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 /// Server tools for server administrators: look up an account's sessions
@@ -15,6 +17,7 @@ class ServerAdminPanel extends StatefulWidget {
 
   static const userFieldKey = ValueKey('server-admin-user');
   static const lookUpKey = ValueKey('server-admin-look-up');
+  static const resultUserKey = ValueKey('server-admin-result-user');
   static const lockedKey = ValueKey('server-admin-locked');
   static const suspendedKey = ValueKey('server-admin-suspended');
   static const noticeKey = ValueKey('server-admin-notice');
@@ -50,6 +53,44 @@ class ServerAdminPanel extends StatefulWidget {
       name: "labelServerAdminSuspended",
       desc: "Switch in the server administration tools: the account is "
           "suspended, it can read but not send, join or change its profile");
+
+  static String get labelServerAdminConfirmLockTitle =>
+      Intl.message("Lock account",
+          name: "labelServerAdminConfirmLockTitle",
+          desc: "Title of the confirmation dialog before a server "
+              "administrator locks an account");
+
+  static String messageServerAdminConfirmLock(String user) => Intl.message(
+      "Lock $user? All of their sessions will stop working until an "
+      "administrator unlocks the account.",
+      name: "messageServerAdminConfirmLock",
+      args: [user],
+      desc: "Question in the confirmation dialog before locking a user's "
+          "account; user is the Matrix ID");
+
+  static String get promptServerAdminLock => Intl.message("Lock",
+      name: "promptServerAdminLock",
+      desc: "Button that confirms locking an account in the server "
+          "administration tools");
+
+  static String get labelServerAdminConfirmSuspendTitle =>
+      Intl.message("Suspend account",
+          name: "labelServerAdminConfirmSuspendTitle",
+          desc: "Title of the confirmation dialog before a server "
+              "administrator suspends an account");
+
+  static String messageServerAdminConfirmSuspend(String user) => Intl.message(
+      "Suspend $user? They will still be able to read, but won't be able to "
+      "send messages, join rooms or change their profile.",
+      name: "messageServerAdminConfirmSuspend",
+      args: [user],
+      desc: "Question in the confirmation dialog before suspending a user's "
+          "account; user is the Matrix ID");
+
+  static String get promptServerAdminSuspend => Intl.message("Suspend",
+      name: "promptServerAdminSuspend",
+      desc: "Button that confirms suspending an account in the server "
+          "administration tools");
 
   static String get messageServerAdminForbidden =>
       Intl.message("Only administrators of your server can do this.",
@@ -105,15 +146,33 @@ class _ServerAdminPanelState extends State<ServerAdminPanel> {
     super.dispose();
   }
 
+  void clearResult() {
+    if (result != null || userId != null || notice != null) {
+      setState(() {
+        result = null;
+        userId = null;
+        notice = null;
+      });
+    }
+  }
+
   Future<void> lookUp() async {
     final id = field.text.trim();
     if (!RegExp(r'^@[^\s:]+:\S+$').hasMatch(id)) {
-      setState(() => notice = ServerAdminPanel.messageServerAdminInvalidUser);
+      setState(() {
+        result = null;
+        userId = null;
+        notice = ServerAdminPanel.messageServerAdminInvalidUser;
+      });
       return;
     }
     setState(() => busy = true);
     final found = await widget.admin.lookUp(id);
     if (!mounted) return;
+    if (field.text.trim() != id) {
+      setState(() => busy = false);
+      return;
+    }
     setState(() {
       busy = false;
       userId = id;
@@ -126,6 +185,25 @@ class _ServerAdminPanelState extends State<ServerAdminPanel> {
   Future<void> change(bool locked, bool value) async {
     final id = userId, current = result;
     if (id == null || current == null) return;
+    if (value) {
+      final confirmed = await AdaptiveDialog.confirmation(
+        context,
+        title: locked
+            ? ServerAdminPanel.labelServerAdminConfirmLockTitle
+            : ServerAdminPanel.labelServerAdminConfirmSuspendTitle,
+        prompt: locked
+            ? ServerAdminPanel.messageServerAdminConfirmLock(id)
+            : ServerAdminPanel.messageServerAdminConfirmSuspend(id),
+        confirmationText: locked
+            ? ServerAdminPanel.promptServerAdminLock
+            : ServerAdminPanel.promptServerAdminSuspend,
+        cancelText: CommonStrings.promptCancel,
+        dangerous: true,
+      );
+      if (confirmed != true || !mounted || userId != id || result != current) {
+        return;
+      }
+    }
     setState(() => busy = true);
     try {
       final answer = locked
@@ -143,7 +221,13 @@ class _ServerAdminPanelState extends State<ServerAdminPanel> {
   @override
   Widget build(BuildContext context) {
     final found = result;
+    final shownUser = userId;
     final devices = found?.whois?.devices ?? const {};
+    final hasDetails = found != null &&
+        shownUser != null &&
+        (found.whois != null ||
+            found.locked != null ||
+            found.suspended != null);
     return tiamat.Panel(
       mode: tiamat.TileType.surfaceContainerLow,
       header: ServerAdminPanel.labelServerAdminHeader,
@@ -157,6 +241,7 @@ class _ServerAdminPanelState extends State<ServerAdminPanel> {
             controller: field,
             decoration: InputDecoration(
                 labelText: ServerAdminPanel.labelServerAdminUser),
+            onChanged: (_) => clearResult(),
             onSubmitted: (_) => lookUp(),
           ),
           tiamat.Button.secondary(
@@ -167,6 +252,11 @@ class _ServerAdminPanelState extends State<ServerAdminPanel> {
           ),
           if (notice != null)
             tiamat.Text.error(notice!, key: ServerAdminPanel.noticeKey),
+          if (hasDetails)
+            tiamat.Text.labelEmphasised(
+              shownUser,
+              key: ServerAdminPanel.resultUserKey,
+            ),
           if (found?.whois != null) ...[
             tiamat.Text.labelEmphasised(
                 UserDeviceListView.labelProfileSessions(devices.length)),
