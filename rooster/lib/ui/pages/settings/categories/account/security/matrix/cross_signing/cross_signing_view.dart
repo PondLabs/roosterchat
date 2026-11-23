@@ -331,6 +331,7 @@ class _MatrixCrossSigningViewState extends State<MatrixCrossSigningView> {
                 await widget.onAskSetupCrossSigning?.call();
               });
 
+              if (!mounted) return;
               setState(() {
                 isActionLoading = false;
               });

@@ -3,15 +3,21 @@ import 'dart:async';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/client_manager.dart';
 import 'package:rooster/client/components/account_switch_prefix/account_switch_prefix.dart';
+import 'package:rooster/client/matrix/auth/matrix_account_lifecycle.dart';
+import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/stale_info.dart';
+import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/molecules/user_panel.dart';
+import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/navigation/adaptive_text_dialog.dart';
 import 'package:rooster/ui/pages/login/login_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' as material show IconButton;
 import 'package:intl/intl.dart';
 import 'package:just_the_tooltip/just_the_tooltip.dart';
 import 'package:provider/provider.dart';
+import 'package:rooster/ui/pages/settings/categories/account/account_management/matrix_account_settings.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 import 'package:tiamat/tiamat.dart';
 
@@ -196,6 +202,12 @@ class _AccountManagementSettingsTabState
                   ],
                 ),
               ),
+              if (client is MatrixClient)
+                material.IconButton(
+                  tooltip: MatrixAccountSettings.labelAccountSettings,
+                  icon: const Icon(Icons.manage_accounts),
+                  onPressed: () => openAccountSettings(client),
+                ),
               tiamat.Button.danger(
                 text: promptLogoutSingleAccount,
                 onTap: () {
@@ -207,6 +219,26 @@ class _AccountManagementSettingsTabState
         ),
       ),
     );
+  }
+
+  void openAccountSettings(MatrixClient client) {
+    final mx = client.matrixClient;
+    AdaptiveDialog.show(context,
+        title: MatrixAccountSettings.labelAccountSettings,
+        builder: (dialog) => MatrixAccountSettings(
+              lifecycle: MatrixAccountLifecycle(mx, userId: mx.userID),
+              onDeactivated: () async {
+                Navigator.of(dialog).pop();
+                try {
+                  await widget.clientManager.logoutClient(client);
+                } catch (e, s) {
+                  // The server already ended the session: only the data
+                  // here is left to clear, which logout did.
+                  Log.onError(e, s);
+                  widget.clientManager.removeClient(client);
+                }
+              },
+            ));
   }
 
   Future<void> setPrefixDialog(Client client) async {

@@ -1,4 +1,5 @@
 import 'package:rooster/client/alert.dart';
+import 'package:rooster/client/matrix/auth/matrix_account_lifecycle.dart';
 import 'package:rooster/client/matrix/components/dehydrated_devices/matrix_dehydrated_devices_component.dart';
 import 'package:rooster/client/matrix/components/key_portability/megolm_key_portability.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
@@ -106,11 +107,6 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
       supportsLegacyUIA == false &&
       authMetadataAnswered &&
       accountManagementUri == null;
-
-  /// The first of [actions] the server announces, in that order.
-  String? announcedAction(List<String> actions) => actions
-      .where((action) => supportedActions?.contains(action) == true)
-      .firstOrNull;
 
   String get labelMatrixCrossSigning => Intl.message("Cross signing",
       desc: "Title label for matrix cross signing",
@@ -463,45 +459,38 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
     getDevices();
   }
 
-  /// Opens the account page on signing [deviceID] out: MSC4191's
-  /// `org.matrix.session_end`, or `org.matrix.device_delete`, its older
-  /// name, when only that one is announced.
+  /// Opens the account page on signing [deviceID] out (MSC4191's
+  /// `org.matrix.session_end`), else on the session, else on the list.
   void removeDeviceOAuth(String deviceID) {
-    final action = announcedAction(const [
-          "org.matrix.session_end",
-          "org.matrix.device_delete",
-        ]) ??
-        announcedAction(const [
-          "org.matrix.session_view",
-          "org.matrix.device_view",
-        ]);
-    if (action == null) return openSessionsList();
-    openAccountPage({"action": action, "device_id": deviceID});
+    final page = [
+      AccountManagementActions.sessionEnd,
+      AccountManagementActions.sessionView,
+    ]
+        .map((action) => accountManagementLink(
+            accountManagementUri, supportedActions,
+            action: action, deviceId: deviceID))
+        .nonNulls
+        .firstOrNull;
+    if (page == null) return openSessionsList();
+    openAccountPage(page);
   }
 
   /// Opens the account page on the list of sessions, where the inactive
   /// ones are signed out.
   void openSessionsList() {
-    final action = announcedAction(const [
-      "org.matrix.sessions_list",
-      "org.matrix.devices_list",
-    ]);
-    openAccountPage({if (action != null) "action": action});
+    final page = accountManagementLink(accountManagementUri, supportedActions,
+            action: AccountManagementActions.sessionsList) ??
+        accountManagementLink(accountManagementUri, supportedActions);
+    if (page != null) openAccountPage(page);
   }
 
-  void openAccountPage(Map<String, String> query) {
-    final page = accountManagementUri!;
+  void openAccountPage(Uri page) {
     sentToAccountPage = true;
     // Without a context: nothing to ask, as this screen says where the
     // button leads and the link is the server's own, so on the web the
     // page opens in the same task as the tap (no popup blocker stops it).
-    LinkUtils.open(
-        query.isEmpty
-            ? page
-            : page
-                .replace(queryParameters: {...page.queryParameters, ...query}),
-        filterTrackingParameters: false,
-        bypassConfirmation: true);
+    LinkUtils.open(page,
+        filterTrackingParameters: false, bypassConfirmation: true);
   }
 
   void onUpdated() {

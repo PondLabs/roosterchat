@@ -8388,6 +8388,74 @@
     "type": "text",
     "placeholders": {}
   },
+  "promptLoginForgotPassword": "Forgot password?",
+  "@promptLoginForgotPassword": {
+    "description": "Link on the login screen to reset the password by email",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPasswordReset": "Reset password",
+  "@labelPasswordReset": {
+    "description": "Title of the dialog that resets a forgotten password by email",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePasswordResetEmail": "Enter the email address on your account. The server will send you a link.",
+  "@messagePasswordResetEmail": {
+    "description": "First step of resetting a forgotten password",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptPasswordResetSend": "Send link",
+  "@promptPasswordResetSend": {
+    "description": "Button that asks the server to email a password reset link",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePasswordResetSent": "We sent a link to {email}. Open it, then choose a new password here.",
+  "@messagePasswordResetSent": {
+    "description": "Second step of resetting a forgotten password, with the email address the link went to",
+    "type": "text",
+    "placeholders": {
+      "email": {}
+    }
+  },
+  "labelNewPassword": "New password",
+  "@labelNewPassword": {
+    "description": "Field for the new password when resetting or changing it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSignOutOtherSessions": "Sign out of my other sessions",
+  "@labelSignOutOtherSessions": {
+    "description": "Checkbox when setting a new password: also sign out every other device signed in to the account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorPasswordResetNotConfirmed": "The link was not opened yet, or it expired. Open the latest email, or send a new link.",
+  "@errorPasswordResetNotConfirmed": {
+    "description": "Setting the new password failed because the server has not seen the emailed link opened, or the link expired",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptPasswordResetSendAgain": "Send a new link",
+  "@promptPasswordResetSendAgain": {
+    "description": "Button to email the password reset link again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorPasswordResetNoAccount": "No account on this server uses that email address.",
+  "@errorPasswordResetNoAccount": {
+    "description": "Sending the password reset link failed: the address is on no account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePasswordResetDone": "Your password was changed. You can log in with it now.",
+  "@messagePasswordResetDone": {
+    "description": "Last step of resetting a forgotten password",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelReauthenticateTitle": "Sign in again",
   "@labelReauthenticateTitle": {
     "description": "Title of the dialog, and of the alert on the Home screen, when the server no longer accepts this device's session and the person has to sign in again",
@@ -8451,6 +8519,74 @@
     "description": "In the dialog to sign in again, when the server answered for another account or another device than this one",
     "type": "text",
     "placeholders": {}
+  },
+  "promptLoginCreateAccount": "Create account",
+  "@promptLoginCreateAccount": {
+    "description": "Link on the login screen, title and button of the form that creates a new account on the server typed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRegisterUsername": "Username",
+  "@labelRegisterUsername": {
+    "description": "Field of the form that creates an account: the name it will have on the server",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRegisterPassword": "Password",
+  "@labelRegisterPassword": {
+    "description": "Field of the form that creates an account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRegisterConfirmPassword": "Confirm password",
+  "@labelRegisterConfirmPassword": {
+    "description": "Field where a new password is typed a second time",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorPasswordsDiffer": "The passwords do not match.",
+  "@errorPasswordsDiffer": {
+    "description": "Under a form where a new password is typed twice, when the two differ",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorRegisterUserInUse": "That username is taken. Pick another.",
+  "@errorRegisterUserInUse": {
+    "description": "Creating an account failed: the server has an account with that name",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorRegisterInvalidUsername": "That username cannot be used. Use lowercase letters, numbers, and . _ = - / only.",
+  "@errorRegisterInvalidUsername": {
+    "description": "Creating an account failed: the name has characters Matrix does not allow; keep the list of characters as it is",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorRegisterExclusive": "That username is reserved on this server. Pick another.",
+  "@errorRegisterExclusive": {
+    "description": "Creating an account failed: the name belongs to a bridge or service of the server",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorRegisterWeakPassword": "That password is too weak. Pick a longer one.",
+  "@errorRegisterWeakPassword": {
+    "description": "Creating an account or changing the password failed: the server finds the password too weak",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorRegisterDisabled": "This server does not let new accounts sign up here.",
+  "@errorRegisterDisabled": {
+    "description": "Creating an account failed: the server has registration turned off",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorRegisterFailed": "Could not create the account: {reason}",
+  "@errorRegisterFailed": {
+    "description": "Creating an account failed for another reason, with the server's message",
+    "type": "text",
+    "placeholders": {
+      "reason": {}
+    }
   },
   "updateInstalledTitle": "Update Installed",
   "@updateInstalledTitle": {
@@ -8555,6 +8691,102 @@
   "messageRoomUiaLoginFailed": "Login failed...",
   "@messageRoomUiaLoginFailed": {
     "description": "Shown when signing in again for a sensitive action failed, in the dialog where the server asked for it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelUiaPassword": "Enter your password",
+  "@labelUiaPassword": {
+    "description": "Title of the dialog where the server asks for the account's password before an account change (a new password, an email address, deactivating the account)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUiaWrongPassword": "That password was not accepted. Try again.",
+  "@messageUiaWrongPassword": {
+    "description": "In the password dialog of an account change, after the server refused the password typed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelUiaRegistrationToken": "Registration token",
+  "@labelUiaRegistrationToken": {
+    "description": "Title of the dialog asking for the token some servers require to create an account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUiaRegistrationToken": "This server needs a registration token to create an account. Ask its admin for one.",
+  "@messageUiaRegistrationToken": {
+    "description": "Explanation in the registration token dialog",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUiaRegistrationTokenRefused": "That token was not accepted. Check it and try again.",
+  "@messageUiaRegistrationTokenRefused": {
+    "description": "In the registration token dialog, after the server refused the token typed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelUiaTerms": "The server's terms",
+  "@labelUiaTerms": {
+    "description": "Title of the dialog listing the policies (terms of service, privacy policy) the server asks people to accept to sign up",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUiaTerms": "Read each of these and accept them to continue.",
+  "@messageUiaTerms": {
+    "description": "Explanation above the list of policies in the terms dialog",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptUiaAcceptPolicy": "I have read and accept: {policy}",
+  "@promptUiaAcceptPolicy": {
+    "description": "Checkbox next to one policy in the terms dialog, with the policy's name as the server gives it (Privacy Policy)",
+    "type": "text",
+    "placeholders": {
+      "policy": {}
+    }
+  },
+  "labelUiaEmail": "Email address",
+  "@labelUiaEmail": {
+    "description": "Title of the dialog asking for an email address the server will confirm with a link, and the placeholder of its field",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUiaEmailSent": "We sent a link to {address}. Open it, then come back and continue.",
+  "@messageUiaEmailSent": {
+    "description": "After the server sent a confirmation link to the email address typed, with that address",
+    "type": "text",
+    "placeholders": {
+      "address": {}
+    }
+  },
+  "labelUiaPhoneCountry": "Country, as a two-letter code (BR, US, PT)",
+  "@labelUiaPhoneCountry": {
+    "description": "Title of the dialog asking which country a phone number is from, as its ISO code, before the number itself",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelUiaPhoneNumber": "Phone number, with the area code",
+  "@labelUiaPhoneNumber": {
+    "description": "Title of the dialog asking for a phone number the server will send a code to",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUiaSmsCode": "Enter the code sent to {phone}",
+  "@messageUiaSmsCode": {
+    "description": "Title of the dialog asking for the code a text message brought to the phone number shown",
+    "type": "text",
+    "placeholders": {
+      "phone": {}
+    }
+  },
+  "messageUiaFinishOnWebsite": "Finish this step on your server's website: open it, follow the steps there, then come back and continue.",
+  "@messageUiaFinishOnWebsite": {
+    "description": "When the server asks for a step only its website can do (a captcha, single sign-on, an approval), with buttons to open the website and to continue after",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorUiaUnsupported": "The server asks for a step this app cannot do, so this could not be finished.",
+  "@errorUiaUnsupported": {
+    "description": "When the server asks for a kind of confirmation the app does not know",
     "type": "text",
     "placeholders": {}
   },
@@ -9063,6 +9295,134 @@
   "labelSettingsAccountPrefixDescription": "When more than one of your logged in accounts share the same room, you can type this prefix to quickly send messages from this account",
   "@labelSettingsAccountPrefixDescription": {
     "description": "Explanation in the 'Set Prefix' dialog of Settings > Manage Accounts",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelAccountSettings": "Account settings",
+  "@labelAccountSettings": {
+    "description": "Settings > Manage Accounts: button on an account, and the title of what it opens (password, email addresses, deactivation)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageAccountOnWebsite": "Your server manages this account on its own website.",
+  "@messageAccountOnWebsite": {
+    "description": "Account settings of an account on a server with an account website: the buttons below open that website",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptAccountManage": "Manage account",
+  "@promptAccountManage": {
+    "description": "Opens the server's account website on its main page",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptAccountProfile": "Profile",
+  "@promptAccountProfile": {
+    "description": "Opens the server's account website on the account's profile",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptAccountSessions": "Sessions",
+  "@promptAccountSessions": {
+    "description": "Opens the server's account website on the list of signed-in devices",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptAccountResetIdentity": "Reset encryption identity",
+  "@promptAccountResetIdentity": {
+    "description": "Opens the server's account website where the keys that verify the account's sessions (cross-signing) can be reset",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptChangePassword": "Change password",
+  "@promptChangePassword": {
+    "description": "Account settings: button, and title of the dialog it opens",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelCurrentPassword": "Current password",
+  "@labelCurrentPassword": {
+    "description": "Field in the Change password dialog",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePasswordChanged": "Your password was changed.",
+  "@messagePasswordChanged": {
+    "description": "Account settings, after changing the password",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelAccountThreepids": "Email addresses and phone numbers",
+  "@labelAccountThreepids": {
+    "description": "Account settings: header of the account's email addresses and phone numbers",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptAddEmail": "Add email address",
+  "@promptAddEmail": {
+    "description": "Account settings: button",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptAddPhone": "Add phone number",
+  "@promptAddPhone": {
+    "description": "Account settings: button",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipThreepidUnbind": "Stop people finding you by this address",
+  "@tooltipThreepidUnbind": {
+    "description": "Account settings: button on an email address or phone number that unlinks it from the identity server, where people look accounts up, and keeps it on the account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorThreepidNotConfirmed": "The address was not confirmed yet. Open the link, then try again.",
+  "@errorThreepidNotConfirmed": {
+    "description": "Adding an email address failed because its confirmation link was not opened",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorThreepidInUse": "That address is already on an account.",
+  "@errorThreepidInUse": {
+    "description": "Adding an email address or phone number failed: another account on the server has it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptLoginToken": "Sign in another device",
+  "@promptLoginToken": {
+    "description": "Account settings: button that makes a one-time sign-in code",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageLoginToken": "{minutes,plural, =1{This code signs in one device, once, within 1 minute.}other{This code signs in one device, once, within {minutes} minutes.}}",
+  "@messageLoginToken": {
+    "description": "Under a one-time sign-in code made in Account settings, how long it lasts",
+    "type": "text",
+    "placeholders": {
+      "minutes": {}
+    }
+  },
+  "labelDeactivateAccount": "Deactivate account",
+  "@labelDeactivateAccount": {
+    "description": "Account settings: button, title of the dialog it opens and its final button",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDeactivateWarning": "Deactivating is permanent: you cannot sign in again, and nobody can take this username.",
+  "@messageDeactivateWarning": {
+    "description": "Warning in the Deactivate account dialog",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeactivateErase": "Also erase my messages for people who join rooms later",
+  "@labelDeactivateErase": {
+    "description": "Checkbox in the Deactivate account dialog (Matrix's erase)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeactivateConfirm": "I understand that this cannot be undone",
+  "@labelDeactivateConfirm": {
+    "description": "Checkbox in the Deactivate account dialog that must be ticked before the account can be deactivated",
     "type": "text",
     "placeholders": {}
   },

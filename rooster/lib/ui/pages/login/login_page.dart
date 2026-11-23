@@ -2,12 +2,15 @@ import 'dart:async';
 
 import 'package:rooster/client/auth.dart';
 import 'package:rooster/client/client.dart';
+import 'package:rooster/client/matrix/auth/matrix_account_lifecycle.dart';
 import 'package:rooster/client/matrix/auth/matrix_device_auth_flow.dart';
 import 'package:rooster/client/matrix/auth/matrix_oidc_login_flow.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/pages/login/login_page_view.dart';
+import 'package:rooster/ui/pages/login/password_reset_view.dart';
+import 'package:rooster/ui/pages/login/register_view.dart';
 import 'package:rooster/utils/debounce.dart';
 import 'package:rooster/utils/rng.dart';
 import 'package:flutter/material.dart';
@@ -17,9 +20,17 @@ import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, this.onSuccess, this.canNavigateBack = false});
+  const LoginPage(
+      {super.key,
+      this.onSuccess,
+      this.canNavigateBack = false,
+      this.createClient});
   final bool canNavigateBack;
   final Function(Client loggedInClient)? onSuccess;
+
+  /// Makes the client that signs in; [MatrixClient.create] when null. Tests
+  /// give one on a fake homeserver.
+  final Future<Client> Function(String internalId)? createClient;
 
   @override
   State<LoginPage> createState() => LoginPageState();
@@ -96,8 +107,9 @@ class LoginPageState extends State<LoginPage> {
 
   Future<void> _initializeLoginClient(String internalId) async {
     try {
-      final client = await MatrixClient.create(internalId)
-          .timeout(const Duration(seconds: 15));
+      final client =
+          await (widget.createClient ?? MatrixClient.create)(internalId)
+              .timeout(const Duration(seconds: 15));
       if (!mounted) return;
       loginClient = client;
 
@@ -147,7 +159,41 @@ class LoginPageState extends State<LoginPage> {
           loginFlows?.whereType<PasswordLoginFlow>().isNotEmpty == true,
       isServerValid: isServerValid,
       serverInfoError: serverInfoError,
+      onRegister: legacyAccountFlows ? doRegister : null,
+      onForgotPassword: legacyAccountFlows ? doPasswordReset : null,
     );
+  }
+
+  /// Registration and password reset of the legacy API, on a server
+  /// without OAuth 2.0 (which has its own pages for both).
+  bool get legacyAccountFlows =>
+      isServerValid &&
+      authMetadata == null &&
+      loginClient is MatrixClient &&
+      loginFlows?.whereType<PasswordLoginFlow>().isNotEmpty == true;
+
+  Future<void> doRegister() async {
+    final client = loginClient;
+    if (client is! MatrixClient) return;
+    final registered = await AdaptiveDialog.show<bool>(context,
+        title: RegisterView.promptLoginCreateAccount,
+        builder: (_) => RegisterView(
+            lifecycle: MatrixAccountLifecycle(client.matrixClient)));
+    // As any other login: the account is kept for the next start, and what
+    // follows a login (push, invitations, key verification) runs.
+    if (registered == true) {
+      await doLogin(
+          () => client.executeLoginFlow(const RegisteredAccountLoginFlow()));
+    }
+  }
+
+  void doPasswordReset() {
+    final client = loginClient;
+    if (client is! MatrixClient) return;
+    AdaptiveDialog.show(context,
+        title: PasswordResetView.labelPasswordReset,
+        builder: (_) => PasswordResetView(
+            lifecycle: MatrixAccountLifecycle(client.matrixClient)));
   }
 
   Future<void> doLogin(Future<LoginResult> Function() login) async {
