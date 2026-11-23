@@ -85,4 +85,16 @@ extension DehydratedDeviceMatrixApi on MatrixApi {
     );
     return DehydratedDeviceEvents.fromJson(response);
   }
+
+  // ROOSTER: MSC3814's `DELETE /dehydrated_device`, so turning the opt-in
+  // off leaves no dehydrated device on the server.
+  /// deletes the dehydrated device, returning its id.
+  /// https://github.com/matrix-org/matrix-spec-proposals/pull/3814
+  Future<String?> deleteDehydratedDevice() async {
+    final response = await request(
+      RequestType.DELETE,
+      '/client/unstable/org.matrix.msc3814.v1/dehydrated_device',
+    );
+    return response['device_id'] as String?;
+  }
 }
