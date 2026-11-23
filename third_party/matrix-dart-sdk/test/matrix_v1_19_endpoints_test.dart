@@ -111,11 +111,13 @@ void main() {
 
       final rooms = <String>[];
       String? from;
-      do {
-        final page = await api.getMutualRooms('@bob:example.test', from: from);
-        rooms.addAll(page.joined);
-        from = page.nextBatch;
-      } while (from != null);
+      // Bounded, so a `from` that is never sent fails instead of looping.
+      for (var page = 0; page < 5; page++) {
+        final batch = await api.getMutualRooms('@bob:example.test', from: from);
+        rooms.addAll(batch.joined);
+        from = batch.nextBatch;
+        if (from == null) break;
+      }
 
       expect(rooms, ['!a:example.test', '!b:example.test']);
       expect(requests, hasLength(2));
