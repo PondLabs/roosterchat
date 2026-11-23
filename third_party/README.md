@@ -446,6 +446,32 @@ Changes since the copy:
   API so it is never encrypted; with older or unreadable versions, or when
   `/send` answers `M_UNRECOGNIZED`, it uses `PUT /redact` as before.
   `Client.redactEventWithMetadata` (MatrixRTC) still uses `/redact`.
+- OAuth 2.0 discovery and sign-in (T2.1a): `Client.getWellknown`
+  (`lib/src/client.dart`) follows 301/302/307/308 on
+  `/.well-known/matrix/client` itself (MSC4402, Matrix v1.20): each
+  `Location` is resolved against the URL it came from, at most
+  `Client.maxWellKnownRedirects` (5) hops, only `http`/`https`, and no URL
+  twice; anything else throws `WellKnownRedirectException`, which
+  `checkHomeserver` passes on instead of treating it as "no well-known file".
+  In a browser `fetch` follows the redirects (asking it not to makes it fail).
+  `checkHomeserver` asks for `auth_metadata` before `/v3/login`, and with
+  metadata in hand a `/v3/login` that answers 404, an error or no flows no
+  longer fails the check (servers whose accounts live in MAS). In
+  `msc_2964_oidc_login_flow/`, `oidc_authorization.dart` negotiates the scopes
+  (`urn:matrix:client:api:*` and `urn:matrix:client:device:<id>` when
+  `scopes_supported` lists them, MSC2967's `urn:matrix:org.matrix.msc2967.client:*`
+  otherwise; `openid` only when the server lists no scopes or lists it),
+  tells whether a server offers Authorization Code with S256 and
+  `prompt=create`, and reads the authorization redirect
+  (`parseOidcAuthorizationCallback`: a missing or different `state`, an OAuth
+  `error` or no `code` throw `OidcCallbackException` before anything is
+  exchanged). `initOidcLoginSession` and `oidcLogin` take the metadata already
+  fetched, and the session keeps its device ID, scopes and response mode. In
+  `msc_2966_oidc_dynamic_client_registration/`, `obtainOidcClient` uses a
+  Client ID Metadata Document URL as `client_id` when the server announces
+  `client_id_metadata_document_supported: true`, and registers the client
+  (RFC 7591) otherwise; `OidcClientRegistrationException` when the server
+  offers neither.
 - Encrypted history shared on invite (T3.2, Matrix v1.19 MSC4268):
   `lib/encryption/room_key_bundle.dart` (`Encryption.roomKeyBundle`).
   `Room.invite(userId, shareHistory: true)` invites, then bundles the room's
