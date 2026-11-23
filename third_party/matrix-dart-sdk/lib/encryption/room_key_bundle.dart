@@ -45,6 +45,7 @@ enum RoomKeyBundleRejection {
   inviteNotActive,
   malformed,
   tooLarge,
+  tooMany,
   downloadFailed,
   hashMismatch,
   wrongRoom,
@@ -87,8 +88,11 @@ class RoomKeyBundleManager {
   /// How long a bundle waits for us to join the room it is for.
   static const Duration pendingLifetime = Duration(days: 1);
 
-  /// Who invited us to each room, seen while the invite was active.
-  final Map<String, String> _inviters = {};
+  /// At most this many bundles wait, in all, for rooms we have not joined.
+  static const int maxPendingBundles = 20;
+
+  /// Who invited us to each room, and when we last saw the invite active.
+  final Map<String, (String, DateTime)> _inviters = {};
   final Map<String, List<_PendingBundle>> _pending = {};
   final Map<String, RoomKeyBundleImport> _lastImports = {};
 
@@ -222,10 +226,13 @@ class RoomKeyBundleManager {
     final room = client.getRoomById(content.roomId);
     if (room != null) {
       _noteInviter(room);
-      final inviter = _inviters[room.id];
+      final inviter = _inviters[room.id]?.$1;
       if (inviter != null && inviter != event.sender) {
         return _reject(RoomKeyBundleRejection.notInvitedBySender);
       }
+    }
+    if (_pending.values.fold(0, (n, l) => n + l.length) >= maxPendingBundles) {
+      return _reject(RoomKeyBundleRejection.tooMany);
     }
     (_pending[content.roomId] ??= []).add(
       _PendingBundle(event.sender, senderKey, content, DateTime.now()),
@@ -247,7 +254,7 @@ class RoomKeyBundleManager {
     if (room.membership != Membership.invite) return;
     final member = room.getState(EventTypes.RoomMember, client.userID!);
     if (member?.content.tryGet<String>('membership') != 'invite') return;
-    _inviters[room.id] = member!.senderId;
+    _inviters[room.id] = (member!.senderId, DateTime.now());
   }
 
   /// Called after each sync: notes who invited us, drops bundles of rooms we
@@ -257,6 +264,12 @@ class RoomKeyBundleManager {
       if (room.membership == Membership.invite) _noteInviter(room);
     }
     final now = DateTime.now();
+    _inviters.removeWhere((roomId, inviter) {
+      final membership = client.getRoomById(roomId)?.membership;
+      return membership == Membership.leave ||
+          membership == Membership.ban ||
+          now.difference(inviter.$2) > pendingLifetime;
+    });
     for (final roomId in _pending.keys.toList()) {
       final bundles = _pending[roomId];
       if (bundles == null) continue;
@@ -279,9 +292,12 @@ class RoomKeyBundleManager {
       }
       if (room == null || room.membership != Membership.join) continue;
       _pending.remove(roomId);
-      final inviter = _inviters[roomId];
+      // An invite seen too long ago no longer vouches for a bundle.
+      final (inviter, seen) = _inviters.remove(roomId) ?? (null, now);
+      final vouches =
+          inviter != null && now.difference(seen) <= pendingLifetime;
       for (final bundle in bundles) {
-        if (inviter == null || bundle.senderId != inviter) {
+        if (!vouches || bundle.senderId != inviter) {
           _reject(RoomKeyBundleRejection.notInvitedBySender);
           continue;
         }

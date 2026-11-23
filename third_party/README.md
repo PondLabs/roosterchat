@@ -462,7 +462,8 @@ Changes since the copy:
   over Olm and from a known, unblocked device of the sender (signed by its
   master key when the sender has one), keeps it until the sync is through
   and takes it in once it joins, only if the sender is who invited it (seen
-  while the invite was active); leaving drops it. The download (the
+  while the invite was active, at most a day before); leaving drops it,
+  and at most 20 bundles wait at a time. The download (the
   authenticated media path when the server has it) stops past 10 MiB before
   anything is decrypted, the SHA-256 must match, and every session must be a
   Megolm session of that room whose key gives its `session_id`, or nothing

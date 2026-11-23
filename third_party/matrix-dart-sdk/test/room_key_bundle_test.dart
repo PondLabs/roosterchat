@@ -625,6 +625,19 @@ void main() {
         await expectRefused(RoomKeyBundleRejection.wrongRoom);
       });
 
+      test('past the number of bundles that may wait', () async {
+        await invited();
+        for (var i = 0; i < RoomKeyBundleManager.maxPendingBundles; i++) {
+          await sendBundle([exported(sessionId)]);
+        }
+        expect(rejections, isEmpty);
+        await sendBundle([exported(sessionId)]);
+        await left();
+        await takeIn();
+        expect(rejections.first, RoomKeyBundleRejection.tooMany);
+        expect(sessionHeld(sessionId), isNull);
+      });
+
       test('from a blocked device of the inviter', () async {
         await invited();
         await invitee.userDeviceKeys[_inviterId]!.deviceKeys[inviter.deviceID]!
