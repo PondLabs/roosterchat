@@ -187,45 +187,14 @@ class MatrixSSOLoginFlow implements SsoLoginFlow {
 
     try {
       var mx = client.getMatrixClient();
-
-      String redirectUrl = SsoLoginUri().toString();
-
-      if (PlatformUtils.isWeb) {
-        redirectUrl = Uri.parse(html.window.location.href)
-            .resolve("auth.html")
-            .toString();
-      }
-
-      String callbackScheme = Uri.parse(redirectUrl).scheme;
-
-      // https://github.com/ThexXTURBOXx/flutter_web_auth_2/blob/2b67cb9674c7d3228de4f5728a73b09ae6598cf9/flutter_web_auth_2/README.md#windows-and-linux
-      if (PlatformUtils.isLinux || PlatformUtils.isWindows) {
-        redirectUrl = "http://localhost:3001/login";
-        callbackScheme = "http://localhost:3001";
-      }
-
-      final url = mx.homeserver!.replace(
-        path:
-            '/_matrix/client/v3/login/sso/redirect${id == null ? '' : '/$id'}',
-        queryParameters: {'redirectUrl': redirectUrl},
-      );
-
-      final result = await FlutterWebAuth2.authenticate(
-          url: url.toString(),
-          callbackUrlScheme: callbackScheme,
-          options: FlutterWebAuth2Options(
-            useWebview: false,
-            landingPageHtml: _landingPage(),
-          ));
-
-      var token = Uri.parse(result).queryParameters['loginToken'];
-      if (token?.isEmpty ?? false) {
-        return LoginResultFailed();
-      }
+      final token = await obtainLoginToken(mx);
+      if (token == null) return LoginResultFailed();
 
       var login = await mx.login(
         matrix.LoginType.mLoginToken,
         token: token,
+        // Renewed on its own later (MatrixTokenRefresher).
+        refreshToken: true,
       );
 
       if (login.accessToken.isNotEmpty) {
@@ -241,6 +210,43 @@ class MatrixSSOLoginFlow implements SsoLoginFlow {
       }
       return LoginResultError(e.toString());
     }
+  }
+
+  /// Opens the server's single sign-on page and returns the `loginToken` it
+  /// hands back, or null without one. Signing the same device in again
+  /// after a refused renewal uses it too. Throws a [PlatformException] with
+  /// the code `CANCELED` when the person closes the page.
+  Future<String?> obtainLoginToken(matrix.Client mx) async {
+    String redirectUrl = SsoLoginUri().toString();
+
+    if (PlatformUtils.isWeb) {
+      redirectUrl =
+          Uri.parse(html.window.location.href).resolve("auth.html").toString();
+    }
+
+    String callbackScheme = Uri.parse(redirectUrl).scheme;
+
+    // https://github.com/ThexXTURBOXx/flutter_web_auth_2/blob/2b67cb9674c7d3228de4f5728a73b09ae6598cf9/flutter_web_auth_2/README.md#windows-and-linux
+    if (PlatformUtils.isLinux || PlatformUtils.isWindows) {
+      redirectUrl = "http://localhost:3001/login";
+      callbackScheme = "http://localhost:3001";
+    }
+
+    final url = mx.homeserver!.replace(
+      path: '/_matrix/client/v3/login/sso/redirect${id == null ? '' : '/$id'}',
+      queryParameters: {'redirectUrl': redirectUrl},
+    );
+
+    final result = await FlutterWebAuth2.authenticate(
+        url: url.toString(),
+        callbackUrlScheme: callbackScheme,
+        options: FlutterWebAuth2Options(
+          useWebview: false,
+          landingPageHtml: _landingPage(),
+        ));
+
+    final token = Uri.parse(result).queryParameters['loginToken'];
+    return token == null || token.isEmpty ? null : token;
   }
 }
 

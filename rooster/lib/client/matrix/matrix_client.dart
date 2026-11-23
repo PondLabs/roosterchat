@@ -8,6 +8,7 @@ import 'package:rooster/client/components/component_registry.dart';
 import 'package:rooster/client/error_profile.dart';
 import 'package:rooster/client/matrix/auth/matrix_oidc_login_flow.dart';
 import 'package:rooster/client/matrix/auth/matrix_sso_login_flow.dart';
+import 'package:rooster/client/matrix/auth/matrix_token_refresher.dart';
 import 'package:rooster/client/matrix/auth/matrix_username_password_login_flow.dart';
 import 'package:rooster/client/matrix/components/matrix_sync_listener.dart';
 import 'package:rooster/client/matrix/components/profile/matrix_profile_component.dart';
@@ -49,6 +50,7 @@ import 'package:matrix/encryption.dart';
 import 'package:flutter_vodozemac/flutter_vodozemac.dart' as vodozemac;
 
 import '../../ui/atoms/code_block.dart';
+import '../../ui/pages/login/reauthenticate_dialog.dart';
 import 'components/key_verification_component/matrix_key_verification_component.dart';
 import 'matrix_room.dart';
 import 'matrix_space.dart';
@@ -128,6 +130,13 @@ class MatrixClient extends Client {
   /// What the own media listens to on the SDK client, cancelled in close().
   final List<StreamSubscription<Object?>> _ownMediaListeners = [];
 
+  /// Renews the access token after a soft logout, one request at a time,
+  /// and says when the person has to sign this device in again.
+  late final MatrixTokenRefresher tokenRefresher;
+
+  /// On the Home screen while [tokenRefresher] needs the person.
+  Alert? _reauthenticationAlert;
+
   MatrixClient({
     required String identifier,
     required matrix.DatabaseApi database,
@@ -149,6 +158,7 @@ class MatrixClient extends Client {
         .where((state) => state == matrix.LoginState.loggedOut)
         .listen((_) => _clearOwnMedia()));
     _syncSpeedTrace = SyncSpeedTrace(_matrixClient.onSyncStatus.stream);
+    tokenRefresher.state.addListener(_onTokenRefreshState);
 
     self = ErrorProfile();
 
@@ -466,14 +476,22 @@ class MatrixClient extends Client {
   matrix.Client _createMatrixClient(
       String name, matrix.DatabaseApi database, http.Client? transport) {
     late final matrix.Client client;
+    tokenRefresher = MatrixTokenRefresher(() => client);
     client = matrix.Client(
       name,
       // Every request of the account goes through our client, which records
       // its timings in the speed log without content (lib/diagnostic/speed_log).
-      httpClient: SpeedHttpClient(
-        inner: transport,
-        hosts: HostClassifier(homeserver: () => client.homeserver),
+      // A soft logout renews the token and sends the request again.
+      httpClient: TokenRefreshingHttpClient(
+        inner: SpeedHttpClient(
+          inner: transport,
+          hosts: HostClassifier(homeserver: () => client.homeserver),
+        ),
+        refresher: tokenRefresher,
+        homeserver: () => client.homeserver,
       ),
+      // Also asks login and registration for a refresh token.
+      onSoftLogout: tokenRefresher.onSoftLogout,
       verificationMethods: {
         KeyVerificationMethod.emoji,
         KeyVerificationMethod.numbers,
@@ -518,6 +536,7 @@ class MatrixClient extends Client {
     try {
       await _matrixClient.logout();
     } finally {
+      _clearReauthenticationAlert();
       await _clearOwnMedia();
     }
   }
@@ -809,8 +828,58 @@ class MatrixClient extends Client {
     return room;
   }
 
+  /// Shows the dialog to sign in again, and an alert on the Home screen
+  /// that opens it, while the refresh token is refused.
+  void _onTokenRefreshState() {
+    if (tokenRefresher.state.value == TokenRefreshState.active) {
+      _clearReauthenticationAlert();
+      return;
+    }
+    if (_reauthenticationAlert != null) return;
+    final alert = _reauthenticationAlert = Alert(
+      AlertType.warning,
+      titleGetter: () => ReauthenticateDialog.labelReauthenticateTitle,
+      messageGetter: () => ReauthenticateDialog.messageReauthenticateAlert,
+      action: (context) => ReauthenticateDialog.show(context, this),
+    );
+    clientManager?.alertManager.addAlert(alert);
+    final binding = WidgetsBinding.instance;
+    binding.addPostFrameCallback((_) {
+      final context = navigator.currentContext;
+      if (context != null && context.mounted) {
+        ReauthenticateDialog.show(context, this);
+      }
+    });
+    binding.scheduleFrame();
+  }
+
+  void _clearReauthenticationAlert() {
+    final alert = _reauthenticationAlert;
+    _reauthenticationAlert = null;
+    if (alert != null) clientManager?.alertManager.clearAlert(alert);
+  }
+
+  /// The ways to sign this device in again: none for a session signed in
+  /// through OAuth 2.0, else the server's password and single sign-on.
+  Future<List<LoginFlow>> reauthenticationFlows() async {
+    final stored = await _matrixClient.database.getClient(identifier);
+    if (stored?['oidc_client_id'] != null) return [];
+    // Without the account's token, which the server no longer takes.
+    final api = matrix.MatrixApi(
+        homeserver: _matrixClient.homeserver,
+        httpClient: _matrixClient.httpClient);
+    final flows = await api.getLoginFlows() ?? [];
+    return [
+      if (flows.any((flow) => flow.type == "m.login.password"))
+        MatrixPasswordLoginFlow(),
+      if (flows.any((flow) => flow.type == "m.login.sso"))
+        ...await _getSsoFlows(api),
+    ];
+  }
+
   @override
   Future<void> close({bool closeDatabase = true}) async {
+    tokenRefresher.state.removeListener(_onTokenRefreshState);
     getComponent<MatrixUserPresenceComponent>()?.dispose();
     for (final listener in _ownMediaListeners) {
       await listener.cancel();
@@ -1039,10 +1108,10 @@ class MatrixClient extends Client {
     }
   }
 
-  Future<List<LoginFlow>> _getSsoFlows() async {
+  Future<List<LoginFlow>> _getSsoFlows([matrix.MatrixApi? api]) async {
     List<LoginFlow> result = List.empty(growable: true);
 
-    Map<String, dynamic> flows = await _matrixClient.request(
+    Map<String, dynamic> flows = await (api ?? _matrixClient).request(
       matrix.RequestType.GET,
       "/client/v3/login",
     );

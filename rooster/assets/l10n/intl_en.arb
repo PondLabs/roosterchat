@@ -8119,6 +8119,70 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelReauthenticateTitle": "Sign in again",
+  "@labelReauthenticateTitle": {
+    "description": "Title of the dialog, and of the alert on the Home screen, when the server no longer accepts this device's session and the person has to sign in again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageReauthenticateAlert": "Your session on this device has ended. Your messages and encryption keys are still here: sign in again to keep using them.",
+  "@messageReauthenticateAlert": {
+    "description": "Alert on the Home screen when the server no longer accepts this device's session; tapping it opens the dialog to sign in again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageReauthenticate": "The session of {user} on this device has ended. Sign in again to go on where you left off: this device keeps its messages and encryption keys.",
+  "@messageReauthenticate": {
+    "description": "In the dialog to sign in again, when the server no longer accepts this device's session; user is the account's Matrix ID",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageReauthenticateNoMethod": "Rooster cannot sign this device in again from here yet. You can try again later; nothing was deleted from this device.",
+  "@messageReauthenticateNoMethod": {
+    "description": "In the dialog to sign in again, when the server offers no way to sign this same device in again (a server that signs in through its own page)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelReauthenticatePassword": "Password",
+  "@labelReauthenticatePassword": {
+    "description": "Label of the password field in the dialog to sign in again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReauthenticate": "Sign in",
+  "@promptReauthenticate": {
+    "description": "Button in the dialog to sign in again, under the password",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReauthenticateSso": "Continue with {provider}",
+  "@promptReauthenticateSso": {
+    "description": "Button in the dialog to sign in again through single sign-on; provider is the sign-in provider's name, or the word for the server's own sign-in",
+    "type": "text",
+    "placeholders": {
+      "provider": {}
+    }
+  },
+  "promptReauthenticateRetry": "Try again",
+  "@promptReauthenticateRetry": {
+    "description": "Button in the dialog to sign in again that asks the server to renew the session once more, without a password",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReauthenticateLater": "Not now",
+  "@promptReauthenticateLater": {
+    "description": "Button that closes the dialog to sign in again; the alert on the Home screen opens it again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorReauthenticateOtherDevice": "The server signed in another account or device, so nothing changed here. Sign in with this account.",
+  "@errorReauthenticateOtherDevice": {
+    "description": "In the dialog to sign in again, when the server answered for another account or another device than this one",
+    "type": "text",
+    "placeholders": {}
+  },
   "updateInstalledTitle": "Update Installed",
   "@updateInstalledTitle": {
     "description": "Title for the dialog which is shown when an update has been installed",
