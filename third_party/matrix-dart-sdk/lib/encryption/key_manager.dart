@@ -238,10 +238,6 @@ class KeyManager {
         senderClaimedKeys_['ed25519'] = device.ed25519Key!;
       }
     }
-    final oldSession = getInboundGroupSession(
-      roomId,
-      sessionId,
-    );
     if (content['algorithm'] != AlgorithmTypes.megolmV1AesSha2) {
       return;
     }
@@ -268,6 +264,34 @@ class KeyManager {
       senderClaimedKeys: senderClaimedKeys_,
       allowedAtIndex: allowedAtIndex_,
     );
+    // ROOSTER: compare with the session the database keeps when none is in
+    // memory, as after a restart: upstream compared only with memory, so a
+    // session from the key backup, a forwarded key or an import that starts
+    // later replaced a better stored one and earlier messages stopped
+    // decrypting. Read without caching it ([loadInboundGroupSession] would
+    // put the stored session back in memory over one a concurrent call has
+    // just set), then look in memory again: a call that ran during the read
+    // set a session already compared with the stored one. No await from here
+    // to the memory writes below. A stored session that is kept goes in
+    // memory, where callers (a key request, a restore) look next.
+    var oldSession = getInboundGroupSession(roomId, sessionId);
+    SessionKey? stored;
+    if (oldSession == null) {
+      try {
+        final dbEntry =
+            await client.database.getInboundGroupSession(roomId, sessionId);
+        if (dbEntry != null) {
+          final dbSession = SessionKey.fromDb(dbEntry, userId);
+          if (dbSession.isValid && dbSession.sessionId == sessionId) {
+            stored = dbSession;
+          }
+        }
+      } catch (e, s) {
+        // An unreadable stored session decrypts nothing: replace it.
+        Logs().w('[KeyManager] Could not read the stored session', e, s);
+      }
+      oldSession = getInboundGroupSession(roomId, sessionId) ?? stored;
+    }
     final oldFirstIndex = oldSession?.inboundGroupSession?.firstKnownIndex ?? 0;
     final newFirstIndex = newSession.inboundGroupSession!.firstKnownIndex;
     if (oldSession == null ||
@@ -278,6 +302,10 @@ class KeyManager {
       // use new session
     } else {
       // we are gonna keep our old session
+      if (stored != null && identical(oldSession, stored)) {
+        (_inboundGroupSessions[roomId] ??= <String, SessionKey>{})[sessionId] =
+            stored; // ROOSTER
+      }
       return;
     }
 
