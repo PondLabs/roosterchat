@@ -1,5 +1,6 @@
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/ui/atoms/tiny_pill.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
@@ -15,6 +16,7 @@ class MatrixSessionView extends StatelessWidget {
       this.isThisDevice = false,
       this.inactive = false,
       this.beginVerification,
+      this.editName,
       this.removeSession});
 
   final String? displayName;
@@ -25,6 +27,10 @@ class MatrixSessionView extends StatelessWidget {
   final bool isThisDevice;
   final bool inactive;
   final Function? beginVerification;
+
+  /// Renames the session or clears its name; null hides the button, as on
+  /// a server whose account page manages sessions.
+  final VoidCallback? editName;
   final Function? removeSession;
 
   String get promptMatrixVerifySession => Intl.message("Verify",
@@ -143,6 +149,19 @@ class MatrixSessionView extends StatelessWidget {
           tiamat.Button.secondary(
             text: promptMatrixVerifySession,
             onTap: () => beginVerification?.call(),
+          ),
+        if (editName != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 4, 0),
+            child: Tooltip(
+              message: CommonStrings.promptRename,
+              child: tiamat.IconButton(
+                key: ValueKey('rename-session-$deviceId'),
+                icon: Icons.edit,
+                size: 24,
+                onPressed: editName,
+              ),
+            ),
           ),
         if (!isThisDevice && removeSession != null)
           Padding(

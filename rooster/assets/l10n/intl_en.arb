@@ -9249,6 +9249,134 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelKeyExportTitle": "Export room keys",
+  "@labelKeyExportTitle": {
+    "description": "Settings > Security: title of the row that saves the keys of your encrypted messages to a file, and reads such a file",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyExportExplanation": "Save the keys of your encrypted messages in a file protected by a passphrase, to read those messages in another app or on a new session.",
+  "@labelKeyExportExplanation": {
+    "description": "Settings > Security: explains the room key export and import",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptKeyExport": "Export",
+  "@promptKeyExport": {
+    "description": "Settings > Security: button that saves the room keys to a file",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptKeyImport": "Import",
+  "@promptKeyImport": {
+    "description": "Settings > Security: button that reads room keys from a file saved by Rooster or another Matrix app",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyImportTitle": "Import room keys",
+  "@labelKeyImportTitle": {
+    "description": "Settings > Security: title of the dialog asking for the passphrase of the key file being imported",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyExportPassphrase": "Choose a passphrase for the file. You will need it to import the keys.",
+  "@messageKeyExportPassphrase": {
+    "description": "Settings > Security > Export room keys: above the passphrase fields of the export",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyExportPassphrase": "Passphrase",
+  "@labelKeyExportPassphrase": {
+    "description": "Settings > Security > Export room keys: label of the field for the passphrase that encrypts the file",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyExportConfirmPassphrase": "Repeat the passphrase",
+  "@labelKeyExportConfirmPassphrase": {
+    "description": "Settings > Security > Export room keys: label of the second passphrase field, which must match the first",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorKeyExportPassphraseTooShort": "{howMany,plural, =1{Use at least 1 character.}other{Use at least {howMany} characters.}}",
+  "@errorKeyExportPassphraseTooShort": {
+    "description": "Settings > Security > Export room keys: the passphrase is shorter than the shortest one allowed",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "errorKeyExportPassphraseMismatch": "The passphrases are not the same.",
+  "@errorKeyExportPassphraseMismatch": {
+    "description": "Settings > Security > Export room keys: the two passphrase fields differ",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyExportDone": "{howMany,plural, =0{The file was saved, with no keys: this session has none yet.}=1{The file was saved, with 1 key.}other{The file was saved, with {howMany} keys.}}",
+  "@messageKeyExportDone": {
+    "description": "Settings > Security: after the room keys were saved to a file, how many it holds",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "messageKeyExportFailed": "The keys were not exported. Try again.",
+  "@messageKeyExportFailed": {
+    "description": "Settings > Security: exporting the room keys failed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyImportPassphrase": "Enter the passphrase the file was saved with.",
+  "@messageKeyImportPassphrase": {
+    "description": "Settings > Security > Import room keys: above the passphrase field",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyImportDone": "{howMany,plural, =0{The file holds no keys.}=1{1 key was imported.}other{{howMany} keys were imported.}}",
+  "@messageKeyImportDone": {
+    "description": "Settings > Security: after a key file was imported, how many keys it gave",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "messageKeyImportSkipped": "{howMany,plural, =1{1 key in the file could not be used.}other{{howMany} keys in the file could not be used.}}",
+  "@messageKeyImportSkipped": {
+    "description": "Settings > Security: after a key file was imported, how many of its entries were not keys this app can read",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "errorKeyImportWrongPassphrase": "The passphrase is wrong, or the file was changed.",
+  "@errorKeyImportWrongPassphrase": {
+    "description": "Settings > Security > Import room keys: the file does not open with this passphrase. Nothing was imported",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorKeyImportDamaged": "The file is damaged or incomplete. Nothing was imported.",
+  "@errorKeyImportDamaged": {
+    "description": "Settings > Security > Import room keys: the file is a key export cut short or broken",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorKeyImportNotAKeyFile": "This is not a room key file. Nothing was imported.",
+  "@errorKeyImportNotAKeyFile": {
+    "description": "Settings > Security > Import room keys: the picked file is not a Matrix key export",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorKeyImportInvalidContent": "The file opened, but holds no keys this app can read. Nothing was imported.",
+  "@errorKeyImportInvalidContent": {
+    "description": "Settings > Security > Import room keys: the passphrase was right but the content is not a list of room keys",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyImportFailed": "The keys were not imported. Try again.",
+  "@messageKeyImportFailed": {
+    "description": "Settings > Security: importing the room keys failed for another reason",
+    "type": "text",
+    "placeholders": {}
+  },
   "messageSettingsSessionsOnAccountPage": "Your server signs sessions out on its own website, which opens in your browser.",
   "@messageSettingsSessionsOnAccountPage": {
     "description": "Settings > Security > Sessions: on a server that only lets its own account website sign sessions (devices) out, says that removing one opens that website",
@@ -9372,6 +9500,36 @@
   "labelSettingsVerificationRequest": "Verification Request",
   "@labelSettingsVerificationRequest": {
     "description": "Settings > Security > Sessions: title of the dialog that verifies one of your other sessions (devices)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSessionRenameTitle": "Rename session",
+  "@labelSessionRenameTitle": {
+    "description": "Settings > Security > Sessions: title of the dialog that changes the name of one of your sessions (signed-in devices)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSessionName": "Session name",
+  "@labelSessionName": {
+    "description": "Settings > Security > Sessions: label of the field with the session's new name",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageSessionNameVisible": "People you talk with can see the names of your sessions.",
+  "@messageSessionNameVisible": {
+    "description": "Settings > Security > Sessions: in the rename dialog, warns that session names are public to other users",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptSessionNameRemove": "Remove name",
+  "@promptSessionNameRemove": {
+    "description": "Settings > Security > Sessions: button that clears the session's name, so it has none",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageSessionRenameFailed": "The session's name was not changed. Try again.",
+  "@messageSessionRenameFailed": {
+    "description": "Settings > Security > Sessions: renaming a session, or removing its name, failed; the name stays as it was",
     "type": "text",
     "placeholders": {}
   },
