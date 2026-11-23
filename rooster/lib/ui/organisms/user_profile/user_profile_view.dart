@@ -7,9 +7,12 @@ import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/adaptive_context_menu.dart';
+import 'package:rooster/ui/atoms/e2ee_trust_shield.dart';
 import 'package:rooster/ui/atoms/scaled_safe_area.dart';
 import 'package:rooster/ui/atoms/tiny_pill.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/ui/organisms/user_profile/user_device_list_view.dart';
+import 'package:rooster/ui/organisms/user_profile/user_devices.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -44,7 +47,11 @@ class UserProfileView extends StatefulWidget {
       this.preview = false,
       this.onEditProfile,
       this.onMessageButtonClicked,
-      this.onVerifyUser});
+      this.onVerifyUser,
+      this.trust,
+      this.devices = const [],
+      this.onSetDeviceBlocked,
+      this.onWithdrawVerification});
   final ImageProvider? userAvatar;
   final ImageProvider? userBanner;
   final UserPresence? presence;
@@ -67,6 +74,17 @@ class UserProfileView extends StatefulWidget {
   final String? currentPetName;
   final Future<void> Function()? onMessageButtonClicked;
   final Future<void> Function()? onVerifyUser;
+
+  /// Their encryption trust, shown as a shield; null where there is none.
+  final E2eeTrust? trust;
+
+  /// Their devices, with a button to block or unblock each one.
+  final List<UserDevice> devices;
+  final Future<void> Function(String deviceId, bool blocked)?
+      onSetDeviceBlocked;
+
+  /// Shown on the alert of a changed identity: stop raising it.
+  final Future<void> Function()? onWithdrawVerification;
   final Future<void> Function(Color?)? setColorOverride;
 
   /// Draws the card as others see it, for a preview: no menu, nothing to
@@ -92,6 +110,21 @@ class UserProfileViewState extends State<UserProfileView> {
       desc: "Button on another user's profile card to start end-to-end "
           "encryption verification with them",
       name: "promptProfileVerifyUser");
+
+  String messageProfileIdentityChanged(String user) => Intl.message(
+      "$user's identity changed since you verified them. Until you verify "
+      "them again, their messages may come from someone else.",
+      name: "messageProfileIdentityChanged",
+      args: [user],
+      desc: "Alert on the profile of a user the user had verified, whose "
+          "encryption identity was replaced since, with their name");
+
+  String get promptProfileWithdrawVerification =>
+      Intl.message("Withdraw verification",
+          name: "promptProfileWithdrawVerification",
+          desc: "Button on the alert of a user whose encryption identity "
+              "changed: accepts the new identity as not verified, and stops "
+              "the alert");
 
   String get promptProfileEditProfile => Intl.message("Edit profile",
       name: "promptProfileEditProfile",
@@ -318,6 +351,20 @@ class UserProfileViewState extends State<UserProfileView> {
                                                       children: [
                                                         displayName(),
                                                         username(context),
+                                                        if (widget.trust
+                                                            case final trust?)
+                                                          Padding(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .fromLTRB(
+                                                                    0, 0, 0, 4),
+                                                            child: E2eeTrustShield(
+                                                                trust,
+                                                                key: const ValueKey(
+                                                                    "user-profile-trust"),
+                                                                showLabel:
+                                                                    true),
+                                                          ),
                                                         pronouns(),
                                                       ],
                                                     ),
@@ -353,6 +400,16 @@ class UserProfileViewState extends State<UserProfileView> {
                                               child: buildBio(context),
                                             ),
                                           if (!widget.preview &&
+                                              widget.trust ==
+                                                  E2eeTrust.identityChanged)
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.fromLTRB(
+                                                      8, 0, 8, 0),
+                                              child:
+                                                  buildIdentityChangedAlert(),
+                                            ),
+                                          if (!widget.preview &&
                                               !widget.isSelf &&
                                               widget.showMessageButton)
                                             Padding(
@@ -379,6 +436,19 @@ class UserProfileViewState extends State<UserProfileView> {
                                                 isLoading:
                                                     isLoadingVerification,
                                                 onTap: clickVerifyButton,
+                                              ),
+                                            ),
+                                          if (!widget.preview &&
+                                              !widget.isSelf &&
+                                              widget.devices.isNotEmpty)
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.fromLTRB(
+                                                      4, 0, 4, 4),
+                                              child: UserDeviceListView(
+                                                devices: widget.devices,
+                                                onSetBlocked:
+                                                    widget.onSetDeviceBlocked,
                                               ),
                                             ),
                                           if (!widget.preview &&
@@ -456,6 +526,50 @@ class UserProfileViewState extends State<UserProfileView> {
                 ),
             ],
           )),
+    );
+  }
+
+  Widget buildIdentityChangedAlert() {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      key: const ValueKey("user-profile-identity-changed"),
+      decoration: BoxDecoration(
+        color: scheme.errorContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 8,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 8,
+            children: [
+              Icon(E2eeTrustShield.iconOf(E2eeTrust.identityChanged),
+                  color: scheme.onErrorContainer),
+              Expanded(
+                child: Text(
+                  messageProfileIdentityChanged(widget.displayName),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(color: scheme.onErrorContainer),
+                ),
+              ),
+            ],
+          ),
+          if (widget.onWithdrawVerification != null)
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: tiamat.Button.secondary(
+                key: const ValueKey("user-profile-withdraw-verification"),
+                text: promptProfileWithdrawVerification,
+                onTap: widget.onWithdrawVerification,
+              ),
+            ),
+        ],
+      ),
     );
   }
 

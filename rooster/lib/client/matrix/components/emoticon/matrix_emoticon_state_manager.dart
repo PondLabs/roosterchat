@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon_component.dart';
+import 'package:rooster/client/matrix/components/emoticon/matrix_image_pack_types.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:matrix/matrix.dart' as matrix;
 
@@ -37,36 +37,46 @@ class MatrixEmoticonPersonalStateManager implements MatrixEmoticonStateManager {
     });
 
     mx.onSync.stream.where((e) => e.accountData != null).listen((update) {
-      if (update.accountData?.any((e) =>
-              e.type == "im.ponies.user_emotes" ||
-              e.type == "im.ponies.emote_rooms") ==
+      if (update.accountData?.any((e) => _accountDataTypes.contains(e.type)) ==
           true) {
         onStateChangedController.add(null);
       }
     });
   }
 
+  static const _accountDataTypes = {
+    ImagePackTypes.user,
+    ImagePackTypes.legacyUser,
+    ImagePackTypes.rooms,
+    ImagePackTypes.legacyRooms,
+  };
+
   @override
   Stream<void> get onStateChanged => onStateChangedController.stream;
 
   @override
   Map<String, dynamic> getAllStates() {
-    var state = getState("im.ponies.user_emotes");
+    var state = getState(ImagePackTypes.userPackKey);
     if (state.isEmpty) return {};
-    return {"im.ponies.user_emotes": state};
+    return {ImagePackTypes.userPackKey: state};
   }
 
+  /// Written to the stable `m.image_pack`, which is read first from then on.
   @override
   Future<void> setState(String packKey, Map<String, dynamic> content) {
     return client.getMatrixClient().setAccountData(
-        client.getMatrixClient().userID!, "im.ponies.user_emotes", content);
+        client.getMatrixClient().userID!, ImagePackTypes.user, content);
   }
 
+  /// `m.image_pack` when the account has it (even emptied), the legacy
+  /// `im.ponies.user_emotes` otherwise.
   @override
   Map<String, dynamic> getState(String packKey) {
+    final accountData = client.getMatrixClient().accountData;
+    final event = accountData[ImagePackTypes.user] ??
+        accountData[ImagePackTypes.legacyUser];
     // A copy, so callers can edit it before the server accepts the change
-    return _copyContent(
-        client.getMatrixClient().accountData['im.ponies.user_emotes']?.content);
+    return _copyContent(event?.content);
   }
 
   @override
@@ -85,7 +95,8 @@ class MatrixEmoticonRoomStateManager implements MatrixEmoticonStateManager {
     mx.onRoomState.stream
         .where((event) =>
             event.roomId == room.id &&
-            event.state.type == MatrixEmoticonComponent.roomEmotesStateKey)
+            (event.state.type == ImagePackTypes.room ||
+                event.state.type == ImagePackTypes.legacyRoom))
         .listen((event) {
       onStateChangedController.add(null);
     });
@@ -93,45 +104,34 @@ class MatrixEmoticonRoomStateManager implements MatrixEmoticonStateManager {
     onStateChangedController.add(null);
   }
 
+  /// Both state types, the stable one winning per state key
+  /// ([readRoomImagePacks]).
   @override
-  Map<String, dynamic> getAllStates() {
-    if (!room.states.containsKey(MatrixEmoticonComponent.roomEmotesStateKey))
-      return {};
-
-    var state = (room.states[MatrixEmoticonComponent.roomEmotesStateKey]
-        as Map<String, matrix.StrippedStateEvent>);
-
-    var result = <String, dynamic>{};
-
-    for (var key in state.keys) {
-      result[key] = state[key]!.content;
-    }
-
-    return result;
-  }
+  Map<String, dynamic> getAllStates() => readRoomImagePacks(room);
 
   @override
   Map<String, dynamic> getState(String packKey) {
     return _copyContent(getAllStates()[packKey]);
   }
 
+  /// Written to the stable `m.room.image_pack`, which hides a legacy pack
+  /// with the same state key from then on.
   @override
   Future<void> setState(String packKey, Map<String, dynamic> content) async {
-    var event = await room.client.setRoomStateWithKey(
-        room.id, MatrixEmoticonComponent.roomEmotesStateKey, packKey, content);
+    var event = await room.client
+        .setRoomStateWithKey(room.id, ImagePackTypes.room, packKey, content);
 
     // Fall back to what we sent, so a following edit (e.g. the next file of a
     // batch upload) doesn't build on stale state before the sync arrives.
     var result = await room.getEventById(event) ??
         matrix.StrippedStateEvent(
-            type: MatrixEmoticonComponent.roomEmotesStateKey,
+            type: ImagePackTypes.room,
             content: content,
             senderId: room.client.userID!,
             stateKey: packKey);
 
     // The room's first pack has no state map to add to yet
-    room.states.putIfAbsent(
-        MatrixEmoticonComponent.roomEmotesStateKey, () => {})[packKey] = result;
+    room.states.putIfAbsent(ImagePackTypes.room, () => {})[packKey] = result;
   }
 
   @override

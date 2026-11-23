@@ -11,6 +11,7 @@ import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/ui/atoms/room_panel.dart';
 import 'package:rooster/ui/atoms/room_panel_view.dart';
 import 'package:rooster/ui/atoms/scaled_safe_area.dart';
+import 'package:rooster/ui/organisms/chat/knock_request_banner.dart';
 import 'package:rooster/ui/organisms/room_quick_access_menu/room_quick_access_menu.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/image/lod_image.dart';
@@ -31,6 +32,9 @@ class SpaceSummaryView extends StatefulWidget {
       required this.displayName,
       this.topic,
       this.joinRoom,
+      this.knockRoom,
+      this.isKnockPending,
+      this.isInvited,
       this.avatar,
       this.onSpaceUpdated,
       this.banner,
@@ -51,6 +55,11 @@ class SpaceSummaryView extends StatefulWidget {
   final String displayName;
   final String? topic;
   final Future<void> Function(RoomPreview preview)? joinRoom;
+  final Future<void> Function(RoomPreview preview)? knockRoom;
+  final bool Function(RoomPreview preview)? isKnockPending;
+
+  /// Whether we hold an invite to the room: it is then joined, never knocked.
+  final bool Function(RoomPreview preview)? isInvited;
   final Stream<void>? onSpaceUpdated;
   final RoomVisibility? visibility;
   final ImageProvider? avatar;
@@ -407,15 +416,64 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
                 itemData: previews,
                 shrinkWrap: true,
                 itemBuilder: (context, preview) {
+                  final invited = widget.isInvited?.call(preview) == true;
+                  final pending =
+                      !invited && widget.isKnockPending?.call(preview) == true;
+                  final canKnock =
+                      !invited && preview.canKnock && widget.knockRoom != null;
+                  final canJoinDirectly = invited ||
+                      preview.joinRule != 'knock' &&
+                          (preview.joinRule != 'knock_restricted' ||
+                              switch (preview.visibility) {
+                                RoomVisibilityRestricted(
+                                  spaces: final allowed
+                                ) =>
+                                  allowed.any((id) =>
+                                      widget.space.client.hasSpace(id) ||
+                                      widget.space.client.hasRoom(id)),
+                                _ => false,
+                              });
+
+                  if (pending) {
+                    return RoomPanelView(
+                      displayName: preview.displayName,
+                      avatar: preview.avatar,
+                      body: KnockRequestBanner.messageKnockPending,
+                      color: preview.color,
+                    );
+                  }
+
+                  if (canKnock && !canJoinDirectly) {
+                    return RoomPanelView(
+                      displayName: preview.displayName,
+                      avatar: preview.avatar,
+                      primaryButtonLabel:
+                          KnockRequestBanner.promptRequestToJoin,
+                      body: preview.topic,
+                      color: preview.color,
+                      onPrimaryButtonPressed: () async {
+                        await widget.knockRoom?.call(preview);
+                      },
+                    );
+                  }
+
                   return RoomPanelView(
                     displayName: preview.displayName,
                     avatar: preview.avatar,
                     primaryButtonLabel: CommonStrings.promptJoin,
+                    secondaryButtonLabel: canKnock
+                        ? KnockRequestBanner.promptRequestToJoin
+                        : null,
                     body: preview.topic,
                     color: preview.color,
                     onPrimaryButtonPressed: () async {
                       await widget.joinRoom?.call(preview);
                     },
+                    onSecondaryButtonPressed: canKnock
+                        ? () async {
+                            await widget.knockRoom?.call(preview);
+                          }
+                        : null,
                   );
                 }),
           ],
