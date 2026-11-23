@@ -40,7 +40,12 @@ class MatrixRoomTags {
     return tag;
   }
 
-  bool get isLowPriority => room.tags.containsKey(matrix.TagType.lowPriority);
+  /// Read straight from `m.tag`: the room menu asks on every build of a
+  /// channel row.
+  bool get isLowPriority {
+    final tags = room.roomAccountData['m.tag']?.content['tags'];
+    return tags is Map && tags.containsKey(matrix.TagType.lowPriority);
+  }
 
   /// The user's own tags on the room, sorted.
   List<String> get customTags =>
