@@ -4,8 +4,8 @@ import 'package:rooster/client/components/emoticon/emoticon_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon_state_manager.dart';
+import 'package:rooster/client/matrix/components/emoticon/matrix_image_pack_types.dart';
 import 'package:rooster/client/client.dart';
-import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_mxc_file_provider.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
@@ -188,17 +188,12 @@ class MatrixRoomEmoticonComponent extends MatrixEmoticonComponent
   @override
   bool isGloballyAvailable(String packId) {
     return room.matrixRoom.client
-        .isEmoticonPackGloballyAvailable(room.matrixRoom.id, packId);
+        .isImagePackEnabledEverywhere(room.matrixRoom.id, packId);
   }
 
-  Future<void> markAsGlobal(bool isGlobal, String packKey) async {
-    if (isGlobal)
-      return room.matrixRoom.client
-          .addEmoticonRoomPack(room.matrixRoom.id, packKey);
-
-    return room.matrixRoom.client
-        .removeEmoticonRoomPack(room.matrixRoom.id, packKey);
-  }
+  Future<void> markAsGlobal(bool isGlobal, String packKey) =>
+      room.matrixRoom.client
+          .setImagePackEnabledEverywhere(room.matrixRoom.id, packKey, isGlobal);
 
   Map<String, Map<String, String>> getEmotePacksFlat(
       matrix.ImagePackUsage emoticon) {

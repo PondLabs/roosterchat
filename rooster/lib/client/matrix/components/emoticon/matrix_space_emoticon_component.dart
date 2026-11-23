@@ -6,7 +6,7 @@ import 'package:rooster/client/components/emoticon/space_emoji_library.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon_state_manager.dart';
-import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
+import 'package:rooster/client/matrix/components/emoticon/matrix_image_pack_types.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_space.dart';
 
@@ -32,7 +32,7 @@ class MatrixSpaceEmoticonComponent extends MatrixEmoticonComponent
   @override
   bool isGloballyAvailable(String packId) {
     return space.matrixRoom.client
-        .isEmoticonPackGloballyAvailable(space.matrixRoom.id, packId);
+        .isImagePackEnabledEverywhere(space.matrixRoom.id, packId);
   }
 
   SpaceEmojiLibrary get _library => SpaceEmojiLibrary(state.getAllStates());

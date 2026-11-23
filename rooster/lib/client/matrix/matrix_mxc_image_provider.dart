@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:rooster/cache/own_media_cache.dart';
+import 'package:rooster/client/matrix/components/gif/matrix_animated_image.dart';
 import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/matrix_mxc_file_provider.dart';
 import 'package:rooster/client/matrix/media/own_media.dart';
@@ -30,8 +31,11 @@ class MatrixMxcImage extends LODImageProvider {
     super.thumbnailHeight,
     super.fullResHeight,
     Event? matrixEvent,
-  }) : super(
-          id: "$identifier-$doThumbnail-$doFullres-$thumbnailHeight-$fullResHeight",
+    bool animated = false,
+  })  : _animated = animated,
+        super(
+          id: "$identifier-$doThumbnail-$doFullres-$thumbnailHeight-$fullResHeight"
+              "${animated ? "-animated" : ""}",
           // A chat's picture (it has an event), not an avatar.
           traceShows: matrixEvent != null,
           // A chat's picture that failed is asked again when shown again;
@@ -52,6 +56,7 @@ class MatrixMxcImage extends LODImageProvider {
                 cache: cache,
                 cached: _cachedThumbnail,
                 serverThumbnail: serverThumbnail,
+                animated: animated,
               ));
     }
     if (doFullres == null || doFullres == true) {
@@ -66,6 +71,10 @@ class MatrixMxcImage extends LODImageProvider {
               ));
     }
   }
+
+  /// Whether the picture is animated, so its thumbnail is asked animated
+  /// ([animatedThumbnailQuery]).
+  final bool _animated;
 
   /// Where [hasCachedThumbnail] found the thumbnail, so that loading it
   /// asks the cache nothing more.
@@ -134,8 +143,29 @@ class MatrixMxcImage extends LODImageProvider {
     return size is! int || size > serverThumbnailAbove;
   }
 
-  static String getThumbnailIdentifier(Uri uri) {
-    return "matrix_thumbnail-$uri";
+  /// [animated]: the animated thumbnail, kept apart from a still one the
+  /// cache may already hold.
+  static String getThumbnailIdentifier(Uri uri, {bool animated = false}) {
+    return animated
+        ? "matrix_thumbnail_animated-$uri"
+        : "matrix_thumbnail-$uri";
+  }
+
+  /// The `animated` parameter of a thumbnail request (Matrix v1.11,
+  /// MSC2705): true for an [animated] picture on a homeserver that
+  /// announces v1.11 or later, otherwise null, so the request leaves it
+  /// out (a still thumbnail, which is what servers give without it).
+  static Future<bool?> animatedThumbnailQuery(
+      Client client, bool animated) async {
+    if (!animated) return null;
+    try {
+      final versions = await client.getVersions();
+      return versions.versions.any((v) => isMatrixVersionAtLeast(v, 1, 11))
+          ? true
+          : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   static String getIdentifier(Uri uri) {
@@ -234,7 +264,10 @@ class MatrixMxcImage extends LODImageProvider {
 
   /// [cached]: where the thumbnail is in the file cache, when that is
   /// already known. [serverThumbnail]: the homeserver's scaled thumbnail
-  /// of [matrixEvent]'s picture ([asksServerThumbnail]).
+  /// of [matrixEvent]'s picture ([asksServerThumbnail]). [animated]: the
+  /// picture is animated, so the homeserver's thumbnail is asked animated
+  /// ([animatedThumbnailQuery]); for [serverThumbnail], [matrixEvent]'s
+  /// info can say so too.
   static Future<Uint8List?> loadMatrixThumbnail(
     Client client,
     Uri uri,
@@ -242,8 +275,9 @@ class MatrixMxcImage extends LODImageProvider {
     bool cache = true,
     Uri? cached,
     bool serverThumbnail = false,
+    bool animated = false,
   }) async {
-    var identifier = getThumbnailIdentifier(uri);
+    var identifier = getThumbnailIdentifier(uri, animated: animated);
 
     final trace = MediaShowTrace.current;
     final hit = await readOwnMedia(client, matrixEvent, thumbnail: true) ??
@@ -270,7 +304,12 @@ class MatrixMxcImage extends LODImageProvider {
             await uri.getThumbnailUri(client,
                 width: serverThumbnailWidth,
                 height: serverThumbnailHeight,
-                method: ThumbnailMethod.scale));
+                method: ThumbnailMethod.scale,
+                animated: await animatedThumbnailQuery(
+                    client,
+                    animated ||
+                        AnimatedImageInfo.isAnimated(matrixEvent.infoMap,
+                            mimetype: matrixEvent.attachmentMimetype))));
       } on MediaDownloadException catch (error) {
         if (error.retryable) rethrow;
         // No thumbnail to be had (a 404, a type it does not scale): the
@@ -298,7 +337,9 @@ class MatrixMxcImage extends LODImageProvider {
         Log.w("Attachment thumbnail had unknown mime type: '${mime}'");
       }
     } else {
-      var response = await client.getContentThumbnailFromUri(uri, 90, 90);
+      var response = await client.getContentThumbnail(
+          uri.authority, uri.pathSegments.first, 90, 90,
+          animated: await animatedThumbnailQuery(client, animated));
       bytes = response.data;
     }
 
@@ -414,7 +455,7 @@ class MatrixMxcImage extends LODImageProvider {
   /// then uses.
   @override
   Future<bool> hasCachedThumbnail() async {
-    var id = getThumbnailIdentifier(identifier);
+    var id = getThumbnailIdentifier(identifier, animated: _animated);
     _cachedThumbnail = await fileCache?.getFile(id);
     return _cachedThumbnail != null;
   }

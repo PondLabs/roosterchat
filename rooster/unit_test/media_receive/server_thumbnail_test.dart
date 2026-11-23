@@ -123,10 +123,12 @@ void main() {
     print('2 MB JPEG: timeline $inTimeline; after opening ${kinds()}; '
         'routes ${server.routes}');
     expect(inTimeline, ['thumbnail']);
+    // A still picture: no `animated` (MSC2705), which servers read as a
+    // still thumbnail.
     expect(
         server.routes.first,
         endsWith('/thumbnail/{serverName}/{mediaId}?width=800&height=600&'
-            'method=scale&animated=false'));
+            'method=scale'));
     expect(kinds(), ['thumbnail', 'download']);
   });
 

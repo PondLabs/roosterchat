@@ -479,6 +479,9 @@ class MatrixClient extends Client {
       },
       importantStateEvents: {
         "im.ponies.room_emotes",
+        // The stable type of image packs (Matrix v1.19), read before the
+        // legacy one above.
+        matrix.EventTypes.RoomImagePack,
         "m.room.power_levels",
         "m.room.join_rules",
         "page.codeberg.everypizza.room.banner",
