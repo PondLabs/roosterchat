@@ -9443,6 +9443,72 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelServerAdminHeader": "Server administration",
+  "@labelServerAdminHeader": {
+    "description": "Header of the server tools in account settings, for administrators of the homeserver",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminDescription": "For administrators of your server: see an account's sessions, and lock or suspend it.",
+  "@labelServerAdminDescription": {
+    "description": "Under the header of the server administration tools",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminUser": "User ID",
+  "@labelServerAdminUser": {
+    "description": "Label of the field where a server administrator types the Matrix ID of the account to look up",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptServerAdminLookUp": "Look up",
+  "@promptServerAdminLookUp": {
+    "description": "Button that loads what the server says about the account typed in the server administration tools",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminLocked": "Locked",
+  "@labelServerAdminLocked": {
+    "description": "Switch in the server administration tools: the account is locked and none of its sessions work until it is unlocked",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminSuspended": "Suspended",
+  "@labelServerAdminSuspended": {
+    "description": "Switch in the server administration tools: the account is suspended, it can read but not send, join or change its profile",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminForbidden": "Only administrators of your server can do this.",
+  "@messageServerAdminForbidden": {
+    "description": "Shown in the server administration tools when the server refuses because the user is not one of its administrators",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminUnsupported": "Your server doesn't offer these tools.",
+  "@messageServerAdminUnsupported": {
+    "description": "Shown in the server administration tools when the homeserver does not know the lock and suspend requests",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminNotFound": "There is no such account on your server.",
+  "@messageServerAdminNotFound": {
+    "description": "Shown in the server administration tools when the account looked up does not exist on the homeserver",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminFailed": "The server didn't answer. Try again.",
+  "@messageServerAdminFailed": {
+    "description": "Shown in the server administration tools when a request failed for another reason",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminInvalidUser": "Type a full Matrix ID, with the @ and the server.",
+  "@messageServerAdminInvalidUser": {
+    "description": "Shown in the server administration tools when what was typed is not a Matrix ID",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelServerSupportHeader": "Server support",
   "@labelServerSupportHeader": {
     "description": "Header of the section of account settings with the contacts and help page the user's homeserver publishes",
