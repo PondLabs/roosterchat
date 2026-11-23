@@ -24,6 +24,7 @@ import 'package:collection/collection.dart';
 import 'package:vodozemac/vodozemac.dart' as vod;
 
 import 'package:matrix/encryption/encryption.dart';
+import 'package:matrix/encryption/room_key_bundle.dart'; // ROOSTER: MSC4268
 import 'package:matrix/encryption/ssss.dart'; // ROOSTER: MSC4287
 import 'package:matrix/encryption/utils/base64_unpadded.dart';
 import 'package:matrix/encryption/utils/outbound_group_session.dart';
@@ -474,6 +475,24 @@ class KeyManager {
       wipe = true;
     }
 
+    // ROOSTER: MSC3061, the session's `shared_history` mark is decided when
+    // it starts, so a session ends when the room's history visibility starts
+    // or stops letting newcomers read: one marked must not go on encrypting
+    // under `invited` or `joined` (an MSC4268 bundle would hand a later
+    // invitee what was said then), and one not marked would keep what is
+    // said under `shared` from them. The visibility is in memory only once
+    // the room's state is loaded; unloaded, it would read as "not shared"
+    // and end every marked session after a restart.
+    if (!wipe) {
+      await room.postLoad();
+      if ((inboundSess?.content[sharedHistoryKey] == true) !=
+          sessionHistoryIsShared(
+            encryption.roomKeyBundle.historyVisibilityOf(room),
+          )) {
+        wipe = true;
+      }
+    }
+
     if (!wipe) {
       // next check if the devices in the room changed
       final devicesToReceive = <DeviceKeys>[];
@@ -671,6 +690,9 @@ class KeyManager {
       );
     }
 
+    // ROOSTER: MSC3061, the history visibility below is kept in memory only
+    // once the room's state is loaded.
+    await room.postLoad();
     final deviceKeys = await room.getUserDeviceKeys();
     final deviceKeyIds = _getDeviceKeyIdMap(deviceKeys);
     // How many devices of the room's members the key leaves out (blocked, // ROOSTER
@@ -694,6 +716,12 @@ class KeyManager {
       'room_id': room.id,
       'session_id': outboundGroupSession.sessionId,
       'session_key': outboundGroupSession.sessionKey,
+      // ROOSTER: MSC3061, newcomers may read this session's messages; only
+      // such sessions go in an MSC4268 bundle on invite.
+      if (sessionHistoryIsShared(
+        encryption.roomKeyBundle.historyVisibilityOf(room),
+      ))
+        sharedHistoryKey: true,
     };
     final allowedAtIndex = <String, Map<String, int>>{};
     for (final device in deviceKeys) {
