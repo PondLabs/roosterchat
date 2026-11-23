@@ -5,6 +5,7 @@ import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/polls/poll_component.dart';
 import 'package:rooster/client/components/read_receipts/read_receipt_component.dart';
 import 'package:rooster/client/components/threads/thread_component.dart';
+import 'package:rooster/client/matrix/matrix_timeline.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_create_room.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event_emote.dart';
@@ -26,6 +27,7 @@ import 'package:rooster/ui/molecules/timeline_events/timeline_event_layout.dart'
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_menu.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_menu_dialog.dart';
 import 'package:rooster/ui/molecules/user_panel.dart';
+import 'package:rooster/ui/organisms/chat/jump_to_date.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/material.dart';
@@ -594,7 +596,18 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
     } else {
       if (showDateSeperator) {
         result = Column(
-          children: [TimelineEventDateTimeMarker(time: time), result],
+          children: [
+            TimelineEventDateTimeMarker(
+              time: time,
+              // The day's separator asks for another day to jump to, in
+              // the room's own timeline (a thread shows its replies only).
+              onTap: widget.timeline is MatrixTimeline
+                  ? () => JumpToDate.pickAndJump(context, widget.timeline.room,
+                      initialDate: time)
+                  : null,
+            ),
+            result
+          ],
         );
       }
     }

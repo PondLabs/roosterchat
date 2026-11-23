@@ -4,6 +4,7 @@ import 'package:rooster/client/components/emoticon/emoticon.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_threaded_receipts.dart';
+import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
@@ -335,3 +336,62 @@ class MatrixTimeline extends Timeline {
   }
 }
 
+/// Why "Jump to date" found no event.
+enum JumpToDateFailure {
+  /// Nothing in the room on that side of the date.
+  notFound,
+
+  /// The homeserver predates `timestamp_to_event` (Matrix v1.6, MSC3030).
+  unsupported,
+}
+
+class JumpToDateException implements Exception {
+  const JumpToDateException(this.failure);
+  final JumpToDateFailure failure;
+
+  @override
+  String toString() => 'JumpToDateException($failure)';
+}
+
+/// "Jump to date": the room's event closest to a moment, from
+/// `GET /_matrix/client/v1/rooms/{roomId}/timestamp_to_event` (Matrix v1.6).
+class MatrixJumpToDate {
+  /// The id of [room]'s event closest to [time]: the first at or after it
+  /// with [matrix.Direction.f], the last at or before it with
+  /// [matrix.Direction.b]. Throws [JumpToDateException] when the room has
+  /// none there or the server cannot tell.
+  static Future<String> eventIdAt(matrix.Room room, DateTime time,
+      {matrix.Direction direction = matrix.Direction.f}) async {
+    final client = room.client;
+    final versions = await client.getVersions();
+    if (!versions.versions.any((v) => isMatrixVersionAtLeast(v, 1, 6))) {
+      throw const JumpToDateException(JumpToDateFailure.unsupported);
+    }
+    try {
+      final found = await client.getEventByTimestamp(
+          room.id, time.millisecondsSinceEpoch, direction);
+      return found.eventId;
+    } on matrix.MatrixException catch (e) {
+      if (e.error == matrix.MatrixError.M_NOT_FOUND) {
+        throw const JumpToDateException(JumpToDateFailure.notFound);
+      }
+      // Advertises v1.6 but has no such endpoint.
+      if (e.error == matrix.MatrixError.M_UNRECOGNIZED) {
+        throw const JumpToDateException(JumpToDateFailure.unsupported);
+      }
+      rethrow;
+    }
+  }
+
+  /// The first event of [day] (local time); the last one before it when
+  /// the room has nothing from that day on.
+  static Future<String> eventIdForDay(matrix.Room room, DateTime day) async {
+    final start = DateTime(day.year, day.month, day.day);
+    try {
+      return await eventIdAt(room, start, direction: matrix.Direction.f);
+    } on JumpToDateException catch (e) {
+      if (e.failure != JumpToDateFailure.notFound) rethrow;
+      return await eventIdAt(room, start, direction: matrix.Direction.b);
+    }
+  }
+}
