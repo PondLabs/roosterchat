@@ -1,11 +1,14 @@
 import 'dart:ui';
 
 import 'package:rooster/client/auth.dart';
+import 'package:matrix/matrix.dart' as matrix;
+import 'package:rooster/client/matrix/auth/matrix_device_auth_flow.dart';
 import 'package:rooster/client/matrix/auth/matrix_oidc_login_flow.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/global_config.dart';
 import 'package:rooster/ui/atoms/shader/star_trails.dart';
 import 'package:rooster/ui/navigation/navigation_utils.dart';
+import 'package:rooster/ui/pages/login/device_auth_login.dart';
 import 'package:rooster/ui/pages/login/oidc_login_buttons.dart';
 import 'package:rooster/ui/pages/settings/app_settings_page.dart';
 import 'package:rooster/ui/pages/settings/categories/about/settings_category_about.dart';
@@ -28,6 +31,9 @@ class LoginPageView extends StatefulWidget {
       this.doSsoLogin,
       this.doPasswordLogin,
       this.doOidcLogin,
+      this.authMetadata,
+      this.deviceAuthFlow,
+      this.doDeviceLogin,
       this.loadingServerInfo = false,
       this.serverInfoError,
       this.isServerValid = false,
@@ -46,6 +52,13 @@ class LoginPageView extends StatefulWidget {
   final bool hasPasswordSupport;
   final Future<void> Function(SsoLoginFlow flow)? doSsoLogin;
   final Future<void> Function(MatrixOidcLoginFlow flow)? doOidcLogin;
+
+  /// The server's `auth_metadata`; the device grant button needs it.
+  final matrix.GetAuthMetadataResponse? authMetadata;
+
+  /// The device grant in progress: its code replaces the form.
+  final MatrixDeviceAuthFlow? deviceAuthFlow;
+  final VoidCallback? doDeviceLogin;
   final Future<void> Function(
           PasswordLoginFlow flow, String username, String password)?
       doPasswordLogin;
@@ -176,6 +189,9 @@ class _LoginPageViewState extends State<LoginPageView> {
   }
 
   Widget loginField(BuildContext context) {
+    // The device grant's code stays usable (cancel, copy) while it polls.
+    final deviceAuthFlow = widget.deviceAuthFlow;
+    final blocked = widget.isLoggingIn && deviceAuthFlow == null;
     return Stack(
       children: [
         Center(
@@ -197,11 +213,13 @@ class _LoginPageViewState extends State<LoginPageView> {
                 child: Stack(
                   children: [
                     IgnorePointer(
-                      ignoring: widget.isLoggingIn,
+                      ignoring: blocked,
                       child: AnimatedOpacity(
-                          opacity: widget.isLoggingIn ? 0.5 : 1.0,
+                          opacity: blocked ? 0.5 : 1.0,
                           duration: Durations.short2,
-                          child: loginInputs(context)),
+                          child: deviceAuthFlow == null
+                              ? loginInputs(context)
+                              : DeviceAuthPanel(flow: deviceAuthFlow)),
                     ),
                   ],
                 ),
@@ -209,7 +227,7 @@ class _LoginPageViewState extends State<LoginPageView> {
             ),
           ),
         ),
-        if (widget.isLoggingIn)
+        if (blocked)
           const Center(
             child: CircularProgressIndicator(),
           )
@@ -221,6 +239,8 @@ class _LoginPageViewState extends State<LoginPageView> {
     var ssoFlows = widget.flows?.whereType<SsoLoginFlow>().toList();
     final oidcFlows =
         widget.flows?.whereType<MatrixOidcLoginFlow>().toList() ?? const [];
+    final hasDeviceAuth =
+        MatrixDeviceAuthFlow.isSupportedBy(widget.authMetadata);
     SsoLoginFlow? defaultSso;
     if (ssoFlows != null) {
       defaultSso = ssoFlows.where((e) => e.id == null).firstOrNull;
@@ -250,10 +270,16 @@ class _LoginPageViewState extends State<LoginPageView> {
           ),
         ),
       const SizedBox(height: 16),
-      if (oidcFlows.isNotEmpty) ...[
-        OidcLoginButtons(
-          flows: oidcFlows,
-          onLogin: (flow) => widget.doOidcLogin?.call(flow),
+      if (oidcFlows.isNotEmpty || hasDeviceAuth) ...[
+        if (oidcFlows.isNotEmpty)
+          OidcLoginButtons(
+            flows: oidcFlows,
+            onLogin: (flow) => widget.doOidcLogin?.call(flow),
+          ),
+        if (oidcFlows.isNotEmpty && hasDeviceAuth) const SizedBox(height: 10),
+        DeviceAuthLoginButton(
+          authMetadata: widget.authMetadata,
+          onPressed: widget.doDeviceLogin,
         ),
         if (widget.hasPasswordSupport || widget.hasSsoSupport) orSeparator(),
       ],

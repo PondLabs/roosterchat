@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:rooster/client/auth.dart';
 import 'package:rooster/client/client.dart';
+import 'package:rooster/client/matrix/auth/matrix_device_auth_flow.dart';
 import 'package:rooster/client/matrix/auth/matrix_oidc_login_flow.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/debug/log.dart';
@@ -11,6 +12,7 @@ import 'package:rooster/utils/debounce.dart';
 import 'package:rooster/utils/rng.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -73,6 +75,8 @@ class LoginPageState extends State<LoginPage> {
   String? pendingHomeserver;
   String? serverInfoError;
   int homeserverRequestId = 0;
+  matrix.GetAuthMetadataResponse? authMetadata;
+  MatrixDeviceAuthFlow? deviceAuthFlow;
 
   final Debouncer homeserverUpdateDebouncer = Debouncer(
     delay: const Duration(seconds: 1),
@@ -132,6 +136,9 @@ class LoginPageState extends State<LoginPage> {
       flows: loginFlows,
       doSsoLogin: doSsoLogin,
       doOidcLogin: doOidcLogin,
+      authMetadata: authMetadata,
+      deviceAuthFlow: deviceAuthFlow,
+      doDeviceLogin: doDeviceLogin,
       doPasswordLogin: doPasswordLogin,
       isLoggingIn: isLoggingIn,
       loadingServerInfo: loadingServerInfo,
@@ -211,6 +218,21 @@ class LoginPageState extends State<LoginPage> {
     await doLogin(() => loginClient!.executeLoginFlow(flow));
   }
 
+  Future<void> doDeviceLogin() async {
+    final metadata = authMetadata;
+    if (loginClient == null || metadata == null || deviceAuthFlow != null) {
+      return;
+    }
+    final flow = MatrixDeviceAuthFlow(authMetadata: metadata);
+    setState(() => deviceAuthFlow = flow);
+    try {
+      await doLogin(() => loginClient!.executeLoginFlow(flow));
+    } finally {
+      flow.cancel();
+      if (mounted) setState(() => deviceAuthFlow = null);
+    }
+  }
+
   Future<void> doPasswordLogin(
     PasswordLoginFlow flow,
     String username,
@@ -242,6 +264,7 @@ class LoginPageState extends State<LoginPage> {
 
     setState(() {
       loginFlows = null;
+      authMetadata = null;
       loadingServerInfo = true;
       isServerValid = false;
     });
@@ -261,6 +284,8 @@ class LoginPageState extends State<LoginPage> {
       loadingServerInfo = false;
       isServerValid = result.$1;
       loginFlows = result.$2;
+      final client = loginClient;
+      authMetadata = client is MatrixClient ? client.authMetadata : null;
       serverInfoError = result.$1 ? null : errorLoginHomeserverUnverified;
     });
   }
@@ -268,6 +293,7 @@ class LoginPageState extends State<LoginPage> {
   @override
   void dispose() {
     homeserverUpdateDebouncer.cancel();
+    deviceAuthFlow?.cancel();
     progressSubscription?.cancel();
     super.dispose();
   }
