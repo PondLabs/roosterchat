@@ -400,7 +400,11 @@ class MatrixActivitiesComponent
   @override
   onSync(JoinedRoomUpdate update) {
     // A limited sync delivers state changes in `state`, not the timeline.
-    final events = [...?update.state, ...?update.timeline?.events];
+    final events = [
+      ...?update.state,
+      ...?update.stateAfter,
+      ...?update.timeline?.events
+    ];
     if (events.any((event) =>
         event.type == callMemberStateEvent ||
         event.type == MatrixCallActivityComponent.stateEventType)) {

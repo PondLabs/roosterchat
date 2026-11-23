@@ -1326,12 +1326,27 @@ class Client extends MatrixApi {
       );
     }
 
+    // ROOSTER: Matrix v1.16 MSC4222 — apply `state_after` after timeline events
+    // on archived/left rooms as well. With it in the update, even empty, the
+    // timeline does not define room state.
+    final stateAfterEvents = roomUpdate.stateAfter;
+
     final timelineEvents = roomUpdate.timeline?.events;
     if (timelineEvents != null) {
       await _handleRoomEvents(
         archivedRoom,
         timelineEvents.reversed.toList(),
         EventUpdateType.timeline,
+        store: false,
+        updateState: stateAfterEvents == null, // ROOSTER
+      );
+    }
+
+    if (stateAfterEvents != null && stateAfterEvents.isNotEmpty) {
+      await _handleRoomEvents(
+        archivedRoom,
+        stateAfterEvents,
+        EventUpdateType.state,
         store: false,
       );
     }
@@ -1901,6 +1916,121 @@ class Client extends MatrixApi {
       final minor = _parseV1MinorVersion(version);
       return minor != null && minor > maxSupportedV1Minor!;
     });
+  }
+
+  // ROOSTER: Strict semantic Matrix spec version parser (`v<major>.<minor>`)
+  // used to negotiate Matrix v1.16+ features such as `use_state_after`.
+  static final RegExp _specVersionPattern =
+      RegExp(r'^v(0|[1-9]\d*)\.(0|[1-9]\d*)$');
+
+  static ({int major, int minor})? _parseSpecVersion(String version) {
+    final match = _specVersionPattern.firstMatch(version);
+    if (match == null) return null;
+    final major = int.tryParse(match.group(1)!);
+    final minor = int.tryParse(match.group(2)!);
+    if (major == null || minor == null) return null;
+    return (major: major, minor: minor);
+  }
+
+  static bool _supportsSpecVersionAtLeast(
+    Iterable<String> serverVersions,
+    int minMajor,
+    int minMinor,
+  ) {
+    for (final version in serverVersions) {
+      final parsed = _parseSpecVersion(version);
+      if (parsed == null) continue;
+      if (parsed.major > minMajor ||
+          (parsed.major == minMajor && parsed.minor >= minMinor)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // ROOSTER: `getVersions()` is cached in the database, so asking on every
+  // sync costs one request per cache lifetime.
+  Future<bool> _supportsUseStateAfter() async {
+    try {
+      return _supportsSpecVersionAtLeast(
+        (await getVersions()).versions,
+        1,
+        16,
+      );
+    } catch (e, s) {
+      Logs().v(
+        'Unable to check server versions for use_state_after; omitting parameter',
+        e,
+        s,
+      );
+      return false;
+    }
+  }
+
+  // ROOSTER: Filter out older state events when paginating backwards (Direction.b)
+  // without mutating the source SyncUpdate event list.
+  Future<List<MatrixEvent>> _filterStateEventsForDirection(
+    Room room,
+    List<MatrixEvent> events,
+    Direction? direction,
+  ) async {
+    if (direction != Direction.b) return events;
+    await room.postLoad();
+    return events.where((stateEvent) {
+      final existingState =
+          room.getState(stateEvent.type, stateEvent.stateKey ?? '');
+      if (existingState == null) return true;
+      if (existingState is User) {
+        return !(existingState.originServerTs
+                ?.isAfter(stateEvent.originServerTs) ??
+            true);
+      }
+      if (existingState is MatrixEvent) {
+        return !existingState.originServerTs.isAfter(stateEvent.originServerTs);
+      }
+      return false;
+    }).toList();
+  }
+
+  // ROOSTER: Normalize per-thread unread notification counts so omitted
+  // `notification_count`/`highlight_count` default to 0 (Matrix v1.4 MSC3773).
+  static Map<String, UnreadNotificationCounts> _normalizeThreadNotifications(
+    Map<String, UnreadNotificationCounts>? raw,
+  ) {
+    if (raw == null || raw.isEmpty) return <String, UnreadNotificationCounts>{};
+    return {
+      for (final entry in raw.entries)
+        entry.key: UnreadNotificationCounts(
+          notificationCount: entry.value.notificationCount ?? 0,
+          highlightCount: entry.value.highlightCount ?? 0,
+        ),
+    };
+  }
+
+  // ROOSTER: The server may omit a thread without notifications, and the whole
+  // `unread_thread_notifications` object when no thread has any. So an update
+  // that brings either the room counts or the thread counts tells the counts
+  // of every thread: the ones it does not name are zero.
+  static bool _carriesThreadNotifications(JoinedRoomUpdate update) =>
+      update.unreadNotifications != null ||
+      update.unreadThreadNotifications != null;
+
+  // ROOSTER: Whether [update] changes the per-thread unread counts of [room].
+  static bool _threadNotificationsChange(Room room, JoinedRoomUpdate update) {
+    if (!_carriesThreadNotifications(update)) return false;
+    final before = room.unreadThreadNotifications;
+    final after =
+        _normalizeThreadNotifications(update.unreadThreadNotifications);
+    if (before.length != after.length) return true;
+    for (final entry in after.entries) {
+      final counts = before[entry.key];
+      if (counts == null ||
+          (counts.notificationCount ?? 0) != entry.value.notificationCount ||
+          (counts.highlightCount ?? 0) != entry.value.highlightCount) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static const List<String> supportedDirectEncryptionAlgorithms = [
@@ -2591,11 +2721,17 @@ class Client extends MatrixApi {
 
       await _checkSyncFilter();
 
+      // ROOSTER: Matrix v1.16 MSC4222 — request `use_state_after=true` only
+      // when the homeserver advertises Matrix >= v1.16.
+      final useStateAfter = await _supportsUseStateAfter();
+      if (!isLogged() || _disposed || _aborted) return;
+
       final syncRequest = sync(
         filter: syncFilterId,
         since: prevBatch,
         timeout: timeout?.inMilliseconds,
         setPresence: syncPresence,
+        useStateAfter: useStateAfter ? true : null, // ROOSTER
       ).then((v) => Future<SyncUpdate?>.value(v)).catchError((e) {
         if (e is MatrixException) {
           syncError = e;
@@ -2895,27 +3031,11 @@ class Client extends MatrixApi {
 
       /// Handle now all room events and save them in the database
       if (syncRoomUpdate is JoinedRoomUpdate) {
-        final state = syncRoomUpdate.state;
-
-        // If we are receiving states when fetching history we need to check if
-        // we are not overwriting a newer state.
-        if (direction == Direction.b) {
-          await room.postLoad();
-          state?.removeWhere((state) {
-            final existingState =
-                room.getState(state.type, state.stateKey ?? '');
-            if (existingState == null) return false;
-            if (existingState is User) {
-              return existingState.originServerTs
-                      ?.isAfter(state.originServerTs) ??
-                  true;
-            }
-            if (existingState is MatrixEvent) {
-              return existingState.originServerTs.isAfter(state.originServerTs);
-            }
-            return true;
-          });
-        }
+        final rawState = syncRoomUpdate.state;
+        // ROOSTER: Keep legacy `state` before timeline for < v1.16 servers.
+        final state = rawState != null && rawState.isNotEmpty
+            ? await _filterStateEventsForDirection(room, rawState, direction)
+            : null;
 
         if (state != null && state.isNotEmpty) {
           await _handleRoomEvents(
@@ -2925,9 +3045,35 @@ class Client extends MatrixApi {
           );
         }
 
+        // ROOSTER: Matrix v1.16 MSC4222 — apply `state_after` AFTER timeline
+        // events so room state reflects the end of the timeline. With it in
+        // the update, even empty, room state comes from it alone: the timeline
+        // may carry a state event that lost state resolution.
+        final rawStateAfter = syncRoomUpdate.stateAfter;
+
         final timelineEvents = syncRoomUpdate.timeline?.events;
         if (timelineEvents != null && timelineEvents.isNotEmpty) {
-          await _handleRoomEvents(room, timelineEvents, timelineUpdateType);
+          await _handleRoomEvents(
+            room,
+            timelineEvents,
+            timelineUpdateType,
+            updateState: rawStateAfter == null, // ROOSTER
+          );
+        }
+
+        final stateAfter = rawStateAfter != null && rawStateAfter.isNotEmpty
+            ? await _filterStateEventsForDirection(
+                room,
+                rawStateAfter,
+                direction,
+              )
+            : null;
+        if (stateAfter != null && stateAfter.isNotEmpty) {
+          await _handleRoomEvents(
+            room,
+            stateAfter,
+            EventUpdateType.state,
+          );
         }
 
         final ephemeral = syncRoomUpdate.ephemeral;
@@ -2949,12 +3095,43 @@ class Client extends MatrixApi {
       }
 
       if (syncRoomUpdate is LeftRoomUpdate) {
+        // ROOSTER: Apply legacy `state` before timeline events, and Matrix
+        // v1.16 MSC4222 `state_after` after timeline events.
+        final rawState = syncRoomUpdate.state;
+        final state = rawState != null && rawState.isNotEmpty
+            ? await _filterStateEventsForDirection(room, rawState, direction)
+            : null;
+        if (state != null && state.isNotEmpty) {
+          await _handleRoomEvents(
+            room,
+            state,
+            EventUpdateType.state,
+            store: false,
+          );
+        }
+        final rawStateAfter = syncRoomUpdate.stateAfter;
         final timelineEvents = syncRoomUpdate.timeline?.events;
         if (timelineEvents != null && timelineEvents.isNotEmpty) {
           await _handleRoomEvents(
             room,
             timelineEvents,
             timelineUpdateType,
+            store: false,
+            updateState: rawStateAfter == null, // ROOSTER
+          );
+        }
+        final stateAfter = rawStateAfter != null && rawStateAfter.isNotEmpty
+            ? await _filterStateEventsForDirection(
+                room,
+                rawStateAfter,
+                direction,
+              )
+            : null;
+        if (stateAfter != null && stateAfter.isNotEmpty) {
+          await _handleRoomEvents(
+            room,
+            stateAfter,
+            EventUpdateType.state,
             store: false,
           );
         }
@@ -2963,15 +3140,6 @@ class Client extends MatrixApi {
           for (final event in accountData) {
             room.roomAccountData[event.type] = event;
           }
-        }
-        final state = syncRoomUpdate.state;
-        if (state != null && state.isNotEmpty) {
-          await _handleRoomEvents(
-            room,
-            state,
-            EventUpdateType.state,
-            store: false,
-          );
         }
       }
 
@@ -3041,6 +3209,10 @@ class Client extends MatrixApi {
     List<StrippedStateEvent> events,
     EventUpdateType type, {
     bool store = true,
+    // ROOSTER: false for a timeline that came with `state_after` (Matrix
+    // v1.16): its state events are shown, and do not change room state, in
+    // memory or in the database.
+    bool updateState = true,
   }) async {
     // Calling events can be omitted if they are outdated from the same sync. So
     // we collect them first before we handle them.
@@ -3107,9 +3279,25 @@ class Client extends MatrixApi {
           room.setState(user);
         }
       }
-      await _updateRoomsByEventUpdate(room, event, type);
+      await _updateRoomsByEventUpdate(
+        room,
+        event,
+        type,
+        updateState: updateState, // ROOSTER
+      );
       if (store) {
-        await database.storeEventUpdate(room.id, event, type, this);
+        // ROOSTER: a database stores a timeline event that has a state key as
+        // room state too, so one that must not change room state is handed
+        // over as a [_TimelineOnlyEvent].
+        final stateKey = event.stateKey;
+        await database.storeEventUpdate(
+          room.id,
+          !updateState && stateKey != null && event is MatrixEvent
+              ? _TimelineOnlyEvent(Event.fromMatrixEvent(event, room), stateKey)
+              : event,
+          type,
+          this,
+        );
       }
       if (event is MatrixEvent && encryptionEnabled) {
         await encryption?.handleEventUpdate(
@@ -3216,6 +3404,10 @@ class Client extends MatrixApi {
                     chatUpdate.unreadNotifications?.highlightCount ?? 0,
                 notificationCount:
                     chatUpdate.unreadNotifications?.notificationCount ?? 0,
+                unreadThreadNotifications: _normalizeThreadNotifications(
+                  // ROOSTER
+                  chatUpdate.unreadThreadNotifications, // ROOSTER
+                ), // ROOSTER
                 summary: chatUpdate.summary,
                 client: this,
               )
@@ -3248,6 +3440,8 @@ class Client extends MatrixApi {
                 (chatUpdate.unreadNotifications?.notificationCount ?? 0) ||
             rooms[roomIndex].highlightCount !=
                 (chatUpdate.unreadNotifications?.highlightCount ?? 0) ||
+            // ROOSTER: or the per-thread counts change.
+            _threadNotificationsChange(rooms[roomIndex], chatUpdate) ||
             chatUpdate.summary != null ||
             chatUpdate.timeline?.prevBatch != null)) {
       /// 1. [InvitedRoomUpdate] doesn't have prev_batch, so we want to set it in case
@@ -3264,6 +3458,13 @@ class Client extends MatrixApi {
             chatUpdate.unreadNotifications?.notificationCount ?? 0;
         rooms[roomIndex].highlightCount =
             chatUpdate.unreadNotifications?.highlightCount ?? 0;
+      }
+
+      // ROOSTER: Per-thread unread counts from /sync (v1.4) replace the ones
+      // we hold, so a thread the server left out is no longer counted.
+      if (_carriesThreadNotifications(chatUpdate)) {
+        rooms[roomIndex].unreadThreadNotifications =
+            _normalizeThreadNotifications(chatUpdate.unreadThreadNotifications);
       }
 
       final summary = chatUpdate.summary;
@@ -3288,8 +3489,9 @@ class Client extends MatrixApi {
   Future<void> _updateRoomsByEventUpdate(
     Room room,
     StrippedStateEvent eventUpdate,
-    EventUpdateType type,
-  ) async {
+    EventUpdateType type, {
+    bool updateState = true, // ROOSTER
+  }) async {
     if (type == EventUpdateType.history) return;
 
     switch (type) {
@@ -3310,6 +3512,7 @@ class Client extends MatrixApi {
         // Update the room state:
         final stateKey = event.stateKey;
         if (stateKey != null &&
+            updateState && // ROOSTER
             (!room.partial || importantStateEvents.contains(event.type))) {
           room.setState(event);
 
@@ -4526,6 +4729,39 @@ class ArchivedRoom {
   final Timeline timeline;
 
   ArchivedRoom({required this.room, required this.timeline});
+}
+
+/// ROOSTER: A state event of a timeline that came with `state_after` (Matrix
+/// v1.16 MSC4222), as the database gets it: an event of the stored timeline
+/// that is not room state.
+///
+/// [DatabaseApi.storeEventUpdate] stores a timeline event that has a state key
+/// as room state too. Its signature cannot say otherwise: the database the app
+/// uses outside the browser (`matrix_dart_sdk_drift_db`) implements
+/// [DatabaseApi] in another package, and would no longer compile. So this
+/// event has no [stateKey], which is what a database looks at before it
+/// stores state, and writes the real one in [toJson], which is what a
+/// database stores in the timeline.
+class _TimelineOnlyEvent extends Event {
+  final String _stateKey;
+
+  _TimelineOnlyEvent(Event event, this._stateKey)
+      : super(
+          status: event.status,
+          content: event.content,
+          type: event.type,
+          eventId: event.eventId,
+          senderId: event.senderId,
+          originServerTs: event.originServerTs,
+          unsigned: event.unsigned,
+          prevContent: event.prevContent,
+          redacts: event.redacts,
+          room: event.room,
+          originalSource: event.originalSource,
+        );
+
+  @override
+  Map<String, dynamic> toJson() => super.toJson()..['state_key'] = _stateKey;
 }
 
 /// An event that is waiting for a key to arrive to decrypt. Times out after some time.
