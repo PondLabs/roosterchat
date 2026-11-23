@@ -380,3 +380,17 @@ Changes since the copy:
   (turns it off and empties the stored key) and
   `restoreKeyBackupWithRecoveryKey` (a backup whose key is not in secret
   storage).
+- Claimed Ed25519 key of `m.room_key` (T3.1b): `KeyManager.handleToDeviceEvent`
+  (`lib/encryption/key_manager.dart`) takes the key a received room key
+  claims from the sender's device whose Curve25519 key is the Olm session's
+  (from `/keys/query` or checked `sender_device_keys`), and claims none when
+  there is no such device. Upstream copied the Ed25519 key of the device the
+  sender named in `requesting_device_id`, a field the sender controls, so a
+  room key sent over any Olm session of that user could claim a verified
+  device; `sender_claimed_ed25519_key` and `sender_claimed_keys` written in
+  the content are dropped too, since `SessionKey.fromDb` falls back to them
+  when the session has no claimed keys of its own. `RoomKeyRequest.forwardKey`
+  claims our own key only for sessions we created (upstream claimed it for
+  any session without a claimed key), else the key of the device the
+  session's Curve25519 key belongs to, and forwards nothing when no key is
+  claimed.
