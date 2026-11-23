@@ -517,7 +517,9 @@ Changes since the copy:
   same index, has the shorter forwarding chain). Upstream compared only with
   memory, so after a restart a session from the key backup, a forwarded key,
   an import or a bundle that starts later replaced a stored one from index 0
-  and earlier messages stopped decrypting. The stored session is read without
-  being cached in memory, and memory is checked again after the read, so of
-  two calls at once the better session still wins. An unreadable stored
-  session is replaced.
+  and earlier messages stopped decrypting. The stored session is read
+  without `loadInboundGroupSession` (which writes it into memory after the
+  read, over what a concurrent call may have just set), and memory is checked
+  again after the read, so of two calls at once the better session still
+  wins. A stored session that wins goes in memory, where callers look next.
+  An unreadable stored session is replaced.
