@@ -301,7 +301,8 @@ class MatrixTimeline extends Timeline {
 
   @override
   Future<void> close() async {
-    await _ignoredUsersChanged?.cancel();
+    // Not awaited: the subscription's cancel has nothing to wait for.
+    unawaited(_ignoredUsersChanged?.cancel());
     _matrixTimeline?.cancelSubscriptions();
     await onEventAdded.close();
     await onChange.close();
