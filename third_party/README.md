@@ -412,3 +412,23 @@ Changes since the copy:
   `Room.topicHtml`, and `Room.setDescription(plain, {html})` read and write
   MSC3765 `m.topic` (`m.text` with `text/plain` and `text/html`) while keeping
   legacy `topic` compatibility on both read and write.
+- Matrix v1.18–v1.19 Client-Server endpoints (T1.1c):
+  `MatrixApi` (`lib/matrix_api_lite/matrix_api.dart`) adds
+  `getMutualRooms(userId, {from})` for `GET /_matrix/client/v1/mutual_rooms`
+  (v1.19 MSC2666; `GetMutualRoomsResponse` reads `joined`, `count` and
+  `next_batch`), and `getUserSuspended` / `setUserSuspended` and
+  `getUserLocked` / `setUserLocked` for `GET`/`PUT
+  /_matrix/client/v1/admin/suspend/{userId}` and `.../admin/lock/{userId}`
+  (v1.18 MSC4323, bodies `{suspended}` and `{locked}`). They are written like
+  the generated endpoints, so a `404 M_UNRECOGNIZED` or `403 M_FORBIDDEN`
+  comes out as a `MatrixException`; the generated `Api` and its models are
+  left as generated. `reportEvent` (`lib/matrix_api_lite/generated/api.dart`)
+  keeps `score` optional and deprecated (removed in v1.18 MSC4277), sends it
+  only when passed, and takes any 200 as a success without parsing the body.
+  `Room.redactEvent` (`lib/src/room.dart`) sends the redaction as an
+  `m.room.redaction` event through `PUT /rooms/{roomId}/send` with `redacts`
+  (and `reason` when given) in the content when the server advertises a
+  `v<major>.<minor>` version `>= v1.18` (v1.18 MSC4169), straight through the
+  API so it is never encrypted; with older or unreadable versions, or when
+  `/send` answers `M_UNRECOGNIZED`, it uses `PUT /redact` as before.
+  `Client.redactEventWithMetadata` (MatrixRTC) still uses `/redact`.
