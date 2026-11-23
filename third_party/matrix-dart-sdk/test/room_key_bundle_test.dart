@@ -649,6 +649,16 @@ void main() {
         expect(bundlesSent(), hasLength(1));
       });
 
+      test('a "shared" the state does not confirm marks no session', () async {
+        await inviterRoom('joined');
+        final room = inviter.getRoomById(_roomId)!;
+        room.partial = true;
+        await setVisibility('shared');
+        room.partial = false;
+        expect(room.historyVisibility, HistoryVisibility.joined);
+        expect(marked(await say('the two disagree')), isNull);
+      });
+
       test('state from before, coming late, changes nothing', () async {
         await inviterRoom('joined', first: (room) => room.partial = false);
         // As a page of older events may carry it.
