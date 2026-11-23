@@ -216,6 +216,8 @@ class MatrixWidgetComponent implements WidgetComponent<MatrixClient> {
         "\$chat.commet.color_scheme": Uri.encodeComponent(colorScheme),
         "\$org.matrix.msc2873.client_theme":
             Theme.of(context).brightness == Brightness.light ? "light" : "dark",
+        "\$org.matrix.msc2873.client_id": matrixWidgetClientId,
+        "\$org.matrix.msc2873.client_language": matrixWidgetClientLanguage(),
       };
 
       Log.i("Replacements: ${jsonEncode(replacements)}");

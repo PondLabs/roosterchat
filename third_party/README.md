@@ -412,6 +412,20 @@ Changes since the copy:
   `Room.topicHtml`, and `Room.setDescription(plain, {html})` read and write
   MSC3765 `m.topic` (`m.text` with `text/plain` and `text/html`) while keeping
   legacy `topic` compatibility on both read and write.
+- Claimed Ed25519 key of `m.room_key` (T3.1b): `KeyManager.handleToDeviceEvent`
+  (`lib/encryption/key_manager.dart`) takes the key a received room key
+  claims from the sender's device whose Curve25519 key is the Olm session's
+  (from `/keys/query` or checked `sender_device_keys`), and claims none when
+  there is no such device. Upstream copied the Ed25519 key of the device the
+  sender named in `requesting_device_id`, a field the sender controls, so a
+  room key sent over any Olm session of that user could claim a verified
+  device; `sender_claimed_ed25519_key` and `sender_claimed_keys` written in
+  the content are dropped too, since `SessionKey.fromDb` falls back to them
+  when the session has no claimed keys of its own. `RoomKeyRequest.forwardKey`
+  claims our own key only for sessions we created (upstream claimed it for
+  any session without a claimed key), else the key of the device the
+  session's Curve25519 key belongs to, and forwards nothing when no key is
+  claimed.
 - Matrix v1.18–v1.19 Client-Server endpoints (T1.1c):
   `MatrixApi` (`lib/matrix_api_lite/matrix_api.dart`) adds
   `getMutualRooms(userId, {from})` for `GET /_matrix/client/v1/mutual_rooms`

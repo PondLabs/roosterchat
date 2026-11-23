@@ -13,7 +13,11 @@ abstract class MatrixCapability {
       "org.matrix.msc4157.send.delayed_event";
   static const String updateDelayedEvent =
       "org.matrix.msc4157.update_delayed_event";
-  static const String sendStickyEvent = "org.matrix.msc4354.send_sticky_event";
+  // MSC4407: a `send_event` with `sticky_duration_ms` needs this as well as
+  // the `send.event` capability for its type.
+  static const String sendStickyEvent = "org.matrix.msc4407.send.sticky_event";
+  static const String receiveStickyEvent =
+      "org.matrix.msc4407.receive.sticky_event";
 
   static String sendEvent(String event) {
     return "org.matrix.msc2762.send.event:$event";
