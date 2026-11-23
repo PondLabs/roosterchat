@@ -220,13 +220,18 @@ class KeyManager {
     Map<String, String>? senderClaimedKeys,
     bool uploaded = false,
     Map<String, Map<String, int>>? allowedAtIndex,
+    // ROOSTER: false when [senderClaimedKeys] is already the whole answer
+    // (an `m.room_key`, which looks only among the sender's own devices):
+    // no device of any other user is looked up by [senderKey].
+    bool claimDeviceOfSenderKey = true,
   }) async {
     final senderClaimedKeys_ = senderClaimedKeys ?? <String, String>{};
     final allowedAtIndex_ = allowedAtIndex ?? <String, Map<String, int>>{};
     final userId = client.userID;
     if (userId == null) return Future.value();
 
-    if (!senderClaimedKeys_.containsKey('ed25519')) {
+    if (claimDeviceOfSenderKey && // ROOSTER
+        !senderClaimedKeys_.containsKey('ed25519')) {
       final device = client.getUserDeviceKeysByCurve25519Key(senderKey);
       if (device != null && device.ed25519Key != null) {
         senderClaimedKeys_['ed25519'] = device.ed25519Key!;
@@ -1261,18 +1266,34 @@ class KeyManager {
         );
         return;
       }
-      final sender_ed25519 = client.userDeviceKeys[event.sender]
-          ?.deviceKeys[event.content['requesting_device_id']]?.ed25519Key;
-      if (sender_ed25519 != null) {
-        event.content['sender_claimed_ed25519_key'] = sender_ed25519;
-      }
+      // ROOSTER: the Ed25519 key the room key claims is the one of the
+      // sender's device whose Curve25519 key is the Olm session's
+      // (`sender_key`), as `/keys/query` or the `sender_device_keys` that
+      // OlmManager checked (MSC4147) gave it; no such device, no claimed key.
+      // Never from the content, which the sender writes: upstream copied the
+      // Ed25519 key of the device named in `requesting_device_id` (any of
+      // the sender's devices, a verified one included), and a
+      // `sender_claimed_ed25519_key` or `sender_claimed_keys` kept in the
+      // content becomes the claim when the session is loaded from the
+      // database with no claimed keys of its own (`SessionKey.fromDb`), then
+      // goes out in forwarded keys and in the key backup.
+      final senderKey = encryptedContent['sender_key'];
+      if (senderKey is! String) return;
+      final claimed = client.userDeviceKeys[event.sender]?.deviceKeys.values
+          .firstWhereOrNull((d) => d.curve25519Key == senderKey)
+          ?.ed25519Key;
+      final content = Map<String, dynamic>.of(event.content)
+        ..remove('sender_claimed_ed25519_key')
+        ..remove('sender_claimed_keys');
       Logs().v('[KeyManager] Keeping room key');
       await setInboundGroupSession(
         roomId,
         sessionId,
-        encryptedContent['sender_key'],
-        event.content,
+        senderKey,
+        content,
         forwarded: false,
+        senderClaimedKeys: {if (claimed != null) 'ed25519': claimed},
+        claimDeviceOfSenderKey: false,
       );
     }
   }
@@ -1339,11 +1360,27 @@ class RoomKeyRequest extends ToDeviceEvent {
     if (session.senderKey.isNotEmpty) {
       message['sender_key'] = session.senderKey;
     }
-    message['sender_claimed_ed25519_key'] =
-        session.senderClaimedKeys['ed25519'] ??
-            (session.forwardingCurve25519KeyChain.isEmpty
+    // ROOSTER: a session received directly that claims no key (it came
+    // before its sender's device was known) claims the key of the device
+    // whose Curve25519 key is the session's, if one is known now: ours for a
+    // session we created, never ours for anyone else's (upstream claimed our
+    // own Ed25519 key for any such session). Still none, it is not
+    // forwarded: `m.forwarded_room_key` requires the key, and a receiver
+    // drops the event without it.
+    final claimed = session.senderClaimedKeys['ed25519'] ??
+        (session.forwardingCurve25519KeyChain.isEmpty
+            ? (session.senderKey == keyManager.encryption.identityKey
                 ? keyManager.encryption.fingerprintKey
-                : null);
+                : keyManager.client
+                    .getUserDeviceKeysByCurve25519Key(session.senderKey)
+                    ?.ed25519Key)
+            : null);
+    if (claimed == null) {
+      Logs().w('[KeyManager] Not forwarding a key that claims no sender');
+      keyManager.incomingShareRequests.remove(request.requestId);
+      return;
+    }
+    message['sender_claimed_ed25519_key'] = claimed;
     message['session_key'] = session.inboundGroupSession!.exportAt(
       index ?? session.inboundGroupSession!.firstKnownIndex,
     );
