@@ -193,6 +193,8 @@ class MatrixUri {
   static bool _isValidId(MatrixUriKind kind, String id) {
     if (!_hasNoControl(id)) return false;
     final colon = id.indexOf(':');
+    // Room version 12 room ids have no server name (MSC4291).
+    if (colon < 0 && kind == MatrixUriKind.roomId) return true;
     if (colon <= 0) return false;
     return _isValidServer(id.substring(colon + 1));
   }
