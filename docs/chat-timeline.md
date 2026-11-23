@@ -133,8 +133,9 @@ The homeserver reports a thread's unread notifications apart from the
 room's (`unread_thread_notifications`, MSC3773) because the sync filter
 asks for them (`MatrixClient.syncFilter`; the SDK defines the filter again
 for sessions from before, see `third_party/README.md`). The SDK keeps them
-in `Room.unreadThreadNotifications`; `MatrixThreadUnread` reads them and
-says when they change.
+in `Room.unreadThreadNotifications`, across restarts too (in its custom
+cache, written when a sync or a read here changes them);
+`MatrixThreadUnread` reads them and says when they change.
 
 - `ThreadUnreadBadge` shows the count on a thread's root in the timeline
   (after its latest reply) and on the thread in the threads panel. It is

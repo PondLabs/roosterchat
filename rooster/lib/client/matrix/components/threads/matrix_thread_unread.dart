@@ -87,7 +87,7 @@ class MatrixThreadUnread {
   /// authority: a message that arrived meanwhile brings them back.
   static void clearLocally(matrix.Room room, String threadRootId) {
     if (room.unreadThreadNotifications.remove(threadRootId) != null) {
-      _clearedLocally.add(room.id);
+      _changedLocally(room);
     }
   }
 
@@ -96,6 +96,14 @@ class MatrixThreadUnread {
   static void clearAllLocally(matrix.Room room) {
     if (room.unreadThreadNotifications.isEmpty) return;
     room.unreadThreadNotifications.clear();
+    _changedLocally(room);
+  }
+
+  /// The SDK keeps the counts across restarts as each sync leaves them; a
+  /// thread read here is kept too, so its badge does not come back when
+  /// the app starts again before the next sync.
+  static void _changedLocally(matrix.Room room) {
+    unawaited(room.client.storeUnreadThreadNotifications());
     _clearedLocally.add(room.id);
   }
 }
