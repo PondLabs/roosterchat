@@ -1,6 +1,9 @@
 import 'package:rooster/client/client.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/pages/get_or_create_room/room_creator.dart';
+import 'package:rooster/ui/pages/settings/categories/room/security/matrix_room_history_access_settings.dart';
+import 'package:rooster/ui/pages/settings/categories/room/security/matrix_room_knock_requests.dart';
 import 'package:rooster/utils/error_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
@@ -64,6 +67,12 @@ class _RoomSecuritySettingsPageState extends State<RoomSecuritySettingsPage> {
         if (widget.room.client.supportsE2EE && widget.showEncryptionToggle)
           buildE2EEToggle(),
         buildRoomVisibility(),
+        // Spaces lay this page out unscrolled: these stay with rooms.
+        if (widget.room case MatrixRoom room when !room.matrixRoom.isSpace) ...[
+          MatrixRoomKnockRequests(room.matrixRoom),
+          MatrixRoomHistoryVisibilitySettings(room.matrixRoom),
+          MatrixRoomGuestAccessSettings(room.matrixRoom),
+        ],
       ],
     );
   }

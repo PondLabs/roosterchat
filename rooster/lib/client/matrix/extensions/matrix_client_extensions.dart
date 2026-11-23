@@ -48,6 +48,7 @@ extension MatrixExtensions on Client {
         joinRule: summary.joinRule,
         roomType: summary.roomType,
         allowedRoomIds: summary.allowedRoomIds,
+        via: via,
       );
     }
 
@@ -69,6 +70,7 @@ extension MatrixExtensions on Client {
       numMembers: result["num_joined_members"] as int?,
       joinRule: result["join_rule"] as String?,
       roomType: result["room_type"] as String?,
+      via: via,
     );
   }
 
@@ -81,6 +83,7 @@ extension MatrixExtensions on Client {
     required String? joinRule,
     required String? roomType,
     List<String>? allowedRoomIds,
+    List<String>? via,
   }) {
     var type = switch (roomType) {
       "m.space" => rooster.RoomType.space,
@@ -113,6 +116,8 @@ extension MatrixExtensions on Client {
           avatar: image,
           numMembers: numMembers,
           visibility: visibility,
+          joinRule: joinRule,
+          via: via ?? const [],
           topic: topic);
     }
 

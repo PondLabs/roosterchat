@@ -12,6 +12,13 @@ abstract class RoomPreview {
   RoomType? get type;
   int? get numMembers;
   RoomVisibility? get visibility;
+  String? get joinRule;
+  List<String> get via;
+
+  bool get canKnock => isKnockJoinRule(joinRule);
+
+  static bool isKnockJoinRule(String? joinRule) =>
+      joinRule == 'knock' || joinRule == 'knock_restricted';
 }
 
 class GenericRoomPreview implements RoomPreview {
@@ -27,17 +34,29 @@ class GenericRoomPreview implements RoomPreview {
   @override
   String? topic;
 
+  @override
   int? numMembers;
 
+  @override
   RoomType? type;
 
   @override
+  String? joinRule;
+
+  @override
+  List<String> via;
+
+  @override
+  bool get canKnock => RoomPreview.isKnockJoinRule(joinRule);
+
   GenericRoomPreview(this.roomId,
       {this.avatar,
       required this.displayName,
       required this.type,
       this.numMembers,
       this.visibility,
+      this.joinRule,
+      this.via = const [],
       this.topic});
 
   @override

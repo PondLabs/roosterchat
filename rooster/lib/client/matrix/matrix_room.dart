@@ -41,6 +41,7 @@ import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_pinn
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_power_levels.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_redaction.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_sticker.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_tombstone.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_unknown.dart';
 import 'package:rooster/client/member.dart';
 import 'package:rooster/client/permissions.dart';
@@ -778,6 +779,8 @@ class MatrixRoom extends Room implements RoomSendPreparation {
           MatrixTimelineEventCall(event, client: c),
         matrix.EventTypes.RoomPinnedEvents =>
           MatrixTimelineEventPinnedMessages(event, client: c),
+        matrix.EventTypes.RoomTombstone =>
+          MatrixTimelineEventTombstone(event, client: c),
         "chat.commet.calendar_events" =>
           MatrixTimelineEventEditCalendar(event, client: c),
         _ => null
