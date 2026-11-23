@@ -2759,7 +2759,6 @@ class Client extends MatrixApi {
         final defined =
             await database.getCustomCacheObject(_definedSyncFilterCacheKey);
         if (defined?.content['filter'] != jsonEncode(syncFilter.toJson())) {
-          _syncFilterId = null;
           await _defineSyncFilter(userID);
         }
       } catch (e, s) {
@@ -2768,7 +2767,6 @@ class Client extends MatrixApi {
           e,
           s,
         );
-        _syncFilterId = previousId;
       }
     }
     if (syncFilterId == null) {
