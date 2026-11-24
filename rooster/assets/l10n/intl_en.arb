@@ -4075,6 +4075,24 @@
       }
     }
   },
+  "labelVoiceMessage": "Voice message",
+  "@labelVoiceMessage": {
+    "description": "Title of the player of a voice message recorded in the chat",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageAudioCouldNotPlay": "This audio could not be played",
+  "@messageAudioCouldNotPlay": {
+    "description": "Shown in the player of an audio message in the chat when its file could not be downloaded or played",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelAudioPlaybackPosition": "Playback position",
+  "@labelAudioPlaybackPosition": {
+    "description": "Read by screen readers for the bar that moves through an audio message in the chat",
+    "type": "text",
+    "placeholders": {}
+  },
   "messagePlaceholderSticker": "{user} sent a sticker",
   "@messagePlaceholderSticker": {
     "description": "Message body for when a user sends a sticker",
@@ -4103,9 +4121,64 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelLocation": "Location",
+  "@labelLocation": {
+    "description": "Title of a place shared in the chat, when the sender gave it no description",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptOpenLocationInMap": "Open in map",
+  "@promptOpenLocationInMap": {
+    "description": "Button on a place shared in the chat that opens it on OpenStreetMap in the web browser",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageLocationInvalid": "This location cannot be shown: its coordinates are not valid",
+  "@messageLocationInvalid": {
+    "description": "Shown in the chat for a shared place whose coordinates could not be read",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelLocationCoordinates": "{latitude}, {longitude}",
+  "@labelLocationCoordinates": {
+    "description": "The latitude and the longitude of a place shared in the chat, in decimal degrees, already formatted as numbers in the app's language",
+    "type": "text",
+    "placeholders": {
+      "latitude": {},
+      "longitude": {}
+    }
+  },
+  "labelLocationAccuracy": "Within {meters} m",
+  "@labelLocationAccuracy": {
+    "description": "Under a place shared in the chat: how far off it may be, in metres, already formatted as a number",
+    "type": "text",
+    "placeholders": {
+      "meters": {}
+    }
+  },
+  "labelLocationAltitude": "Altitude {meters} m",
+  "@labelLocationAltitude": {
+    "description": "Under a place shared in the chat: its height above sea level, in metres, already formatted as a number",
+    "type": "text",
+    "placeholders": {
+      "meters": {}
+    }
+  },
   "messageFailedToDecrypt": "Failed to decrypt event",
   "@messageFailedToDecrypt": {
     "description": "Placeholde text for when a message fails to decrypt",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotice": "Automated notice",
+  "@labelNotice": {
+    "description": "Marks a message in the chat that a bot or a service sent (a Matrix notice), not a person",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipNotice": "Sent by a bot or a service, not typed by a person",
+  "@tooltipNotice": {
+    "description": "Tooltip of the mark on a message that a bot or a service sent (a Matrix notice)",
     "type": "text",
     "placeholders": {}
   },
@@ -5200,6 +5273,42 @@
   "promptGoToReplacementRoom": "Go to new room",
   "@promptGoToReplacementRoom": {
     "description": "Button on the banner of an upgraded room that joins and opens the room that replaced it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSendLocation": "Send a location",
+  "@labelSendLocation": {
+    "description": "Title of the dialog, and tooltip of the composer's button, that sends a place to the chat",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSendLocationCoordinates": "Coordinates",
+  "@labelSendLocationCoordinates": {
+    "description": "Label of the field where the coordinates of a place to send are typed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintSendLocationCoordinates": "Latitude, longitude (e.g. -23.5505, -46.6333)",
+  "@hintSendLocationCoordinates": {
+    "description": "Hint in the field where the coordinates of a place to send are typed. Keep the example numbers as they are: they are typed with a dot",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSendLocationDescription": "Description (optional)",
+  "@labelSendLocationDescription": {
+    "description": "Label of the field where the person may say what the place they send is",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorSendLocationCoordinates": "Type a latitude from -90 to 90 and a longitude from -180 to 180, separated by a comma, or a geo: link",
+  "@errorSendLocationCoordinates": {
+    "description": "Shown under the coordinates of a place to send when they cannot be read. Keep \"geo:\" as it is",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptSendLocation": "Send",
+  "@promptSendLocation": {
+    "description": "Button that sends the place typed in the dialog to the chat",
     "type": "text",
     "placeholders": {}
   },

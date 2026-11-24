@@ -73,10 +73,9 @@ void main() {
 
     await typeAndSend(tester, 'look at this');
 
-    // The first frame after Send.
-    expect(sent.map((m) => (m.room, m.message, m.files.length)),
-        [(room, 'look at this', 0)],
-        reason: 'the text went without waiting for the photo');
+    // The first frame after Send. The text is the photo's caption (Matrix
+    // v1.10): it goes with the photo once prepared.
+    expect(sent, isEmpty);
     final slot = find.byKey(_slot);
     expect(slot, findsOneWidget);
     // As the timeline draws a picture: 200 high, its aspect ratio.
@@ -94,16 +93,18 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('0:01'), findsOneWidget);
     await typeAndSend(tester, 'and another thing');
-    expect(sent.map((m) => m.message), ['look at this', 'and another thing']);
+    expect(sent.map((m) => m.message), ['and another thing'],
+        reason: 'a text alone goes without waiting for the photo');
     expect(sent.every((m) => m.files.isEmpty), isTrue);
 
-    // Prepared: the photo follows, with the size and thumbnail made once.
+    // Prepared: the photo follows with its caption, with the size and
+    // thumbnail made once.
     await tester.pump(const Duration(seconds: 1));
     await tester.pump();
-    expect(sent, hasLength(3));
+    expect(sent, hasLength(2));
     final file = sent.last.files.single;
     expect(sent.last.room, room);
-    expect(sent.last.message, isNull);
+    expect(sent.last.message, 'look at this');
     expect(file.file.info['w'], 400);
     expect(file.file.info['h'], 300);
     expect(file.file.bytes, same(photo.data));
@@ -255,7 +256,8 @@ void main() {
       expect(
           sent.map(
               (m) => (m.room, m.threadRootEventId, m.message, m.files.length)),
-          [(room, r'$root', 'in the thread', 0), (room, r'$root', null, 1)]);
+          [(room, r'$root', 'in the thread', 1)],
+          reason: "the text is the file's caption");
       await closeChat(tester);
     });
 
@@ -274,7 +276,8 @@ void main() {
       await tester.pump(const Duration(seconds: 3));
 
       expect(sent.map((m) => (m.room, m.message, m.files.length)),
-          [(roomAsOther, 'from b', 0), (roomAsOther, null, 1)]);
+          [(roomAsOther, 'from b', 1)],
+          reason: "the text is the file's caption");
       await closeChat(tester);
     });
 
@@ -289,7 +292,8 @@ void main() {
       await tester.pump(const Duration(seconds: 3));
 
       expect(sent.map((m) => (m.room, m.message, m.files.length)),
-          [(room, 'bye', 0), (room, null, 1)]);
+          [(room, 'bye', 1)],
+          reason: "the text is the file's caption");
       await closeChat(tester);
     });
   });

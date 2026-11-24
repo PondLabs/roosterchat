@@ -12,6 +12,7 @@ import 'package:rooster/client/components/gif/gif_search_result.dart';
 import 'package:rooster/client/components/read_receipts/read_receipt_component.dart';
 import 'package:rooster/client/components/threads/thread_component.dart';
 import 'package:rooster/client/components/typing_indicators/typing_indicator_component.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event_message.dart';
 import 'package:rooster/client/timeline_events/timeline_event_sticker.dart';
@@ -26,6 +27,7 @@ import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/chat/chat_view.dart';
 import 'package:rooster/ui/organisms/chat/composer_send.dart';
 import 'package:rooster/ui/organisms/chat/dropped_files.dart';
+import 'package:rooster/ui/organisms/chat/send_location_dialog.dart';
 import 'package:rooster/ui/organisms/chat/url_preview_prefetcher.dart';
 import 'package:rooster/utils/debounce.dart';
 import 'package:rooster/utils/error_utils.dart';
@@ -463,6 +465,20 @@ class ChatState extends State<Chat> {
 
   void addReaction(TimelineEvent event, Emoticon emote) {
     room.addReaction(event, emote);
+  }
+
+  /// Asks for a place and sends it as an `m.location` message, in the
+  /// thread when this chat is one.
+  Future<void> sendLocation() async {
+    final target = room;
+    if (target is! MatrixRoom) return;
+    final place = await SendLocationForm.show(context);
+    if (place == null || !mounted) return;
+    await ErrorUtils.tryRun(context, () async {
+      await target.sendLocation(place.location,
+          description: place.description,
+          threadRootEventId: isThread ? threadId : null);
+    });
   }
 
   void sendSticker(Emoticon sticker) {

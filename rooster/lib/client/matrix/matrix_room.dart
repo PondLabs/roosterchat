@@ -38,6 +38,7 @@ import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_edit
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_emote.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_encrypted.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_membership.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_location_uri.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_message.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_pinned_messages.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_power_levels.dart';
@@ -634,60 +635,37 @@ class MatrixRoom extends Room implements RoomSendPreparation {
       Map<String, dynamic>? fileExtraContent,
       List<ProcessedAttachment>? processedAttachments}) async {
     final replyingTo = await _replyTarget(inReplyTo);
+    final files = (processedAttachments ?? const <ProcessedAttachment>[])
+        .whereType<MatrixProcessedAttachment>()
+        .toList();
+
+    // One file with text, neither a reply nor an edit: the text is the
+    // file's caption (v1.10, MSC2530), in its `body` (and formatted body),
+    // while `filename` keeps the file's own name.
+    final caption = message != null &&
+            message.trim().isNotEmpty &&
+            files.length == 1 &&
+            inReplyTo == null &&
+            replaceEvent == null
+        ? _textContent(message, replyingTo: null)
+        : null;
 
     // Each file goes on its own, its failure caught and shown on its
     // pending message (see media/matrix_file_send.dart).
-    for (final file in processedAttachments ?? const <ProcessedAttachment>[]) {
-      if (file is! MatrixProcessedAttachment) continue;
+    for (final file in files) {
       unawaited(sendMatrixAttachment(_matrixRoom, file,
           threadLastEventId: threadLastEventId,
           threadRootEventId: threadRootEventId,
-          extraContent: fileExtraContent));
+          extraContent: caption == null
+              ? fileExtraContent
+              : {...?fileExtraContent, ...caption}));
     }
 
-    if (message != null && message.trim().isNotEmpty) {
+    if (caption == null && message != null && message.trim().isNotEmpty) {
       final event = <String, dynamic>{
         'msgtype': matrix.MessageTypes.Text,
-        'body': message
+        ..._textContent(message, replyingTo: replyingTo),
       };
-
-      var emoticons = getComponent<MatrixRoomEmoticonComponent>();
-      final html = mx_markdown.markdown(message,
-          getEmotePacks: emoticons != null
-              ? () =>
-                  emoticons.getEmotePacksFlat(matrix.ImagePackUsage.emoticon)
-              : null,
-          getMention: _matrixRoom.getMention);
-
-      if (HtmlUnescape().convert(html.replaceAll(RegExp(r'<br />\n?'), '\n')) !=
-          event['body']) {
-        event['format'] = 'org.matrix.custom.html';
-        event['formatted_body'] = html;
-      }
-
-      var document = html_parser.parse(html);
-
-      var mentionsList = _findEventMentions(document);
-
-      var mentions = {};
-
-      if (mentionsList.contains("@room")) {
-        mentions["room"] = true;
-        mentionsList.remove("@room");
-      }
-
-      // A reply calls on whoever it answers, as the Matrix spec has it (and
-      // as Discord does): they are notified and see it highlighted.
-      if (replyingTo != null &&
-          replyingTo.senderId != _matrixRoom.client.userID) {
-        mentionsList.add(replyingTo.senderId);
-      }
-
-      if (mentionsList.isNotEmpty) {
-        mentions["user_ids"] = mentionsList.toList();
-      }
-
-      event["m.mentions"] = mentions;
 
       // The SDK makes the same transaction id when given none; ours lets the
       // speed log see the local echo (docs/speed-log.md).
@@ -718,6 +696,76 @@ class MatrixRoom extends Room implements RoomSendPreparation {
     }
 
     return null;
+  }
+
+  /// [message]'s `body`, its formatted body when the markdown made one,
+  /// and its `m.mentions`: a text message's content, or a file's caption.
+  Map<String, dynamic> _textContent(String message,
+      {required matrix.Event? replyingTo}) {
+    final content = <String, dynamic>{'body': message};
+
+    var emoticons = getComponent<MatrixRoomEmoticonComponent>();
+    final html = mx_markdown.markdown(message,
+        getEmotePacks: emoticons != null
+            ? () => emoticons.getEmotePacksFlat(matrix.ImagePackUsage.emoticon)
+            : null,
+        getMention: _matrixRoom.getMention);
+
+    if (HtmlUnescape().convert(html.replaceAll(RegExp(r'<br />\n?'), '\n')) !=
+        message) {
+      content['format'] = 'org.matrix.custom.html';
+      content['formatted_body'] = html;
+    }
+
+    var document = html_parser.parse(html);
+
+    var mentionsList = _findEventMentions(document);
+
+    var mentions = {};
+
+    if (mentionsList.contains("@room")) {
+      mentions["room"] = true;
+      mentionsList.remove("@room");
+    }
+
+    // A reply calls on whoever it answers, as the Matrix spec has it (and
+    // as Discord does): they are notified and see it highlighted.
+    if (replyingTo != null &&
+        replyingTo.senderId != _matrixRoom.client.userID) {
+      mentionsList.add(replyingTo.senderId);
+    }
+
+    if (mentionsList.isNotEmpty) {
+      mentions["user_ids"] = mentionsList.toList();
+    }
+
+    content["m.mentions"] = mentions;
+    return content;
+  }
+
+  /// Sends [location] as an `m.location` message, with the
+  /// extensible-events fields (MSC3488) other clients read: a pin the
+  /// person placed, not where their device is. Returns the event's id.
+  Future<String?> sendLocation(MatrixLocationUri location,
+      {String? description, String? threadRootEventId}) {
+    final text = description?.trim();
+    final hasText = text != null && text.isNotEmpty;
+    final geoUri = location.geoUri;
+    // Not translated: what other clients show without m.location; the URI
+    // reads the same in every language.
+    final body = hasText ? text : geoUri;
+    return _matrixRoom.sendEvent({
+      'msgtype': matrix.MessageTypes.Location,
+      'body': body,
+      'geo_uri': geoUri,
+      'org.matrix.msc3488.location': {
+        'uri': geoUri,
+        if (hasText) 'description': text,
+      },
+      'org.matrix.msc3488.asset': {'type': 'm.pin'},
+      'org.matrix.msc1767.text': body,
+      'org.matrix.msc3488.ts': DateTime.now().millisecondsSinceEpoch,
+    }, threadRootEventId: threadRootEventId);
   }
 
   /// The event a reply goes to: the one already held, not looked up again
