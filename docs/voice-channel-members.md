@@ -72,6 +72,68 @@ another room does not wait. An old join that outlasts those 10 s does not
 clear at all once the new join has written the membership, so its clear
 cannot erase it. A hung up join never hands over a session.
 
+## Newer MatrixRTC clients
+
+Since 2026-11 (T5.2) a membership can come in three formats, and every
+reader above goes through one list of them (`CallMemberships.of`,
+`client/matrix/components/voip_room/call_memberships.dart`): the legacy
+state event, `m.rtc.member` (MSC4143) as room state, and
+`org.matrix.msc4143.rtc.member` (or `m.rtc.member`) as a sticky event
+(MSC4354), which sync hands out while it is sticky (`duration_ms` from
+when it was sent, an hour at most) and the SDK keeps across a restart.
+The list has one membership per person's device, each in the legacy shape
+(the newer format's `expires` is how long it stays sticky), so the
+channel's page, the sidebar, Who's around, the key provider (who gets our
+keys), the soundboard and "joined again from another device" list someone
+once whichever format, or formats, their client writes. When a device has
+both: while both say it is in the call, the legacy one counts (only it
+has the badges and a delayed leave behind it); otherwise the newer of the
+two, unless one has only lapsed. So a client that dies is off the list
+within the delayed leave's 15 s, when the delayed leave clears its legacy
+membership after its last sticky one, and a sticky membership that lapsed
+does not hide a live legacy one. Lapsing still goes by the homeserver's
+clock. A sticky leave that does not name its device (no `member`) only
+replaces the join it shares a sticky key with.
+
+Our own membership is written as before, legacy state with its hourly
+rewrite, delayed leave and clear. Where the homeserver announces sticky
+events (`org.matrix.msc4354`), and only there, the heartbeat also sends it
+as a sticky `org.matrix.msc4143.rtc.member` for two minutes, again half a
+minute after each send (`MatrixLivekitVoipSession.stickyLifetime`,
+`stickyRefresh`), while the legacy one is live, and a sticky leave
+(`member`, no `application`) when we step out or hang up. Short like a
+membership without a delayed leave: a client that reads only the newer
+format drops us within two minutes of our app dying.
+
+**Delayed leaves on Matrix v1.20.** A homeserver with Matrix v1.20 (or
+`org.matrix.msc4140.stable`) arms ours on the stable API
+(`/_matrix/client/v1/delayed_events`, `?delay=`), an older one on the
+unstable one. Each leave is restarted, sent and cancelled on the API it
+was armed with (`_delayedLeaveApis`): asked for on the other one it is not
+found, and a client that died would stay listed. One that says v1.20 but
+answers `M_UNRECOGNIZED` to the stable arm gets the unstable one, if it
+offers it.
+
+## Ringing
+
+Someone starting a call can ring the others (MSC4075:
+`org.matrix.msc4075.rtc.notification` or `m.rtc.notification` with
+`notification_type: ring`, `m.call.notify` or
+`org.matrix.msc4075.call.notify` with `notify_type: ring`). `MatrixClient`
+hands every one, decrypted, to the room's `MatrixVoipRoomComponent.rings`
+(`call_ring.dart`). One rings when it is not ours, mentions us or the room
+(or nobody in particular), and is not over by the homeserver's clock: its
+`lifetime` (30 s by default, two minutes at most) from its `sender_ts`,
+or from when it was sent if the two are more than 20 s apart. The
+channel's page then shows "Bob is calling" with Join and Decline
+(`voip_room_view/call_ring_banner.dart`, the same on the web). It stops
+when its lifetime ends, when we join, when we decline, and when another of
+our devices declines it. Decline sends a decline (MSC4310) with an
+`m.reference` to the notification: `m.rtc.decline` from Matrix v1.20 (or
+`org.matrix.msc4310.stable`), `org.matrix.msc4310.rtc.decline` before.
+Rooster does not ring anyone itself, and a ring shows only on the
+channel's page, not elsewhere in the app.
+
 ## Clicking, right-clicking and dragging someone
 
 Each person under a voice channel in the sidebar
@@ -140,6 +202,10 @@ directly. Clients other than Rooster ignore the message.
 | The membership write and the LiveKit connection run together; the microphone is published only once both succeeded; a write or a connection that fails, times out or is hung up leaves no membership and no session, the clear goes only after the write has ended, a quick rejoin writes after that clear, an old join that outlasts the rejoin's wait leaves the new membership alone, and a join in another room does not wait | `unit_test/call_join/membership_beside_connect_test.dart`, `unit_test/call_join/voip_room_component_hang_up_test.dart` |
 | Joining without a microphone advertises muted even without delayed events or a track event; stopping a screen share during a full reconnect clears LIVE from the membership people outside the call read | `unit_test/call_membership_keepalive_test.dart`, `unit_test/screen_share_stop_test.dart` |
 | An older device cannot overwrite the current join's voice state, regardless of state-key order; deafening and undeafening are published, and a sync refreshes the open sidebar before joining | `unit_test/voice_channel_member_list_test.dart`, `unit_test/voice_channel_sidebar_row_test.dart`, `unit_test/call_membership_keepalive_test.dart` |
+| Every format is listed, the three at once for one device once (page, sidebar, Who's around, key recipients), with the legacy one's badges; two devices of one person are two memberships; a sticky membership counts while sticky by the homeserver's clock; a cleared legacy membership takes down an older sticky one, a lapsed one hides nothing; a sync with a sticky membership refreshes the list | `unit_test/matrix_rtc_next/dual_read_test.dart` |
+| The delayed leave is armed, restarted and sent on the stable API from v1.20 and on the unstable one before, and stays on the unstable one when the stable one is unknown; the sticky membership goes out only where the homeserver has sticky events, beside a live legacy one, every half minute, and comes down when we step out | `unit_test/matrix_rtc_next/session_delayed_and_sticky_test.dart` |
+| Sticky events from both sync transports, kept by sticky key, across a restart; the call extension's delayed leave on the API it was scheduled with; `m.rtc.member` memberships listed once per device in the SDK | `third_party/matrix-dart-sdk/test/matrix_rtc_next_test.dart` |
+| Each notification type rings, for its lifetime and two minutes at most, until it ends, we join or decline; ours, a lapsed one, a plain notification and one for others do not; Decline sends the decline for the server's version, referencing the notification; our other device's decline stops it; the banner shows who rings and its buttons work | `unit_test/matrix_rtc_next/call_ring_test.dart` |
 
 Reverting any one of these fixes turns at least one of these tests red
 (checked by hand on 2026-09-30, twenty-two mutations).
