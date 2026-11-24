@@ -577,11 +577,26 @@ class Client extends MatrixApi {
       if (checkWellKnown) {
         try {
           wellKnown = await getWellknown();
-          homeserver = wellKnown.mHomeserver.baseUrl.stripTrailingSlash();
+          final baseUrl = wellKnown.mHomeserver.baseUrl;
+          // ROOSTER: the well-known is fetched over HTTPS; a plain-HTTP
+          // base_url in it would drop TLS for the whole session. Only a
+          // server typed as http:// or one on this machine may use http:.
+          if (homeserverUrl.scheme != 'http' &&
+              baseUrl.scheme == 'http' &&
+              !_isLoopbackHost(baseUrl.host)) {
+            throw InsecureDiscoveryException(
+              InsecureDiscoveryFailure.baseUrl,
+              homeserverUrl,
+              baseUrl,
+            );
+          }
+          homeserver = baseUrl.stripTrailingSlash();
         } on WellKnownRedirectException {
           // ROOSTER: a redirect loop or a redirect to a non-HTTP(S) URL is a
           // broken discovery file (FAIL_PROMPT in the spec), not "no file".
           rethrow;
+        } on InsecureDiscoveryException {
+          rethrow; // ROOSTER
         } catch (e) {
           Logs().v('Found no well known information', e);
         }
@@ -611,6 +626,10 @@ class Client extends MatrixApi {
       if (fetchAuthMetadata) {
         try {
           authMetadata = await getAuthMetadata();
+        } on InsecureDiscoveryException {
+          // ROOSTER: a redirect to plain HTTP is an attack on the sign-in,
+          // not a server without OAuth: do not fall back to /v3/login.
+          rethrow;
         } on MatrixException catch (e, s) {
           if (e.error != MatrixError.M_UNRECOGNIZED) {
             Logs().w('Unable to discover OIDC auth metadata.', e, s);
@@ -665,7 +684,7 @@ class Client extends MatrixApi {
       requestAndCache(
         () async {
           // ROOSTER: follow 301/302/307/308 (MSC4402, Matrix v1.20).
-          final wellKnownResponse = await _getFollowingWellKnownRedirects(
+          final wellKnownResponse = await _getFollowingDiscoveryRedirects(
             Uri.https(
               userID?.domain ?? homeserver!.host,
               '/.well-known/matrix/client',
@@ -685,7 +704,9 @@ class Client extends MatrixApi {
 
   // ROOSTER: MSC4402 (Matrix v1.20) lets `/.well-known/matrix/client` answer
   // with a redirect. Each hop resolves `Location` against the URL it came
-  // from; at most [maxWellKnownRedirects] hops, only http(s), no URL twice.
+  // from; at most [maxWellKnownRedirects] hops, only http(s), no URL twice,
+  // and never from https: to http: (InsecureDiscoveryException). The
+  // `auth_metadata` fetch follows its redirects through the same rules.
   /// The most redirects followed for `/.well-known/matrix/client`.
   static const int maxWellKnownRedirects = 5;
 
@@ -696,7 +717,7 @@ class Client extends MatrixApi {
   static const bool _browserFollowsRedirects =
       bool.fromEnvironment('dart.library.js_interop');
 
-  Future<http.Response> _getFollowingWellKnownRedirects(Uri uri) async {
+  Future<http.Response> _getFollowingDiscoveryRedirects(Uri uri) async {
     final seen = <Uri>{uri};
     var current = uri;
     for (var hops = 0;; hops++) {
@@ -730,6 +751,14 @@ class Client extends MatrixApi {
           target: next,
         );
       }
+      // ROOSTER: checked before the hop, so nothing is asked of the http: host.
+      if (current.scheme == 'https' && next.scheme == 'http') {
+        throw InsecureDiscoveryException(
+          InsecureDiscoveryFailure.redirect,
+          current,
+          next,
+        );
+      }
       if (hops + 1 > maxWellKnownRedirects) {
         throw WellKnownRedirectException(
           WellKnownRedirectFailure.tooManyRedirects,
@@ -747,6 +776,12 @@ class Client extends MatrixApi {
       current = next;
     }
   }
+
+  // ROOSTER: a homeserver on this machine (local development).
+  static bool _isLoopbackHost(String host) =>
+      host == 'localhost' ||
+      host == '::1' ||
+      RegExp(r'^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$').hasMatch(host);
 
   /// Checks to see if a username is available, and valid, for the server.
   /// Returns the fully-qualified Matrix user ID (MXID) that has been registered.
@@ -882,7 +917,20 @@ class Client extends MatrixApi {
     bool throwOnUpdateFailure = false,
   }) =>
       requestAndCache(
-        super.getAuthMetadata,
+        // ROOSTER: the generated call lets the HTTP client follow redirects,
+        // which on dart:io goes on to http: too. Follow them by hand, under
+        // the well-known's rules, so a downgrade is refused before it is sent.
+        () async {
+          final response = await _getFollowingDiscoveryRedirects(
+            baseUri!.resolveUri(Uri(path: '_matrix/client/v1/auth_metadata')),
+          );
+          if (response.statusCode != 200) {
+            unexpectedResponse(response, response.bodyBytes);
+          }
+          return GetAuthMetadataResponse.fromJson(
+            jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, Object?>,
+          );
+        },
         fromJson: GetAuthMetadataResponse.fromJson,
         toJson: (response) => response.toJson(),
         cacheKey: 'auth_metadata',
@@ -5307,6 +5355,36 @@ class WellKnownRedirectException implements Exception {
   @override
   String toString() =>
       'WellKnownRedirectException: ${failure.name} at $from${target == null ? '' : ' -> ${target!.scheme}:'}';
+}
+
+// ROOSTER: Why the server discovery was refused for leaving HTTPS.
+enum InsecureDiscoveryFailure {
+  /// A `/.well-known/matrix/client` or `auth_metadata` redirect from
+  /// https: to http:.
+  redirect,
+
+  /// A well-known fetched over HTTPS whose `m.homeserver.base_url` is
+  /// http: on another machine.
+  baseUrl,
+}
+
+// ROOSTER: The discovery would go from HTTPS to plain HTTP; nothing was
+// asked of the http: URL.
+class InsecureDiscoveryException implements Exception {
+  final InsecureDiscoveryFailure failure;
+
+  /// The https: URL the discovery was at (for [InsecureDiscoveryFailure.baseUrl],
+  /// the server as it was given).
+  final Uri from;
+
+  /// The http: URL it pointed to.
+  final Uri target;
+
+  InsecureDiscoveryException(this.failure, this.from, this.target);
+
+  @override
+  String toString() =>
+      'InsecureDiscoveryException: ${failure.name} from ${from.host} to http:${target.host}';
 }
 
 // ROOSTER: Explicit exception when a homeserver advertises no compatible Matrix spec version.
