@@ -92,13 +92,46 @@ class ServerAclEditor extends StatefulWidget {
 }
 
 class _ServerAclEditorState extends State<ServerAclEditor> {
-  late final ServerAcl initial = widget.acl.current;
-  late final allow = TextEditingController(text: initial.allow.join('\n'));
-  late final deny = TextEditingController(text: initial.deny.join('\n'));
-  late bool allowIpLiterals = initial.allowIpLiterals;
+  final allow = TextEditingController();
+  final deny = TextEditingController();
+  ServerAcl initial = ServerAcl(allow: ['*']);
+  bool allowIpLiterals = true;
+  bool loading = false;
+  bool loadFailed = false;
   bool saving = false;
   bool saved = false;
   String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.acl.room.partial) {
+      loading = true;
+      _load();
+    } else {
+      _applyCurrent();
+    }
+  }
+
+  void _applyCurrent() {
+    initial = widget.acl.current;
+    allow.text = initial.allow.join('\n');
+    deny.text = initial.deny.join('\n');
+    allowIpLiterals = initial.allowIpLiterals;
+  }
+
+  Future<void> _load() async {
+    try {
+      await widget.acl.room.postLoad();
+    } catch (e, s) {
+      Log.onError(e, s, content: "Could not load the server ACL");
+      error = ModerationStrings.errorText(e);
+      loadFailed = true;
+    }
+    if (!mounted) return;
+    if (!loadFailed) _applyCurrent();
+    setState(() => loading = false);
+  }
 
   ServerAcl get edited => ServerAcl(
         allow: allow.text.split('\n'),
@@ -134,7 +167,13 @@ class _ServerAclEditorState extends State<ServerAclEditor> {
 
   @override
   Widget build(BuildContext context) {
+    if (loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
     final colors = Theme.of(context).colorScheme;
+    if (loadFailed) {
+      return Text(error!, style: TextStyle(color: colors.error));
+    }
     final server = widget.acl.ownServer;
     final problems = widget.acl.problemsOf(edited);
     TextField field(Key key, TextEditingController controller, String label) =>

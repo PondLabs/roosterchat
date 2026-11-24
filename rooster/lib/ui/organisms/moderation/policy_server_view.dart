@@ -96,12 +96,43 @@ class PolicyServerView extends StatefulWidget {
 }
 
 class _PolicyServerViewState extends State<PolicyServerView> {
-  late final via = TextEditingController(text: widget.policy.current.via);
-  late final key =
-      TextEditingController(text: widget.policy.current.ed25519PublicKey);
+  final via = TextEditingController();
+  final key = TextEditingController();
+  bool loading = false;
+  bool loadFailed = false;
   bool saving = false;
   bool saved = false;
   String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.policy.room.partial) {
+      loading = true;
+      _load();
+    } else {
+      _applyCurrent();
+    }
+  }
+
+  void _applyCurrent() {
+    final current = widget.policy.current;
+    via.text = current.via ?? '';
+    key.text = current.ed25519PublicKey ?? '';
+  }
+
+  Future<void> _load() async {
+    try {
+      await widget.policy.room.postLoad();
+    } catch (e, s) {
+      Log.onError(e, s, content: "Could not load the policy server");
+      error = ModerationStrings.errorText(e);
+      loadFailed = true;
+    }
+    if (!mounted) return;
+    if (!loadFailed) _applyCurrent();
+    setState(() => loading = false);
+  }
 
   @override
   void dispose() {
@@ -130,7 +161,13 @@ class _PolicyServerViewState extends State<PolicyServerView> {
 
   @override
   Widget build(BuildContext context) {
+    if (loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
     final colors = Theme.of(context).colorScheme;
+    if (loadFailed) {
+      return Text(error!, style: TextStyle(color: colors.error));
+    }
     final problems = widget.policy.problemsOf(via.text, key.text);
     final rules = PolicyRule.of(widget.policy.room);
     TextField field(Key k, TextEditingController controller, String label) =>
