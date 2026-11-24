@@ -330,6 +330,21 @@ void main() {
       );
     });
 
+    test("a claim of another device than the Olm session's is not verified",
+        () async {
+      // Claimed keys of its own (the migration leaves it): the victim's key
+      // over the Olm session of the legit device.
+      final sessionId = await storeOldSession(
+        legit.curve,
+        column: {'ed25519': victim.ed},
+      );
+      final c = await start();
+      expect(
+        c.encryption!.megolmSenderTrust(await message(c, sessionId, 'old')),
+        MegolmSenderTrust.unverifiedOrigin,
+      );
+    });
+
     test('it runs once per database and every old message still decrypts',
         () async {
       final attacker = vod.Account().identityKeys.curve25519.toBase64();
