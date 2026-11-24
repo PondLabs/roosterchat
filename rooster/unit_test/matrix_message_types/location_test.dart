@@ -84,6 +84,8 @@ void main() {
       'https://maps.example/?q=1,2',
       'http://evil.example/geo:1,2',
       'mxc://server/media',
+      'xyz:1,2',
+      'map:51.5,0.12',
       'geo:1,2;${'a' * 300}',
     ]) {
       test(
