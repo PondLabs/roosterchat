@@ -358,7 +358,10 @@ class LoginPageState extends State<LoginPage> {
       loginFlows = result.$2;
       final client = loginClient;
       authMetadata = client is MatrixClient ? client.authMetadata : null;
-      serverInfoError = result.$1 ? null : errorLoginHomeserverUnverified;
+      serverInfoError = result.$1
+          ? null
+          : (client is MatrixClient ? client.homeserverError : null) ??
+              errorLoginHomeserverUnverified;
     });
   }
 
