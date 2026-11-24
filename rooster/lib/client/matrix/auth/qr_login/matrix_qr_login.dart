@@ -141,10 +141,11 @@ class MatrixQrLoginFlow implements LoginFlow, QrLoginNewDeviceHost {
   @override
   Future<void> importSecrets(QrLoginSecrets secrets) => importQrLoginSecrets(
       (_client as MatrixClient).getMatrixClient(), secrets);
-
-  static bool _sameOrigin(Uri a, Uri b) =>
-      a.scheme == b.scheme && a.host == b.host && a.port == b.port;
 }
+
+/// Same scheme, host and port (the port a scheme implies included).
+bool _sameOrigin(Uri a, Uri b) =>
+    a.scheme == b.scheme && a.host == b.host && a.port == b.port;
 
 /// Keeps each of [secrets] that matches the account's published public key
 /// (the others are dropped), the way a secret shared by another device is
@@ -232,15 +233,18 @@ class MatrixQrLoginExistingDevice implements QrLoginExistingDeviceHost {
   @override
   Future<void> approve(Uri verificationUri) => onApprove(verificationUri);
 
+  /// The page's whole origin (scheme, host and port) must be one of the
+  /// authorization server's: an `http:` page on the issuer's host is not
+  /// the issuer's page, anyone on the network can answer it.
   @override
   Future<bool> trusts(Uri verificationUri) async {
     try {
       final metadata = await mx.getAuthMetadata();
-      return {
-        metadata.issuer.host,
-        metadata.authorizationEndpoint.host,
-        metadata.deviceAuthorizationEndpoint?.host,
-      }.contains(verificationUri.host);
+      return [
+        metadata.issuer,
+        metadata.authorizationEndpoint,
+        metadata.deviceAuthorizationEndpoint,
+      ].any((server) => server != null && _sameOrigin(server, verificationUri));
     } catch (_) {
       // No OAuth 2.0 server: no page to trust.
       return false;
