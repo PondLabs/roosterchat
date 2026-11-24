@@ -168,6 +168,38 @@ abstract class SyncRoomUpdate {}
 
 // ROOSTER: Parse `{events: [...]}` state blocks (such as Matrix v1.16 MSC4222
 // `state_after`) without crashing /sync on malformed entries.
+// ROOSTER: MSC4354 sticky events of a joined room (see
+// [JoinedRoomUpdate.sticky]), once each: a server may send one in both
+// the timeline and the sticky section. Null when the room has none.
+List<MatrixEvent>? _parseStickyEvents(Map<String, Object?> json) {
+  final raw = <Object?>[
+    ...?(json['sticky'] as Map?)?['events'] as List?,
+    ...?(json['msc4354_sticky'] as Map?)?['events'] as List?,
+    for (final event
+        in (json['timeline'] as Map?)?['events'] as List? ?? const [])
+      if (event is Map &&
+          (event['sticky'] is Map || event['msc4354_sticky'] is Map))
+        event,
+  ];
+  if (raw.isEmpty) return null;
+  final events = <String, MatrixEvent>{};
+  for (final item in raw) {
+    if (item is! Map) continue;
+    final sticky = item['sticky'] ?? item['msc4354_sticky'];
+    final duration = sticky is Map ? sticky['duration_ms'] : null;
+    try {
+      final event = MatrixEvent.fromJson(Map<String, Object?>.from(item));
+      if (duration is int) {
+        (event.unsigned ??= {})[JoinedRoomUpdate.stickyDurationKey] = duration;
+      }
+      events[event.eventId] = event;
+    } catch (e, s) {
+      Logs().w('Ignoring malformed sticky event in sync', e, s);
+    }
+  }
+  return events.isEmpty ? null : events.values.toList();
+}
+
 List<MatrixEvent>? _parseStateEvents(Map<String, Object?> json, String key) {
   final block = json.tryGetMap<String, Object?>(key);
   if (block == null) return null;
@@ -243,6 +275,16 @@ class JoinedRoomUpdate extends SyncRoomUpdate {
   // ROOSTER: Matrix v1.4 MSC3773 per-thread unread notification counts.
   Map<String, UnreadNotificationCounts>? unreadThreadNotifications;
 
+  // ROOSTER: MSC4354 sticky events (MatrixRTC memberships, T5.2): the room's
+  // `sticky` (`msc4354_sticky` while unstable) section, plus the timeline
+  // events that say they are sticky. Each one's duration is kept in
+  // `unsigned` under [stickyDurationKey]: `MatrixEvent` drops the top-level
+  // `sticky` object it comes in.
+  List<MatrixEvent>? sticky;
+
+  // ROOSTER: Where a sticky event's `duration_ms` is kept (see [sticky]).
+  static const stickyDurationKey = 'chat.commet.sticky_duration_ms';
+
   JoinedRoomUpdate({
     this.summary,
     this.state,
@@ -252,6 +294,7 @@ class JoinedRoomUpdate extends SyncRoomUpdate {
     this.accountData,
     this.unreadNotifications,
     this.unreadThreadNotifications, // ROOSTER
+    this.sticky, // ROOSTER
   });
 
   JoinedRoomUpdate.fromJson(Map<String, Object?> json)
@@ -275,7 +318,8 @@ class JoinedRoomUpdate extends SyncRoomUpdate {
           UnreadNotificationCounts.fromJson,
         ),
         unreadThreadNotifications = // ROOSTER
-            _parseUnreadThreadNotifications(json); // ROOSTER
+            _parseUnreadThreadNotifications(json), // ROOSTER
+        sticky = _parseStickyEvents(json); // ROOSTER
 
   Map<String, Object?> toJson() {
     final data = <String, Object?>{};
@@ -285,6 +329,19 @@ class JoinedRoomUpdate extends SyncRoomUpdate {
     if (state != null) {
       data['state'] = {
         'events': state!.map((i) => i.toJson()).toList(),
+      };
+    }
+    // ROOSTER: Serialize MSC4354 sticky events, their duration back on top.
+    if (sticky != null) {
+      data['msc4354_sticky'] = {
+        'events': [
+          for (final event in sticky!)
+            {
+              ...event.toJson(),
+              if (event.unsigned?[stickyDurationKey] case final int duration)
+                'msc4354_sticky': {'duration_ms': duration},
+            },
+        ],
       };
     }
     // ROOSTER: Serialize Matrix v1.16 `state_after`.

@@ -2614,6 +2614,7 @@ class Client extends MatrixApi {
         _rooms = rooms;
         // ROOSTER: with the per-thread unread counts they had.
         await _restoreUnreadThreadNotifications();
+        await _restoreStickyEvents(); // ROOSTER: T5.2
         _sortRooms();
       });
       _accountDataLoading = database.getAccountData().then((data) {
@@ -3103,6 +3104,68 @@ class Client extends MatrixApi {
     }
   }
 
+  // ROOSTER: MSC4354 sticky events (T5.2) are only handed out once by an
+  // incremental sync: kept in the custom cache, so a restart still knows
+  // who is in a call (MatrixRTC memberships are sticky events).
+  static const _stickyEventsCacheKey = 'rooster_msc4354_sticky_events';
+  bool _stickyEventsDirty = false;
+
+  Future<void> _handleStickyEvents(Room room, List<MatrixEvent> sticky) async {
+    for (final raw in sticky) {
+      var event = Event.fromMatrixEvent(raw, room);
+      if (event.type == EventTypes.Encrypted && encryptionEnabled) {
+        try {
+          event = await encryption!.decryptRoomEvent(event);
+        } catch (e, s) {
+          Logs().w('Unable to decrypt a sticky event', e, s);
+        }
+      }
+      if (room.addStickyEvent(event)) _stickyEventsDirty = true;
+    }
+  }
+
+  Future<void> _storeStickyEvents() async {
+    _stickyEventsDirty = false;
+    // Long past their end by any clock: whoever reads the rest decides by
+    // their own (Rooster by the homeserver's).
+    final before = DateTime.now().subtract(RoomStickyEvents.maxDuration);
+    for (final room in rooms) {
+      room.pruneStickyEvents(before);
+    }
+    try {
+      await database.cacheCustomObject(_stickyEventsCacheKey, {
+        'rooms': {
+          for (final room in rooms)
+            if (room.stickyEvents.isNotEmpty)
+              room.id: [
+                for (final event in room.stickyEvents) event.toJson(),
+              ],
+        },
+      });
+    } catch (e, s) {
+      _stickyEventsDirty = true;
+      Logs().w('Unable to store the sticky events', e, s);
+    }
+  }
+
+  Future<void> _restoreStickyEvents() async {
+    try {
+      final stored = await database.getCustomCacheObject(_stickyEventsCacheKey);
+      final byRoom = stored?.content.tryGetMap<String, Object?>('rooms');
+      if (byRoom == null) return;
+      for (final room in _rooms) {
+        for (final json in byRoom.tryGetList<Object?>(room.id) ?? const []) {
+          if (json is! Map) continue;
+          room.addStickyEvent(
+            Event.fromJson(Map<String, Object?>.from(json), room),
+          );
+        }
+      }
+    } catch (e, s) {
+      Logs().w('Unable to restore the sticky events', e, s);
+    }
+  }
+
   Future<void>? _handleSoftLogoutFuture;
 
   Future<void> _handleSoftLogout() async {
@@ -3385,6 +3448,8 @@ class Client extends MatrixApi {
     _sortRooms();
     // ROOSTER: keep the per-thread unread counts this sync changed.
     if (_threadNotificationsDirty) await storeUnreadThreadNotifications();
+    // ROOSTER: and the sticky events it brought (T5.2).
+    if (_stickyEventsDirty) await _storeStickyEvents();
     onSync.add(sync);
   }
 
@@ -3573,6 +3638,13 @@ class Client extends MatrixApi {
             await database.storeRoomAccountData(room.id, event);
             room.roomAccountData[event.type] = event;
           }
+        }
+
+        // ROOSTER: MSC4354 sticky events (T5.2), from `/v3/sync` and
+        // Sliding Sync alike (the hydration puts them in the same place).
+        final sticky = syncRoomUpdate.sticky;
+        if (sticky != null && direction != Direction.b) {
+          await _handleStickyEvents(room, sticky);
         }
       }
 
