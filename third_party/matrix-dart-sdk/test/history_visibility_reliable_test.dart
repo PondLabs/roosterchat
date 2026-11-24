@@ -273,6 +273,25 @@ void main() {
       expect(marked(hidden), isNull, reason: 'a session marked under joined');
     });
 
+    test('a "joined" dated earlier is not undone by older state', () async {
+      await client.handleSync(syncOf(newRoom('shared')));
+      final room = client.getRoomById(_roomId)!;
+      room.partial = false;
+      final now = DateTime.now();
+      await client.handleSync(
+        syncOf([
+          visibility('joined', at: now.subtract(const Duration(minutes: 5))),
+        ]),
+      );
+      // Older than the first "shared" too, so it says nothing new.
+      await client.handleSync(
+        syncOf([
+          visibility('shared', at: now.subtract(const Duration(minutes: 2))),
+        ]),
+      );
+      expect(marked(await say('said under joined')), isNull);
+    });
+
     test('a "shared" dated earlier still changes nothing', () async {
       await client.handleSync(syncOf(newRoom('joined')));
       final room = client.getRoomById(_roomId)!;
