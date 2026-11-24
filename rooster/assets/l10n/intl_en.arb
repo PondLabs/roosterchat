@@ -9394,6 +9394,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "errorReauthenticateNewDevice": "Your server signed you in on a new device instead of this one, so Rooster did not use it and nothing changed here. Your messages and encryption keys are still on this device. You can remove the new device from your account's sessions.",
+  "@errorReauthenticateNewDevice": {
+    "description": "In the dialog to sign in again, after the server's sign-in page: the server signed the account in on another device than the one it was asked for, so the new session was not used",
+    "type": "text",
+    "placeholders": {}
+  },
   "promptLoginCreateAccount": "Create account",
   "@promptLoginCreateAccount": {
     "description": "Link on the login screen, title and button of the form that creates a new account on the server typed",

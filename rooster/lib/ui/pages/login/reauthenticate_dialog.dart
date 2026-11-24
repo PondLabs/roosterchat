@@ -3,20 +3,34 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/auth.dart';
+import 'package:rooster/client/client.dart';
+import 'package:rooster/client/matrix/auth/matrix_oidc_login_flow.dart';
 import 'package:rooster/client/matrix/auth/matrix_sso_login_flow.dart';
 import 'package:rooster/client/matrix/auth/matrix_token_refresher.dart';
 import 'package:rooster/client/matrix/auth/matrix_username_password_login_flow.dart';
+import 'package:rooster/client/matrix/auth/oidc_redirect_receiver.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/ui/pages/login/oidc_login_buttons.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 /// Signs an account's device in again when its refresh token was refused,
 /// in place: the same device, its database and its encryption keys stay.
 class ReauthenticateDialog extends StatefulWidget {
-  const ReauthenticateDialog({super.key, required this.client});
+  const ReauthenticateDialog({
+    super.key,
+    required this.client,
+    this.oidcReceiverFactory,
+  });
 
   final MatrixClient client;
+
+  /// Where the OAuth 2.0 sign-in page sends the browser back; the
+  /// platform's receiver when null (tests give a fake browser).
+  final Future<OidcRedirectReceiver> Function({
+    required OidcLandingPage landingPage,
+  })? oidcReceiverFactory;
 
   static final Set<MatrixClient> _open = {};
 
@@ -97,6 +111,16 @@ class ReauthenticateDialog extends StatefulWidget {
       desc: "In the dialog to sign in again, when the server answered for "
           "another account or another device than this one");
 
+  static String get errorReauthenticateNewDevice => Intl.message(
+      "Your server signed you in on a new device instead of this one, so "
+      "Rooster did not use it and nothing changed here. Your messages and "
+      "encryption keys are still on this device. You can remove the new "
+      "device from your account's sessions.",
+      name: "errorReauthenticateNewDevice",
+      desc: "In the dialog to sign in again, after the server's sign-in page: "
+          "the server signed the account in on another device than the one "
+          "it was asked for, so the new session was not used");
+
   @override
   State<ReauthenticateDialog> createState() => _ReauthenticateDialogState();
 }
@@ -112,12 +136,26 @@ class _ReauthenticateDialogState extends State<ReauthenticateDialog> {
   @override
   void initState() {
     super.initState();
-    widget.client.reauthenticationFlows().then((flows) {
+    _loadFlows().then((flows) {
       if (mounted) setState(() => _flows = flows);
     }).catchError((Object e, StackTrace s) {
       Log.onError(e, s, content: "Could not read the server's sign-in ways");
       if (mounted) setState(() => _flows = const []);
     });
+  }
+
+  /// The server's OAuth 2.0 sign-in for a session signed in through it, else
+  /// its password and single sign-on.
+  Future<List<LoginFlow>> _loadFlows() async {
+    MatrixOidcLoginFlow? oauth;
+    try {
+      oauth = await MatrixOidcLoginFlow.forReauthentication(widget.client,
+          receiverFactory: widget.oidcReceiverFactory);
+    } catch (e, s) {
+      Log.onError(e, s, content: "Could not read the server's OAuth sign-in");
+    }
+    if (oauth != null) return [oauth];
+    return widget.client.reauthenticationFlows();
   }
 
   @override
@@ -133,8 +171,10 @@ class _ReauthenticateDialogState extends State<ReauthenticateDialog> {
     });
     try {
       await action();
-    } on ReauthenticationMismatch {
-      _error = ReauthenticateDialog.errorReauthenticateOtherDevice;
+    } on ReauthenticationMismatch catch (e) {
+      _error = e.newDevice
+          ? ReauthenticateDialog.errorReauthenticateNewDevice
+          : ReauthenticateDialog.errorReauthenticateOtherDevice;
     } on matrix.MatrixException catch (e) {
       _error = e.errorMessage;
     } on PlatformException catch (e) {
@@ -166,12 +206,20 @@ class _ReauthenticateDialogState extends State<ReauthenticateDialog> {
         if (token != null) await _refresher.reauthenticate(loginToken: token);
       });
 
+  /// Closing the server's page leaves the account as it was: signed out on
+  /// this device, with the alert to sign in again.
+  Future<void> _signInWithOAuth(MatrixOidcLoginFlow flow) => _run(() async {
+        final result = await flow.reauthenticate(widget.client);
+        if (result is LoginResultError) _error = result.errorMessage;
+      });
+
   @override
   Widget build(BuildContext context) {
     final flows = _flows;
     final user = widget.client.getMatrixClient().userID ?? "";
     final password = flows?.whereType<MatrixPasswordLoginFlow>() ?? [];
     final sso = flows?.whereType<MatrixSSOLoginFlow>() ?? [];
+    final oauth = flows?.whereType<MatrixOidcLoginFlow>() ?? [];
     return Padding(
       padding: const EdgeInsets.all(8),
       child: Column(
@@ -205,6 +253,13 @@ class _ReauthenticateDialogState extends State<ReauthenticateDialog> {
               onTap: _busy ? null : _signInWithPassword,
             ),
           ],
+          for (final flow in oauth)
+            tiamat.Button(
+              key: const ValueKey('reauthenticate-oauth'),
+              text: OidcLoginButtons.promptLoginOauth(flow.serverName),
+              isLoading: _busy,
+              onTap: _busy ? null : () => _signInWithOAuth(flow),
+            ),
           for (final flow in sso)
             tiamat.Button.secondary(
               text: ReauthenticateDialog.promptReauthenticateSso(flow.name),
