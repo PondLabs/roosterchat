@@ -18,6 +18,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:intl/intl.dart';
 import 'package:rooster/ui/pages/login/password_reset_view.dart';
+import 'package:rooster/ui/pages/login/qr_code_login.dart';
 import 'package:rooster/ui/pages/login/register_view.dart';
 import 'package:tiamat/atoms/circle_button.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
@@ -36,6 +37,8 @@ class LoginPageView extends StatefulWidget {
       this.authMetadata,
       this.deviceAuthFlow,
       this.doDeviceLogin,
+      this.qrLoginPanel,
+      this.doQrLogin,
       this.loadingServerInfo = false,
       this.serverInfoError,
       this.isServerValid = false,
@@ -63,6 +66,10 @@ class LoginPageView extends StatefulWidget {
   /// The device grant in progress: its code replaces the form.
   final MatrixDeviceAuthFlow? deviceAuthFlow;
   final VoidCallback? doDeviceLogin;
+
+  /// QR code login in progress (MSC4108): it replaces the form.
+  final Widget? qrLoginPanel;
+  final VoidCallback? doQrLogin;
   final Future<void> Function(
           PasswordLoginFlow flow, String username, String password)?
       doPasswordLogin;
@@ -200,7 +207,9 @@ class _LoginPageViewState extends State<LoginPageView> {
   Widget loginField(BuildContext context) {
     // The device grant's code stays usable (cancel, copy) while it polls.
     final deviceAuthFlow = widget.deviceAuthFlow;
-    final blocked = widget.isLoggingIn && deviceAuthFlow == null;
+    final qrLoginPanel = widget.qrLoginPanel;
+    final blocked =
+        widget.isLoggingIn && deviceAuthFlow == null && qrLoginPanel == null;
     return Stack(
       children: [
         Center(
@@ -226,9 +235,10 @@ class _LoginPageViewState extends State<LoginPageView> {
                       child: AnimatedOpacity(
                           opacity: blocked ? 0.5 : 1.0,
                           duration: Durations.short2,
-                          child: deviceAuthFlow == null
-                              ? loginInputs(context)
-                              : DeviceAuthPanel(flow: deviceAuthFlow)),
+                          child: qrLoginPanel ??
+                              (deviceAuthFlow == null
+                                  ? loginInputs(context)
+                                  : DeviceAuthPanel(flow: deviceAuthFlow))),
                     ),
                   ],
                 ),
@@ -289,6 +299,11 @@ class _LoginPageViewState extends State<LoginPageView> {
         DeviceAuthLoginButton(
           authMetadata: widget.authMetadata,
           onPressed: widget.doDeviceLogin,
+        ),
+        if (hasDeviceAuth) const SizedBox(height: 10),
+        QrLoginButton(
+          authMetadata: widget.authMetadata,
+          onPressed: widget.doQrLogin,
         ),
         if (widget.hasPasswordSupport || widget.hasSsoSupport) orSeparator(),
       ],
