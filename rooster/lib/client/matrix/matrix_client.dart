@@ -293,6 +293,15 @@ class MatrixClient extends Client {
             "an article if your language needs one)",
       );
 
+  static String get errorLoginHomeserverInsecure => Intl.message(
+      "This server tries to move the connection from HTTPS to unencrypted "
+      "HTTP, so it was refused.",
+      name: "errorLoginHomeserverInsecure",
+      desc: "Under the homeserver field on the login screen when the "
+          "server's discovery redirects from a secure (HTTPS) address to an "
+          "insecure (HTTP) one, or names an HTTP server, and the app "
+          "refused to connect");
+
   static Future<void> loadFromDB(
     ClientManager manager, {
     bool isBackgroundService = false,
@@ -1098,9 +1107,14 @@ class MatrixClient extends Client {
   /// read it from here.
   matrix.GetAuthMetadataResponse? authMetadata;
 
+  /// Why the last [setHomeserver] refused the server, for the login screen,
+  /// when there is more to say than that it did not answer; null otherwise.
+  String? homeserverError;
+
   @override
   Future<(bool, List<LoginFlow>?)> setHomeserver(Uri uri) async {
     authMetadata = null;
+    homeserverError = null;
     try {
       var result = await _matrixClient.checkHomeserver(uri);
 
@@ -1138,6 +1152,9 @@ class MatrixClient extends Client {
       return (true, resultFlows);
     } catch (error, trace) {
       authMetadata = null;
+      if (error is matrix.InsecureDiscoveryException) {
+        homeserverError = errorLoginHomeserverInsecure;
+      }
       Log.onError(error, trace);
       return (false, null);
     }
