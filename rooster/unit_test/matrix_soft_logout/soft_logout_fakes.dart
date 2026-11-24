@@ -8,7 +8,13 @@ import 'package:rooster/client/matrix/matrix_client.dart';
 import '../matrix_auth_oidc/oidc_fakes.dart';
 
 export '../matrix_auth_oidc/oidc_fakes.dart'
-    show homeserverHost, tokenEndpoint, initVodozemac, skipWithoutVodozemac;
+    show
+        homeserverHost,
+        tokenEndpoint,
+        initVodozemac,
+        skipWithoutVodozemac,
+        FakeRedirectReceiver,
+        redirectWith;
 
 const userId = '@alice:$homeserverHost';
 const deviceId = 'DEVICE1';
@@ -31,9 +37,28 @@ class SoftLogoutServer extends http.BaseClient {
   /// The device the server signs in, or the one the request asks for.
   String? loginDeviceId;
 
+  /// The `auth_metadata`, with the stable Matrix scopes.
+  Map<String, Object?> metadata = authMetadataJson(scopes: [
+    'openid',
+    'urn:matrix:client:api:*',
+    'urn:matrix:client:device:*',
+  ]);
+
+  /// Whose token `at-oauth` (the OAuth Authorization Code grant's) is,
+  /// for `whoami`: [userId] by default, on [oauthDeviceId].
+  String? oauthUserId;
+  String? oauthDeviceId;
+
+  static bool _isCodeGrant(http.Request r) =>
+      r.url.toString() == tokenEndpoint &&
+      r.bodyFields['grant_type'] == 'authorization_code';
+
   Iterable<http.Request> get refreshRequests => requests.where((r) =>
       r.url.path == '/_matrix/client/v3/refresh' ||
-      r.url.toString() == tokenEndpoint);
+      (r.url.toString() == tokenEndpoint && !_isCodeGrant(r)));
+
+  /// The OAuth Authorization Code grants (a sign-in on the server's page).
+  Iterable<http.Request> get codeGrantRequests => requests.where(_isCodeGrant);
 
   Iterable<http.Request> get loginRequests => requests.where(
       (r) => r.url.path == '/_matrix/client/v3/login' && r.method == 'POST');
@@ -66,6 +91,18 @@ class SoftLogoutServer extends http.BaseClient {
 
   Future<http.Response?> _answer(http.Request request) async {
     final url = request.url;
+    if (_isCodeGrant(request)) {
+      return json({
+        'access_token': 'at-oauth',
+        'refresh_token': 'rt-oauth',
+        'token_type': 'Bearer',
+        'expires_in': 300,
+      });
+    }
+    if (url.toString() == registrationEndpoint) {
+      return json({'client_id': 'dcr-client-01', ...jsonDecode(request.body)},
+          status: 201);
+    }
     final isRefresh = url.toString() == tokenEndpoint ||
         url.path == '/_matrix/client/v3/refresh';
     if (isRefresh) {
@@ -105,7 +142,13 @@ class SoftLogoutServer extends http.BaseClient {
           'versions': ['v1.11'],
         });
       case '/_matrix/client/v1/auth_metadata':
-        return json(authMetadataJson());
+        return json(metadata);
+      case '/_matrix/client/v3/account/whoami'
+          when authorization == 'Bearer at-oauth':
+        return json({
+          'user_id': oauthUserId ?? userId,
+          'device_id': oauthDeviceId,
+        });
       case '/_matrix/client/v3/login':
         if (request.method == 'GET') {
           return json({

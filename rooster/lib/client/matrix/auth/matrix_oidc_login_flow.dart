@@ -5,6 +5,7 @@ import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/auth.dart';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/matrix/auth/matrix_sso_login_flow.dart';
+import 'package:rooster/client/matrix/auth/matrix_token_refresher.dart';
 import 'package:rooster/client/matrix/auth/oidc_redirect_receiver.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/config/build_config.dart';
@@ -171,7 +172,90 @@ class MatrixOidcLoginFlow implements LoginFlow {
       return LoginResultError(MatrixSSOLoginFlow.errorLoginWrongClientType);
     }
     final mx = client.getMatrixClient();
+    return _signIn(mx, deviceId: null, finish: (session, code) async {
+      await mx.oidcLogin(
+        session: session,
+        code: code,
+        state: session.state,
+        authMetadata: authMetadata,
+      );
+      return mx.isLogged() ? LoginResultSuccess() : LoginResultFailed();
+    });
+  }
 
+  /// The flow that signs [client]'s device in again, when its session was
+  /// signed in through OAuth 2.0 and the server still offers it; else null.
+  static Future<MatrixOidcLoginFlow?> forReauthentication(
+    MatrixClient client, {
+    Future<OidcRedirectReceiver> Function({
+      required OidcLandingPage landingPage,
+    })? receiverFactory,
+  }) async {
+    if (!isAvailableOnThisPlatform) return null;
+    final mx = client.getMatrixClient();
+    final stored = await mx.database.getClient(mx.clientName);
+    if (stored?['oidc_client_id'] == null || mx.homeserver == null) {
+      return null;
+    }
+    final metadata = await mx.getAuthMetadata();
+    if (!isSupportedBy(metadata)) return null;
+    return MatrixOidcLoginFlow(
+      authMetadata: metadata,
+      serverName: mx.homeserver!.host,
+      receiverFactory: receiverFactory,
+    );
+  }
+
+  /// Signs [client]'s device in again on the server's page, asking for this
+  /// same device (`urn:matrix:client:device:<device_id>`), so the database
+  /// and the encryption keys stay. Throws [ReauthenticationMismatch] when
+  /// the server signed in another account or device; nothing is stored then.
+  Future<LoginResult> reauthenticate(MatrixClient client) {
+    final mx = client.getMatrixClient();
+    return _signIn(mx, deviceId: mx.deviceID!, finish: (session, code) async {
+      final tokens = await _exchangeCode(mx, session, code);
+      await client.tokenRefresher.reauthenticateWithOAuth(
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresInSeconds: tokens.expiresIn,
+        oidcClientId: session.oidcClientData.clientId,
+      );
+      return LoginResultSuccess();
+    });
+  }
+
+  /// The Authorization Code grant (RFC 6749 4.1.3) with the PKCE verifier,
+  /// without the SDK's `oidcLogin`, which starts a new session.
+  Future<matrix.OidcAuthResponse> _exchangeCode(
+      matrix.Client mx, matrix.OidcLoginSession session, String code) async {
+    final response = await mx.httpClient.post(
+      authMetadata.tokenEndpoint,
+      body: {
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': session.redirectUri.toString(),
+        'client_id': session.oidcClientData.clientId,
+        'code_verifier': session.codeVerifier,
+      },
+      headers: {'content-type': 'application/x-www-form-urlencoded'},
+    );
+    if (response.statusCode != 200) {
+      mx.unexpectedResponse(response, response.bodyBytes);
+    }
+    return matrix.OidcAuthResponse.fromJson(
+        jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, Object?>);
+  }
+
+  /// The browser part: the client, the authorization request (for
+  /// [deviceId], or a new device when null), the redirect, then [finish]
+  /// with the code.
+  Future<LoginResult> _signIn(
+    matrix.Client mx, {
+    required String? deviceId,
+    required Future<LoginResult> Function(
+            matrix.OidcLoginSession session, String code)
+        finish,
+  }) async {
     final OidcRedirectReceiver receiver;
     try {
       receiver = await _receiverFactory(landingPage: landingPage);
@@ -208,6 +292,7 @@ class MatrixOidcLoginFlow implements LoginFlow {
       final session = await mx.initOidcLoginSession(
         oidcClientData: oidcClient,
         redirectUri: redirectUri,
+        deviceId: deviceId,
         authMetadata: authMetadata,
         prompt: createAccount && authMetadata.supportsPromptCreate
             ? 'create'
@@ -226,13 +311,9 @@ class MatrixOidcLoginFlow implements LoginFlow {
         return LoginResultError(messageForCallbackFailure(e.failure));
       }
 
-      await mx.oidcLogin(
-        session: session,
-        code: code,
-        state: session.state,
-        authMetadata: authMetadata,
-      );
-      return mx.isLogged() ? LoginResultSuccess() : LoginResultFailed();
+      return await finish(session, code);
+    } on ReauthenticationMismatch {
+      rethrow;
     } on matrix.OidcClientRegistrationException {
       return LoginResultError(errorLoginOauthNoClientRegistration);
     } on matrix.MatrixException catch (e) {
