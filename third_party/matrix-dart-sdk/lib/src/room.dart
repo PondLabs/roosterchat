@@ -326,6 +326,17 @@ class Room {
   String? _getRichTopicRepresentation(String desiredMimeType) {
     final content = getState(EventTypes.RoomTopic)?.content;
     if (content == null) return null;
+    return richTopicRepresentation(content, desiredMimeType); // ROOSTER
+  }
+
+  /// ROOSTER: The [desiredMimeType] representation of the Matrix v1.15
+  /// `m.topic` in the `m.room.topic` [content] of any event, not only the
+  /// room's current state (the app shows each topic change in the timeline),
+  /// or `null` when there is none. Malformed entries are skipped.
+  static String? richTopicRepresentation(
+    Map<String, Object?> content,
+    String desiredMimeType,
+  ) {
     final mTopic = content['m.topic'];
     if (mTopic is! Map) return null;
     final representations = mTopic['m.text'];

@@ -50,11 +50,18 @@ class MatrixHtmlSanitizer {
     return true;
   }
 
-  /// Rewrites [document] in place: invalid colours, list starts and links
-  /// are removed, and `<font>` keeps only the attributes Matrix allows.
+  /// Rewrites [document] in place: `<style>`, `<script>` and `<iframe>`
+  /// elements, inline `style` attributes, and invalid colours, list starts
+  /// and links are removed, and `<font>` keeps only the attributes Matrix
+  /// allows.
   static void sanitize(dom.Document document) {
+    for (final element in document.querySelectorAll('style, script, iframe')) {
+      element.remove();
+    }
+
     for (final element in document.querySelectorAll('*')) {
       final attributes = element.attributes;
+      attributes.remove('style');
       for (final name in [...colorAttributes, 'color']) {
         if (!attributes.containsKey(name)) continue;
         final color = sanitizeColor(attributes[name]);
