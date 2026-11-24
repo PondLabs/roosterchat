@@ -2456,7 +2456,11 @@ class MatrixLivekitVoipSession
     } catch (e, s) {
       Log.onError(e, s, content: "Could not extend our call membership");
     }
-    await _keepStickyMembership();
+    // Beside the heartbeat, never in it: waited for, a sticky send lost
+    // after a lost restart made one heartbeat last longer than the
+    // interval, the next one was skipped, and the delayed leave went a
+    // whole window without a restart.
+    _keepStickyMembershipBeside();
   }
 
   /// Schedules a delayed leave: the server clears our membership once
@@ -2717,9 +2721,23 @@ class MatrixLivekitVoipSession
         : wait;
   }
 
+  /// The sticky send in progress: a heartbeat does not start a second one,
+  /// and the sticky leave waits for it, so it lands after the join.
+  Future<void>? _stickyInFlight;
+
+  /// Starts [_keepStickyMembership] without waiting for it, one at a time.
+  void _keepStickyMembershipBeside() {
+    if (_stickyInFlight != null) return;
+    final send = _keepStickyMembership();
+    _stickyInFlight = send;
+    send.whenComplete(() {
+      if (identical(_stickyInFlight, send)) _stickyInFlight = null;
+    });
+  }
+
   /// Sends our membership in the newer format too, where the homeserver
   /// has sticky events, beside a live legacy one and never instead of it:
-  /// a client that only reads the newer format sees us.
+  /// a client that only reads the newer format sees us. Never fails.
   Future<void> _keepStickyMembership() async {
     if (_stickyEvents != true || _leaving || _steppedOut) return;
     final current =
@@ -2759,6 +2777,8 @@ class MatrixLivekitVoipSession
   /// is given up on after [stickyTimeout]: the legacy membership's leave is
   /// what counts, and this one lapses anyway.
   Future<void> _leaveStickyMembership() async {
+    // A send still on its way ends within [stickyTimeout] too.
+    await _stickyInFlight;
     if (!_stickyMaybeOut) return;
     _stickyMaybeOut = false;
     _stickySentAt = null;
