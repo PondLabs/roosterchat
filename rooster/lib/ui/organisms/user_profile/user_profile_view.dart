@@ -53,6 +53,7 @@ class UserProfileView extends StatefulWidget {
       this.devices = const [],
       this.onSetDeviceBlocked,
       this.onWithdrawVerification,
+      this.mutualRooms,
       this.moderationActions = const []});
   final ImageProvider? userAvatar;
   final ImageProvider? userBanner;
@@ -84,6 +85,9 @@ class UserProfileView extends StatefulWidget {
   final List<UserDevice> devices;
   final Future<void> Function(String deviceId, bool blocked)?
       onSetDeviceBlocked;
+
+  /// The rooms we share with them, under their sessions.
+  final Widget? mutualRooms;
 
   /// Shown on the alert of a changed identity: stop raising it.
   final Future<void> Function()? onWithdrawVerification;
@@ -455,6 +459,15 @@ class UserProfileViewState extends State<UserProfileView> {
                                                 onSetBlocked:
                                                     widget.onSetDeviceBlocked,
                                               ),
+                                            ),
+                                          if (!widget.preview &&
+                                              !widget.isSelf &&
+                                              widget.mutualRooms != null)
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.fromLTRB(
+                                                      4, 0, 4, 4),
+                                              child: widget.mutualRooms,
                                             ),
                                           if (!widget.preview &&
                                               widget.isSelf &&

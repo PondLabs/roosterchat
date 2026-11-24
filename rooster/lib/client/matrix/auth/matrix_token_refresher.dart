@@ -43,6 +43,22 @@ class MatrixTokenRefresher {
   final ValueNotifier<TokenRefreshState> state =
       ValueNotifier(TokenRefreshState.active);
 
+  final StreamController<matrix.MatrixError> _restrictions =
+      StreamController<matrix.MatrixError>.broadcast();
+
+  /// Account restriction errors (`M_USER_LOCKED`, `M_USER_SUSPENDED`) seen on
+  /// responses from the homeserver or during token renewal.
+  Stream<matrix.MatrixError> get onRestriction => _restrictions.stream;
+
+  /// Records an account restriction error seen on a homeserver response or
+  /// token renewal.
+  void reportRestriction(matrix.MatrixError error) {
+    if (error == matrix.MatrixError.M_USER_LOCKED ||
+        error == matrix.MatrixError.M_USER_SUSPENDED) {
+      _restrictions.add(error);
+    }
+  }
+
   Future<String?>? _inFlight;
   bool _stoppedSync = false;
 
@@ -92,6 +108,9 @@ class MatrixTokenRefresher {
       _resumeSync(client);
       return client.accessToken;
     } catch (e) {
+      if (e is matrix.MatrixException) {
+        reportRestriction(e.error);
+      }
       // The kind of error only: it may quote the request.
       final reason = e is matrix.MatrixException ? e.errcode : e.runtimeType;
       if (_isTransient(e, answer.status)) {
@@ -106,14 +125,17 @@ class MatrixTokenRefresher {
     }
   }
 
-  /// A server error (5xx), a rate limit (429) or no answer at all: the
-  /// token was not refused, so the next renewal tries again.
+  /// A server error (5xx), a rate limit (429), an account lock/suspension
+  /// (`M_USER_LOCKED`, `M_USER_SUSPENDED`) or no answer at all: the token was
+  /// not refused, so the next renewal tries again.
   static bool _isTransient(Object e, int? status) =>
       (status != null && (status >= 500 || status == 429)) ||
       e is http.ClientException ||
       e is TimeoutException ||
       (e is matrix.MatrixException &&
-          e.error == matrix.MatrixError.M_LIMIT_EXCEEDED);
+          (e.error == matrix.MatrixError.M_LIMIT_EXCEEDED ||
+              e.error == matrix.MatrixError.M_USER_LOCKED ||
+              e.error == matrix.MatrixError.M_USER_SUSPENDED));
 
   void _resumeSync(matrix.Client client) {
     state.value = TokenRefreshState.active;
@@ -215,20 +237,31 @@ class TokenRefreshingHttpClient extends http.BaseClient {
     }
   }
 
-  @override
-  Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    final authorization = request.headers['authorization'];
-    final response = await _inner.send(request);
-    MatrixTokenRefresher.recordStatus(response.statusCode);
-    if (response.statusCode != 401 ||
-        authorization == null ||
-        !authorization.startsWith('Bearer ') ||
-        !_isHomeserver(request.url)) {
-      return response;
+  /// Extracts an account lock (`401 M_USER_LOCKED`) or suspension
+  /// (`403 M_USER_SUSPENDED`) error from a homeserver response body.
+  static matrix.MatrixError? restrictionOf(int statusCode, List<int> body) {
+    if (statusCode != 401 && statusCode != 403) return null;
+    try {
+      final json = jsonDecode(utf8.decode(body));
+      if (json is! Map) return null;
+      final errcode = json['errcode'];
+      if (errcode == 'M_USER_LOCKED') {
+        return matrix.MatrixError.M_USER_LOCKED;
+      }
+      if (statusCode == 403 && errcode == 'M_USER_SUSPENDED') {
+        return matrix.MatrixError.M_USER_SUSPENDED;
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
+  }
 
-    final body = await response.stream.toBytes();
-    final answer = http.StreamedResponse(
+  http.StreamedResponse _bufferAndReport(
+      http.StreamedResponse response, List<int> body) {
+    final restriction = restrictionOf(response.statusCode, body);
+    if (restriction != null) refresher.reportRestriction(restriction);
+    return http.StreamedResponse(
       Stream.value(body),
       response.statusCode,
       contentLength: body.length,
@@ -238,7 +271,26 @@ class TokenRefreshingHttpClient extends http.BaseClient {
       persistentConnection: response.persistentConnection,
       reasonPhrase: response.reasonPhrase,
     );
-    if (!isSoftLogout(body)) return answer;
+  }
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final authorization = request.headers['authorization'];
+    final response = await _inner.send(request);
+    MatrixTokenRefresher.recordStatus(response.statusCode);
+    if ((response.statusCode != 401 && response.statusCode != 403) ||
+        !_isHomeserver(request.url)) {
+      return response;
+    }
+
+    final body = await response.stream.toBytes();
+    final answer = _bufferAndReport(response, body);
+    if (response.statusCode != 401 ||
+        authorization == null ||
+        !authorization.startsWith('Bearer ') ||
+        !isSoftLogout(body)) {
+      return answer;
+    }
 
     final staleToken = authorization.substring('Bearer '.length);
     if (request is! http.Request) {
@@ -255,7 +307,11 @@ class TokenRefreshingHttpClient extends http.BaseClient {
       ..maxRedirects = request.maxRedirects
       ..persistentConnection = request.persistentConnection
       ..bodyBytes = request.bodyBytes;
-    return _inner.send(again);
+    final retried = await _inner.send(again);
+    if (retried.statusCode == 401 || retried.statusCode == 403) {
+      return _bufferAndReport(retried, await retried.stream.toBytes());
+    }
+    return retried;
   }
 
   bool _isHomeserver(Uri url) {
