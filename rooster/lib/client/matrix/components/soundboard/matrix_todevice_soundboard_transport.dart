@@ -13,6 +13,8 @@ import 'dart:convert';
 
 import 'package:rooster/client/components/soundboard/soundboard_event.dart';
 import 'package:rooster/client/components/soundboard/soundboard_transport.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_memberships.dart';
+import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:matrix/matrix.dart' as matrix;
 
@@ -58,16 +60,16 @@ class MatrixToDeviceSoundboardTransport implements SoundboardTransport {
       };
       // Collect target devices from current call memberships (same source
       // the LiveKit E2EE key provider uses), so only THIS call's
-      // participants are notified — never the whole Space.
+      // participants are notified — never the whole Space. Memberships of
+      // either MatrixRTC format, once per device (CallMemberships).
       final room = mx.getRoomById(roomId);
-      final memberStates =
-          room?.states['org.matrix.msc3401.call.member'] as Map?;
+      final memberStates = room == null
+          ? null
+          : CallMemberships.of(room, now: HomeserverClock.instance.now());
       final deviceKeys = <matrix.DeviceKeys>[];
       final userIds = <String>{};
       if (memberStates != null) {
-        for (final ev in memberStates.values) {
-          if (ev is! matrix.StrippedStateEvent) continue;
-          final stateEv = ev;
+        for (final stateEv in memberStates) {
           if (stateEv.content.isEmpty) continue;
           final sender = stateEv.senderId;
           final device = (stateEv.content['device_id'] as String?) ?? '';

@@ -3,12 +3,47 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'package:matrix/matrix.dart';
+import 'package:matrix/src/utils/versions_comparator.dart'; // ROOSTER
 
 enum DelayedEventAction { send, cancel, restart }
 
+// ROOSTER: Which delayed events (MSC4140) a homeserver has (T5.2): the
+// stable API from Matrix v1.20 (or with `org.matrix.msc4140.stable`), the
+// unstable one, or none. A delayed event is managed on the API it was
+// scheduled with, so one scheduled before a homeserver upgrade is not lost.
+enum DelayedEventsSupport {
+  none,
+  unstable,
+  stable;
+
+  static const unstableFeature = 'org.matrix.msc4140';
+  static const stableFeature = 'org.matrix.msc4140.stable';
+
+  /// What [versions] announce.
+  static DelayedEventsSupport of(GetVersionsResponse versions) {
+    final features = versions.unstableFeatures ?? const {};
+    if (features[stableFeature] == true ||
+        versions.versions
+            .any((v) => isVersionGreaterThanOrEqualTo(v, 'v1.20'))) {
+      return stable;
+    }
+    return features[unstableFeature] == true ? unstable : none;
+  }
+
+  /// The endpoint delayed events are managed on, without the leading slash.
+  String get endpoint => this == stable
+      ? '_matrix/client/v1/delayed_events'
+      : '_matrix/client/unstable/org.matrix.msc4140/delayed_events';
+
+  /// The query parameter that delays a sent event, in milliseconds.
+  String get delayParameter =>
+      this == stable ? 'delay' : 'org.matrix.msc4140.delay';
+}
+
 extension DelayedEventsHandler on Client {
-  static const _delayedEventsEndpoint =
-      '_matrix/client/unstable/org.matrix.msc4140/delayed_events';
+  // ROOSTER: What the homeserver's `/versions` say about delayed events.
+  Future<DelayedEventsSupport> delayedEventsSupport() async =>
+      DelayedEventsSupport.of(await getVersions());
 
   /// State events can be sent using this endpoint.  These events will be
   /// overwritten if `<room id>`, `<event type>` and `<state key>` all
@@ -45,18 +80,22 @@ extension DelayedEventsHandler on Client {
   /// A unique identifier for the event.
   /// If a delay is provided, the homeserver schedules the event to be sent with the specified delay
   /// and responds with an opaque delay_id field (omitting the event_id as it is not available)
+  ///
+  /// ROOSTER: [via] is the API to delay it with (the unstable one unless
+  /// said otherwise); manage it on the same one.
   Future<String> setRoomStateWithKeyWithDelay(
     String roomId,
     String eventType,
     String stateKey,
     int? delayInMs,
-    Map<String, Object?> body,
-  ) async {
+    Map<String, Object?> body, {
+    DelayedEventsSupport via = DelayedEventsSupport.unstable,
+  }) async {
     final requestUri = Uri(
       path:
           '_matrix/client/v3/rooms/${Uri.encodeComponent(roomId)}/state/${Uri.encodeComponent(eventType)}/${Uri.encodeComponent(stateKey)}',
       queryParameters: {
-        if (delayInMs != null) 'org.matrix.msc4140.delay': delayInMs.toString(),
+        if (delayInMs != null) via.delayParameter: delayInMs.toString(),
       },
     );
 
@@ -74,10 +113,11 @@ extension DelayedEventsHandler on Client {
 
   Future<void> manageDelayedEvent(
     String delayedId,
-    DelayedEventAction delayedEventAction,
-  ) async {
+    DelayedEventAction delayedEventAction, {
+    DelayedEventsSupport via = DelayedEventsSupport.unstable, // ROOSTER
+  }) async {
     final requestUri = Uri(
-      path: '$_delayedEventsEndpoint/$delayedId',
+      path: '${via.endpoint}/${Uri.encodeComponent(delayedId)}',
     );
 
     final request = http.Request('POST', baseUri!.resolveUri(requestUri));
@@ -97,9 +137,10 @@ extension DelayedEventsHandler on Client {
   // but synapse implementation uses the /delayed_events
   Future<ScheduledDelayedEventsResponse> getScheduledDelayedEvents({
     String? from,
+    DelayedEventsSupport via = DelayedEventsSupport.unstable, // ROOSTER
   }) async {
     final requestUri = Uri(
-      path: _delayedEventsEndpoint,
+      path: via.endpoint,
       queryParameters: {if (from != null) 'from': from},
     );
 
@@ -109,7 +150,10 @@ extension DelayedEventsHandler on Client {
     final response = await httpClient.send(request);
     final responseBody = await response.stream.toBytes();
     if (response.statusCode != 200) {
-      return await _getScheduledDelayedEventsAccordingToSpec(from: from);
+      return await _getScheduledDelayedEventsAccordingToSpec(
+        from: from,
+        via: via,
+      );
     }
     final responseString = utf8.decode(responseBody);
     final json = jsonDecode(responseString);
@@ -121,9 +165,10 @@ extension DelayedEventsHandler on Client {
   Future<ScheduledDelayedEventsResponse>
       _getScheduledDelayedEventsAccordingToSpec({
     String? from,
+    required DelayedEventsSupport via, // ROOSTER
   }) async {
     final requestUri = Uri(
-      path: '$_delayedEventsEndpoint/scheduled',
+      path: '${via.endpoint}/scheduled',
       queryParameters: {if (from != null) 'from': from},
     );
 

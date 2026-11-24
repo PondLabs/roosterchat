@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:rooster/client/matrix/components/voip_room/call_key_distributor.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_key_messages.dart';
-import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_memberships.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:livekit_client/livekit_client.dart' hide KeyProvider;
@@ -147,13 +147,14 @@ class MatrixLivekitEncryptionKeyProvider
     });
   }
 
-  /// Who is in the call now, from the room state: every live membership of
-  /// the room's call but this device's.
+  /// Who is in the call now, from the room state and sticky events: every
+  /// live membership of the room's call but this device's, of either
+  /// format (a newer client gets our keys too).
   Map<CallMember, DateTime?> currentMembers() {
-    final state = room.states[MatrixVoipRoomComponent.callMemberStateEvent];
+    final now = HomeserverClock.instance.now();
     return callMembersFromState(
       [
-        for (final event in state?.values ?? const <mx.StrippedStateEvent>[])
+        for (final event in CallMemberships.of(room, now: now))
           (
             sender: event.senderId,
             content: event.content,
@@ -165,7 +166,7 @@ class MatrixLivekitEncryptionKeyProvider
       // Memberships lapse by the homeserver's clock. By a clock hours ahead,
       // someone in the call for a while counted as gone: their keys were
       // held back, and our new ones did not go to them.
-      now: HomeserverClock.instance.now(),
+      now: now,
     );
   }
 
@@ -308,16 +309,9 @@ class MatrixLivekitEncryptionKeyProvider
     final roomUpdate = event.rooms?.join?[room.id];
     if (roomUpdate == null) return;
 
-    bool touches(List<mx.BasicEvent>? events) =>
-        events?.any(
-            (e) => e.type == MatrixVoipRoomComponent.callMemberStateEvent) ??
-        false;
-    // A gappy sync puts membership changes in the state section.
-    if (!touches(roomUpdate.timeline?.events) &&
-        !touches(roomUpdate.state) &&
-        !touches(roomUpdate.stateAfter)) {
-      return;
-    }
+    // A gappy sync puts membership changes in the state section, and the
+    // newer format comes as sticky events too.
+    if (!CallMemberships.touches(roomUpdate)) return;
 
     _membersChanged();
   }

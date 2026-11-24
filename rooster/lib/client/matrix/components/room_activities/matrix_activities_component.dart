@@ -11,6 +11,7 @@ import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/components/widgets/widget_component.dart';
 import 'package:rooster/client/matrix/components/matrix_sync_listener.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_key_distributor.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_memberships.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_call_membership.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
@@ -107,28 +108,28 @@ class MatrixActivitiesComponent
     }));
   }
 
-  static const callMemberStateEvent = "org.matrix.msc3401.call.member";
+  static const callMemberStateEvent = CallMemberships.legacyType;
 
   @override
   List<RoomActivitySession> getSessions() {
     // No membership state is not the end of it: people can be in our LiveKit
     // room with their membership gone (see below).
-    final state = room.matrixRoom.states[callMemberStateEvent] ?? const {};
-
     List<RoomActivitySession> activities = List.empty(growable: true);
     final now = _clock.now();
+    // Every format, once per device (see CallMemberships): the sidebar and
+    // Who's around list someone once whichever their client writes.
+    final state = CallMemberships.of(room.matrixRoom, now: now);
     final expiries = <DateTime?>[];
     final voiceMemberships = <String, Event>{};
 
-    for (var entry in state.entries) {
-      if (entry.value.content.isEmpty) continue;
+    for (final event in state) {
+      if (event.content.isEmpty) continue;
 
-      var application = entry.value.content.tryGet<String>("application");
+      var application = event.content.tryGet<String>("application");
       if (application == null) continue;
       var activity =
           activities.firstWhereOrNull((i) => i.application == application);
 
-      final event = entry.value;
       final sentAt = event is Event ? event.originServerTs : null;
       if (MatrixCallMembership.isExpired(event.content, sentAt, now)) {
         // Named, with both times: the first thing to read when someone in
@@ -145,8 +146,8 @@ class MatrixActivitiesComponent
       // device is actually in the call; otherwise it is a leftover from a
       // previous run that was closed without hanging up.
       if (application == "m.call" &&
-          entry.value.senderId == client.self?.identifier &&
-          entry.value.content.tryGet<String>("device_id") ==
+          event.senderId == client.self?.identifier &&
+          event.content.tryGet<String>("device_id") ==
               client.matrixClient.deviceID &&
           _callManager?.getCallInRoom(client, room.identifier) == null) {
         continue;
@@ -185,7 +186,7 @@ class MatrixActivitiesComponent
         activities.add(activity);
       }
 
-      activity.participants.add(entry.value.senderId);
+      activity.participants.add(event.senderId);
       expiries.add(MatrixCallMembership.expiresAt(event.content, sentAt));
 
       if (application == "m.call" && event is Event) {
@@ -405,9 +406,9 @@ class MatrixActivitiesComponent
       ...?update.stateAfter,
       ...?update.timeline?.events
     ];
-    if (events.any((event) =>
-        event.type == callMemberStateEvent ||
-        event.type == MatrixCallActivityComponent.stateEventType)) {
+    if (CallMemberships.touches(update) ||
+        events.any((event) =>
+            event.type == MatrixCallActivityComponent.stateEventType)) {
       _onParticipantsChanged.add(());
     }
   }
