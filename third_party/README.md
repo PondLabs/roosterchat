@@ -635,3 +635,23 @@ Changes since the copy:
   thread read here), and it has no presence, so other people's presence
   stops changing while Sliding Sync runs (asking `/presence` for the
   people on screen is left for another task).
+- Room keys stored before T3.1b (T6.1): such a session kept, with no claimed
+  keys of its own, the Ed25519 key of the device its sender named in
+  `requesting_device_id` (or any claim the sender wrote) in its content.
+  `SessionKey.fromDb` no longer reads a claim from the content of a session
+  that was not forwarded, so it claims nothing from its first load.
+  `KeyManager.migrateClaimedKeysFromOlmSessions`, started by the first
+  `Encryption.onSync` (device lists loaded and updated), then goes once per
+  database over the stored sessions with that shape: one that a single known
+  device has the Olm session's Curve25519 key for claims that device's key;
+  any other claims nothing. The claim leaves the content either way, and the
+  session is stored again with its own pickle and indexes (nothing is
+  deleted, every message still decrypts; it is queued for the key backup
+  again). The mark is the custom cache object
+  `rooster_claimed_keys_from_olm_session` (`DatabaseApi` does not change);
+  `clearCache` drops it, and the next run finds nothing left to change.
+  `Encryption.megolmSenderTrust(event)` says whether a decrypted message's
+  session proves its sender's device: `verified` or `unverifiedDevice` when
+  the session claims the Ed25519 key of the sender's device that holds its
+  Curve25519 key, `unverifiedOrigin` when it claims none, another device's,
+  or was forwarded.
