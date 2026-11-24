@@ -6116,6 +6116,40 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelBannedMembers": "Banned Members",
+  "@labelBannedMembers": {
+    "description": "Title of the list of people banned from a room, in its settings",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNoBannedMembers": "No one is banned from this room.",
+  "@labelNoBannedMembers": {
+    "description": "Shown instead of the banned list when it is empty",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptUnban": "Unban",
+  "@promptUnban": {
+    "description": "Button next to a banned member: lifts the ban so they can join again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUnbanConfirmation": "Lift the ban on {user}? They will be able to join again.",
+  "@messageUnbanConfirmation": {
+    "description": "Asked before unbanning someone, with their name",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "labelBanReason": "Reason: {reason}",
+  "@labelBanReason": {
+    "description": "Under a banned member, the reason the moderator gave for the ban",
+    "type": "text",
+    "placeholders": {
+      "reason": {}
+    }
+  },
   "promptIgnoreUser": "Ignore",
   "@promptIgnoreUser": {
     "description": "Entry in a user's profile menu, and button in Settings, that ignores the user: their messages and invites are hidden",
@@ -6151,6 +6185,120 @@
   "errorIgnoreFailed": "The ignore list could not be saved. Check your connection and try again.",
   "@errorIgnoreFailed": {
     "description": "Shown when saving the ignore list to the homeserver failed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintModerationReason": "Reason (optional)",
+  "@hintModerationReason": {
+    "description": "Placeholder of the field where a moderator says why they kick, ban, unban or invite someone or delete a message; it can be left empty, and the room's members can read it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorModerationForbidden": "You do not have permission to do this in this room.",
+  "@errorModerationForbidden": {
+    "description": "Shown when the homeserver refused a moderation action (M_FORBIDDEN)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorModerationNotFound": "The server could not find this member or message. It may already be gone.",
+  "@errorModerationNotFound": {
+    "description": "Shown when the homeserver answered M_NOT_FOUND to a moderation action",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorModerationRateLimited": "Too many actions at once. Wait a moment and try again.",
+  "@errorModerationRateLimited": {
+    "description": "Shown when the homeserver answered M_LIMIT_EXCEEDED to a moderation action",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorModerationFailed": "This did not go through. Check your connection and try again.",
+  "@errorModerationFailed": {
+    "description": "Shown when a moderation action failed for any other reason",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageModerationDeleteConfirmation": "Delete this message for everyone?",
+  "@messageModerationDeleteConfirmation": {
+    "description": "Asked before a moderator deletes someone else's message, above a field for an optional reason",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyServer": "Policy Server",
+  "@labelPolicyServer": {
+    "description": "Title of the room setting for the server that checks new messages against the room's rules before they are shared (Matrix policy server)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyServerDescription": "A policy server checks new events against this room's rules before other servers accept them. Leave the server empty to turn it off.",
+  "@labelPolicyServerDescription": {
+    "description": "Explanation at the top of the policy server setting",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyServerVia": "Server name",
+  "@labelPolicyServerVia": {
+    "description": "Field for the policy server's name, like policy.example.org",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyServerKey": "Public key (ed25519)",
+  "@labelPolicyServerKey": {
+    "description": "Field for the policy server's signing key, which its operator publishes",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorPolicyServerName": "Enter a server name such as policy.example.org, without https://.",
+  "@errorPolicyServerName": {
+    "description": "Why the policy server setting will not save a malformed name",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorPolicyServerKey": "Enter the policy server's public key. Without it, servers ignore the policy server.",
+  "@errorPolicyServerKey": {
+    "description": "Why the policy server setting will not save without a key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePolicyServerSaved": "Policy server saved.",
+  "@messagePolicyServerSaved": {
+    "description": "Shown after the room's policy server was saved",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyRules": "Policy Rules",
+  "@labelPolicyRules": {
+    "description": "Heading of the moderation rules (bans of users, rooms or servers) published in this room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNoPolicyRules": "This room publishes no policy rules.",
+  "@labelNoPolicyRules": {
+    "description": "Shown instead of the policy rules when there are none",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyRuleUser": "User",
+  "@labelPolicyRuleUser": {
+    "description": "Kind of a policy rule that applies to users",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyRuleRoom": "Room",
+  "@labelPolicyRuleRoom": {
+    "description": "Kind of a policy rule that applies to rooms",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyRuleServer": "Server",
+  "@labelPolicyRuleServer": {
+    "description": "Kind of a policy rule that applies to servers",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyRuleBan": "Ban",
+  "@labelPolicyRuleBan": {
+    "description": "What a policy rule recommends: banning the users, rooms or servers it names",
     "type": "text",
     "placeholders": {}
   },
@@ -6235,6 +6383,72 @@
   "errorReportFailed": "The report could not be sent. Check your connection and try again.",
   "@errorReportFailed": {
     "description": "In the report dialog when sending failed for any other reason",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAcl": "Server Access",
+  "@labelServerAcl": {
+    "description": "Title of the room setting that says which Matrix servers may take part in the room (the server ACL)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAclDescription": "Choose which servers may take part in this room. One server per line; * matches any characters and ? one character.",
+  "@labelServerAclDescription": {
+    "description": "Explanation at the top of the server access editor",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAclAllow": "Allowed servers",
+  "@labelServerAclAllow": {
+    "description": "Label of the list of servers that may take part in the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAclDeny": "Blocked servers",
+  "@labelServerAclDeny": {
+    "description": "Label of the list of servers that may not take part in the room, even when allowed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAclIpLiterals": "Allow servers named by an IP address",
+  "@labelServerAclIpLiterals": {
+    "description": "Switch in the server access editor for servers whose name is an IP address instead of a domain",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorServerAclAllowEmpty": "Allow at least one server. With no allowed servers, no one could ever use this room again.",
+  "@errorServerAclAllowEmpty": {
+    "description": "Why the server access editor will not save an empty list of allowed servers",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorServerAclOwnServerNotAllowed": "Your server, {server}, is not on the allowed list. Saving this would lock you out of the room for good.",
+  "@errorServerAclOwnServerNotAllowed": {
+    "description": "Why the server access editor will not save, with the user's own server name",
+    "type": "text",
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "errorServerAclOwnServerDenied": "Your server, {server}, is on the blocked list. Saving this would lock you out of the room for good.",
+  "@errorServerAclOwnServerDenied": {
+    "description": "Why the server access editor will not save, with the user's own server name",
+    "type": "text",
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "errorServerAclIpLiteral": "Your server, {server}, is named by an IP address. Blocking those would lock you out of the room for good.",
+  "@errorServerAclIpLiteral": {
+    "description": "Why the server access editor will not save, with the user's own server name",
+    "type": "text",
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "messageServerAclSaved": "Server access saved.",
+  "@messageServerAclSaved": {
+    "description": "Shown after the room's server access was saved",
     "type": "text",
     "placeholders": {}
   },
@@ -13762,6 +13976,12 @@
     "placeholders": {
       "eventType": {}
     }
+  },
+  "labelRoomModeration": "Moderation",
+  "@labelRoomModeration": {
+    "description": "Heading of the moderation tools in a room's permission settings",
+    "type": "text",
+    "placeholders": {}
   },
   "messageRoomSettingNoPermission": "You need permission to change this setting.",
   "@messageRoomSettingNoPermission": {
