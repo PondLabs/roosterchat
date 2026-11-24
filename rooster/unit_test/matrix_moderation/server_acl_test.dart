@@ -127,4 +127,13 @@ void main() {
     expect(acl.current.deny, isEmpty);
     expect(acl.current.allowIpLiterals, isTrue);
   });
+
+  test('collapses repeated wildcards without exponential backtracking', () {
+    final stars = '*' * 30;
+    final watch = Stopwatch()..start();
+    expect(serverGlobMatches('${stars}z', 'sub.example.org'), isFalse);
+    expect(serverGlobMatches('$stars.org', 'sub.example.org'), isTrue);
+    watch.stop();
+    expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+  });
 }

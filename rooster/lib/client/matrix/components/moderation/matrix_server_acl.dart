@@ -26,11 +26,16 @@ class ServerAclRejected implements Exception {
   String toString() => 'ServerAclRejected($problems)';
 }
 
+final _repeatedStars = RegExp(r'\*+');
+
 /// Whether [name] matches the server ACL glob [pattern]: `*` is any run of
-/// characters, `?` one character, letters in any case.
-bool serverGlobMatches(String pattern, String name) {
+/// characters, `?` one character. Set [caseSensitive] to true where servers
+/// compare exact case.
+bool serverGlobMatches(String pattern, String name,
+    {bool caseSensitive = false}) {
+  final collapsed = pattern.replaceAll(_repeatedStars, '*');
   final buffer = StringBuffer('^');
-  for (final char in pattern.split('')) {
+  for (final char in collapsed.split('')) {
     buffer.write(switch (char) {
       '*' => '.*',
       '?' => '.',
@@ -38,7 +43,7 @@ bool serverGlobMatches(String pattern, String name) {
     });
   }
   buffer.write(r'$');
-  return RegExp(buffer.toString(), caseSensitive: false).hasMatch(name);
+  return RegExp(buffer.toString(), caseSensitive: caseSensitive).hasMatch(name);
 }
 
 /// The host of a server name, without the port ACLs leave out.
@@ -125,13 +130,16 @@ class ServerAcl {
   }
 
   /// What would lock [ownServer] out of the room; empty when it is safe.
+  /// Checks `allow` case-sensitively (for Tuwunel/Conduit/Dendrite) and `deny`
+  /// case-insensitively (for Synapse): the stricter side for each.
   List<ServerAclProblem> problemsFor(String ownServer) {
     final host = serverHost(ownServer);
     return [
       if (allow.isEmpty) ServerAclProblem.allowEmpty,
-      if (allow.isNotEmpty && !allow.any((p) => serverGlobMatches(p, host)))
+      if (allow.isNotEmpty &&
+          !allow.any((p) => serverGlobMatches(p, host, caseSensitive: true)))
         ServerAclProblem.ownServerNotAllowed,
-      if (deny.any((p) => serverGlobMatches(p, host)))
+      if (deny.any((p) => serverGlobMatches(p, host, caseSensitive: false)))
         ServerAclProblem.ownServerDenied,
       if (!allowIpLiterals && isIpLiteral(host))
         ServerAclProblem.ownServerIpLiteralBlocked,
