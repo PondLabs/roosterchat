@@ -2,9 +2,12 @@ import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/direct_messages/direct_message_component.dart';
 import 'package:rooster/client/components/invitation/invitation_component.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
+import 'package:rooster/client/matrix/components/moderation/matrix_room_moderation.dart';
+import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/ui/atoms/scaled_safe_area.dart';
 import 'package:rooster/ui/molecules/profile/mini_profile_view.dart';
-import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/ui/organisms/moderation/moderation_reason_dialog.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/debounce.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -191,14 +194,24 @@ class _SendInvitationWidgetState extends State<SendInvitationWidget> {
       return;
     }
 
-    final confirm = await AdaptiveDialog.confirmation(context,
+    final answer = await ModerationReasonDialog.ask(context,
         prompt: promptRoomInviteConfirm(userId, widget.displayName ?? ""),
-        title: labelRoomInviteConfirmTitle);
-    if (confirm != true) {
+        title: labelRoomInviteConfirmTitle,
+        confirmText: CommonStrings.promptConfirm);
+    if (answer == null) {
       return;
     }
 
-    widget.component.inviteUserToRoom(userId: userId, roomId: widget.roomId!);
+    // The invite may carry the reason the dialog asked for.
+    final client = widget.client;
+    final room = client is MatrixClient
+        ? client.getMatrixClient().getRoomById(widget.roomId!)
+        : null;
+    if (room != null) {
+      MatrixRoomModeration(room).invite(userId, reason: answer.reason);
+    } else {
+      widget.component.inviteUserToRoom(userId: userId, roomId: widget.roomId!);
+    }
 
     if (mounted) Navigator.pop(context);
   }

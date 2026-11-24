@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/direct_messages/direct_message_component.dart';
+import 'package:rooster/client/matrix/components/moderation/matrix_room_moderation.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/member.dart';
 import 'package:rooster/client/role.dart';
@@ -12,6 +13,7 @@ import 'package:rooster/ui/atoms/shimmer_loading.dart';
 import 'package:rooster/ui/molecules/profile/e2ee_trust.dart';
 import 'package:rooster/ui/molecules/user_panel.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/ui/organisms/moderation/moderation_reason_dialog.dart';
 import 'package:rooster/ui/organisms/user_profile/user_profile.dart';
 import 'package:rooster/utils/error_utils.dart';
 import 'package:flutter/material.dart';
@@ -136,14 +138,15 @@ class RoomMemberList extends StatefulWidget {
             icon: Icons.subdirectory_arrow_left_rounded,
             color: ColorScheme.of(context).error,
             onPressed: () async {
-              if (await AdaptiveDialog.confirmation(context,
-                      prompt:
-                          messageProfileKickConfirmation(userDisplayName)) ==
-                  true) {
-                ErrorUtils.tryRun(context, () async {
-                  await room.kickUser(userId);
-                  onUserKicked?.call();
-                });
+              if (await ModerationReasonDialog.confirmAndRun(context,
+                  title: promptProfileKick,
+                  prompt: messageProfileKickConfirmation(userDisplayName),
+                  confirmText: promptProfileKick,
+                  action: (reason) => room is MatrixRoom
+                      ? MatrixRoomModeration(room.matrixRoom)
+                          .kick(userId, reason: reason)
+                      : room.kickUser(userId))) {
+                onUserKicked?.call();
               }
             }),
       if (room.permissions.canBan && !isSelf)
@@ -152,13 +155,15 @@ class RoomMemberList extends StatefulWidget {
             icon: Icons.shield,
             color: ColorScheme.of(context).error,
             onPressed: () async {
-              if (await AdaptiveDialog.confirmation(context,
-                      prompt: messageProfileBanConfirmation(userDisplayName)) ==
-                  true) {
-                ErrorUtils.tryRun(context, () async {
-                  await room.banUser(userId);
-                  onUserBanned?.call();
-                });
+              if (await ModerationReasonDialog.confirmAndRun(context,
+                  title: promptProfileBan,
+                  prompt: messageProfileBanConfirmation(userDisplayName),
+                  confirmText: promptProfileBan,
+                  action: (reason) => room is MatrixRoom
+                      ? MatrixRoomModeration(room.matrixRoom)
+                          .ban(userId, reason: reason)
+                      : room.banUser(userId))) {
+                onUserBanned?.call();
               }
             }),
     ];
