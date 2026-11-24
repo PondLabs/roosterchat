@@ -1436,6 +1436,7 @@
   "promptReauthenticateRetry": "Tentar de novo",
   "promptReauthenticateLater": "Agora não",
   "errorReauthenticateOtherDevice": "O servidor entrou em outra conta ou outro dispositivo, então nada mudou aqui. Entre com esta conta.",
+  "errorReauthenticateNewDevice": "Seu servidor fez você entrar num dispositivo novo em vez deste, então o Rooster não o usou e nada mudou aqui. Suas mensagens e chaves de criptografia continuam neste dispositivo. Você pode remover o dispositivo novo das sessões da sua conta.",
   "promptLoginCreateAccount": "Criar conta",
   "labelRegisterUsername": "Nome de usuário",
   "labelRegisterPassword": "Senha",
