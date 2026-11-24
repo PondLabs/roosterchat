@@ -90,6 +90,8 @@ class MessageInput extends StatefulWidget {
       this.hintText,
       this.attachments,
       this.addAttachment,
+      this.onSendLocation,
+      this.sendLocationTooltip,
       this.onTextUpdated,
       this.onInputStarted,
       this.removeAttachment,
@@ -156,6 +158,10 @@ class MessageInput extends StatefulWidget {
   final Client? Function(String input)? findOverrideClient;
   final void Function(Client overrideClient)? onTapOverrideClient;
   final void Function(PendingFileAttachment attachment)? addAttachment;
+
+  /// The composer's "Send a location" button, shown when given.
+  final void Function()? onSendLocation;
+  final String? sendLocationTooltip;
   final void Function(PendingFileAttachment attachment)? removeAttachment;
   final List<AutofillSearchResult> Function(String text)? processAutofill;
 
@@ -1063,6 +1069,10 @@ class MessageInputState extends State<MessageInput> {
                           children: [
                             if (widget.enabled && widget.showAttachmentButton)
                               addAttachmentButton(),
+                            if (widget.enabled &&
+                                widget.showAttachmentButton &&
+                                widget.onSendLocation != null)
+                              sendLocationButton(),
                             Flexible(
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(5),
@@ -1708,6 +1718,25 @@ class MessageInputState extends State<MessageInput> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Padding sendLocationButton() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 0, 4, 0),
+      child: SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: Tooltip(
+          message: widget.sendLocationTooltip ?? "",
+          child: tiamat.IconButton(
+            key: const ValueKey("composer-send-location"),
+            icon: Icons.location_on_outlined,
+            size: widget.size * widget.iconScale,
+            onPressed: widget.onSendLocation,
+          ),
+        ),
       ),
     );
   }
