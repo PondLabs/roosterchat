@@ -48,7 +48,11 @@ class MatrixRichTopic {
           room.getState(matrix.EventTypes.RoomTopic)?.content);
 
   static String? _textOf(String html) {
-    final text = html_parser.parse(html).body?.text.trim();
+    final document = html_parser.parse(html);
+    for (final element in document.querySelectorAll('script, style, iframe')) {
+      element.remove();
+    }
+    final text = document.body?.text.trim();
     return text == null || text.isEmpty ? null : text;
   }
 }

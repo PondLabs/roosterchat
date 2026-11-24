@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -213,6 +215,98 @@ void main() {
         }
         expect(allText(tester), contains(text));
       }
+    });
+  });
+
+  group('CSS, script and iframe sanitisation', () {
+    test(
+        'removes style, script and iframe elements and inline style attributes',
+        () {
+      final document = html_parser.parse('<style>b { color: #ff0000; }</style>'
+          '<script>steal("cookies")</script>'
+          '<iframe src="https://evil.example">frame-secret</iframe>'
+          '<b style="color: #00ff00">Safe</b>'
+          '<span data-mx-color="#112233" data-mx-bg-color="#445566" '
+          'style="font-size: 99px">Color</span>'
+          '<span data-mx-spoiler="hint" style="color: #00ff00">Hidden</span>');
+      MatrixHtmlSanitizer.sanitize(document);
+
+      expect(document.querySelectorAll('style, script, iframe'), isEmpty);
+      expect(document.querySelector('b')!.attributes, isEmpty);
+      expect(document.querySelector('[data-mx-color]')!.attributes, {
+        'data-mx-color': '#112233',
+        'data-mx-bg-color': '#445566',
+      });
+      expect(document.querySelector('[data-mx-spoiler]')!.attributes, {
+        'data-mx-spoiler': 'hint',
+      });
+    });
+
+    testWidgets(
+        'message with CSS list-style-image creates no network image or HTTP client',
+        (tester) async {
+      var httpClientsCreated = 0;
+      await HttpOverrides.runZoned(
+        () async {
+          await pumpHtml(
+              tester,
+              '<style>b { color: #ff0000; font-size: 99px; } '
+              'li { list-style-image: url(http://127.0.0.1:9/msg-tag.png); }'
+              '</style>'
+              '<b>TagStyled</b> '
+              '<span style="color: #00ff00; font-size: 88px">AttrStyled</span> '
+              '<script>steal("cookies")</script>'
+              '<iframe src="https://evil.example">frame-secret</iframe>'
+              '<ul><li style="list-style-image: url(http://127.0.0.1:9/msg-inline.png)">'
+              'Item</li></ul>');
+        },
+        createHttpClient: (_) {
+          httpClientsCreated++;
+          throw StateError('CSS must not open an HTTP client');
+        },
+      );
+
+      expect(httpClientsCreated, 0,
+          reason: 'CSS list-style-image must not trigger an HTTP request');
+      expect(find.byType(Image), findsNothing,
+          reason: 'CSS list-style-image must not instantiate Image.network');
+
+      final tagSpan = findSpan(tester, 'TagStyled').style;
+      expect(tagSpan.color, isNot(const Color(0xFFFF0000)));
+      expect(tagSpan.fontSize, isNot(99.0));
+
+      final attrSpan = findSpan(tester, 'AttrStyled').style;
+      expect(attrSpan.color, isNot(const Color(0xFF00FF00)));
+      expect(attrSpan.fontSize, isNot(88.0));
+
+      final text = allText(tester);
+      expect(text, isNot(contains('steal')));
+      expect(text, isNot(contains('frame-secret')));
+      expect(text, contains('Item'));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'keeps Matrix colours and spoilers when inline style is stripped',
+        (tester) async {
+      await pumpHtml(
+          tester,
+          '<span data-mx-color="#ff0000" data-mx-bg-color="#0000ff" '
+          'style="color: #00ff00; font-size: 99px">Colored</span> '
+          '<span data-mx-spoiler="hint" style="color: #00ff00">Secret</span>');
+
+      final colored = findSpan(tester, 'Colored').style;
+      expect(colored.color, const Color(0xFFFF0000));
+      expect(colored.backgroundColor, const Color(0xFF0000FF));
+      expect(colored.fontSize, isNot(99.0));
+
+      var secret = findSpan(tester, 'Secret');
+      expect(secret.style.backgroundColor, secret.style.color);
+      (secret.recognizer as TapGestureRecognizer).onTap!();
+      await tester.pump();
+      secret = findSpan(tester, 'Secret');
+      expect(secret.style.backgroundColor, isNot(secret.style.color));
+      expect(tester.takeException(), isNull);
     });
   });
 }

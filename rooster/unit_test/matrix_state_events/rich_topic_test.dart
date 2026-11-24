@@ -52,6 +52,46 @@ void expectSanitizedRichTopic(WidgetTester tester) {
   }
 }
 
+const _cssAndFrameHtml = '<style>b { color: #ff0000; font-size: 99px; } '
+    'li { list-style-image: url(http://127.0.0.1:9/tag-leak.png); }</style>'
+    '<b>TagStyled</b> '
+    '<span style="color: #00ff00; font-size: 88px">AttrStyled</span> '
+    '<iframe src="https://evil.example">frame-secret</iframe> '
+    '<ul><li style="list-style-image: url(http://127.0.0.1:9/inline-leak.png)">'
+    'Item</li></ul>';
+
+Map<String, Object?> _cssAndFrameTopicContent() => {
+      'topic': 'Legacy topic',
+      'm.topic': {
+        'm.text': [
+          {'body': _cssAndFrameHtml, 'mimetype': 'text/html'},
+          {'body': 'Plain topic', 'mimetype': 'text/plain'},
+        ],
+      },
+    };
+
+void _expectNoStyleOrFrameLeak(WidgetTester tester) {
+  final tagSpan = findSpans(tester, 'TagStyled');
+  expect(tagSpan, isNotEmpty);
+  expect(tagSpan.first.style.color, isNot(const Color(0xFFFF0000)),
+      reason: '<style> color must not reach the screen');
+  expect(tagSpan.first.style.fontSize, isNot(99.0),
+      reason: '<style> font-size must not reach the screen');
+
+  final attrSpan = findSpans(tester, 'AttrStyled');
+  expect(attrSpan, isNotEmpty);
+  expect(attrSpan.first.style.color, isNot(const Color(0xFF00FF00)),
+      reason: 'inline style color must not reach the screen');
+  expect(attrSpan.first.style.fontSize, isNot(88.0),
+      reason: 'inline style font-size must not reach the screen');
+
+  expect(allText(tester), isNot(contains('frame-secret')),
+      reason: '<iframe> content must not reach the screen');
+  expect(find.byType(Image), findsNothing,
+      reason: 'CSS list-style-image must not instantiate Image.network');
+  expect(tester.takeException(), isNull);
+}
+
 void main() {
   late MatrixClient client;
   late MatrixRoom room;
@@ -123,6 +163,46 @@ void main() {
       setTopic({'topic': 'Legacy topic'});
       expect(MatrixRichTopic.ofRoom(room.matrixRoom).html, isNull);
     });
+
+    test('HTML-only rich topic strips script, style and iframe from plain text',
+        () {
+      final content = <String, Object?>{
+        'm.topic': {
+          'm.text': [
+            {
+              'body': '<b>Hello</b>'
+                  '<script>steal("cookies")</script>'
+                  '<style>b { color: red; }</style>'
+                  '<iframe>frame-secret</iframe>',
+              'mimetype': 'text/html',
+            },
+          ],
+        },
+      };
+
+      final topic = MatrixRichTopic.fromContent(content);
+      expect(topic.plain, 'Hello');
+
+      final event = convert(room, matrix.EventTypes.RoomTopic, content)
+          as MatrixTimelineEventRoomTopic;
+      expect(event.getBody(), 'Alice changed the topic to: Hello');
+      expect(event.plainTextBody, 'Alice changed the topic to: Hello');
+    });
+
+    test('HTML-only topic with only script/style yields empty plain text', () {
+      final topic = MatrixRichTopic.fromContent({
+        'm.topic': {
+          'm.text': [
+            {
+              'body': '<p></p><script>steal("cookies")</script>'
+                  '<style>body { display: none; }</style>',
+              'mimetype': 'text/html',
+            },
+          ],
+        },
+      });
+      expect(topic.plain, '');
+    });
   });
 
   group('timeline', () {
@@ -142,6 +222,19 @@ void main() {
           findsOneWidget);
       expect(find.byType(MatrixHtmlState), findsOneWidget);
       expectSanitizedRichTopic(tester);
+    });
+
+    testWidgets('timeline strips <style>, inline style and <iframe>',
+        (tester) async {
+      final event = convert(
+          room, matrix.EventTypes.RoomTopic, _cssAndFrameTopicContent());
+      await tester.pumpWidget(host(TimelineEventViewGeneric(
+        initialEvent: event,
+        initialIndex: 0,
+        room: room,
+      )));
+      await tester.pump();
+      _expectNoStyleOrFrameLeak(tester);
     });
 
     testWidgets('without m.topic, the legacy topic is the line\'s text',
@@ -195,6 +288,13 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('room header strips <style>, inline style and <iframe>',
+        (tester) async {
+      setTopic(_cssAndFrameTopicContent());
+      await pumpHeader(tester);
+      _expectNoStyleOrFrameLeak(tester);
+    });
+
     testWidgets('falls back to the legacy topic without m.topic',
         (tester) async {
       setTopic({'topic': 'Legacy topic'});
@@ -224,6 +324,14 @@ void main() {
           findsOneWidget);
       expect(find.byKey(MatrixRoomTopicSettings.formattedKey), findsOneWidget);
       expectSanitizedRichTopic(tester);
+    });
+
+    testWidgets('general settings strips <style>, inline style and <iframe>',
+        (tester) async {
+      setTopic(_cssAndFrameTopicContent());
+      await tester.pumpWidget(host(MatrixRoomTopicSettings(room)));
+      await tester.pump();
+      _expectNoStyleOrFrameLeak(tester);
     });
 
     testWidgets('shows the legacy topic as text without m.topic',
