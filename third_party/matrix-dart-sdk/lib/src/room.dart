@@ -3462,11 +3462,26 @@ extension RoomStickyEvents on Room {
     return true;
   }
 
-  /// Forgets the events that stopped being sticky before [before]. Returns
-  /// whether any were.
-  bool pruneStickyEvents(DateTime before) {
+  /// Forgets the events that stopped being sticky more than [maxDuration]
+  /// before the newest one a user of [homeserver] sent here: that one's
+  /// `origin_server_ts` is a time that homeserver's clock has reached. No
+  /// other clock is asked: this machine's can be hours off, and so can
+  /// another homeserver's, whose one event would then take down everyone's.
+  /// With no sticky event from [homeserver] nothing is forgotten; a newer
+  /// event of the same sender, type and sticky key still replaces an older
+  /// one. Returns whether any were forgotten.
+  bool pruneStickyEvents({required String? homeserver}) {
     final store = _store[this];
-    if (store == null) return false;
+    if (store == null || homeserver == null) return false;
+    DateTime? reached;
+    for (final event in store.values) {
+      if (event.senderId.domain != homeserver) continue;
+      if (reached == null || event.originServerTs.isAfter(reached)) {
+        reached = event.originServerTs;
+      }
+    }
+    if (reached == null) return false;
+    final before = reached.subtract(maxDuration);
     final count = store.length;
     store.removeWhere(
       (_, event) => !stickyExpiresAt(event)!.isAfter(before),

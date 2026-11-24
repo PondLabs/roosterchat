@@ -334,4 +334,70 @@ void main() {
     expect(changes, hasLength(1));
     expect(CallMemberships.touches(matrix.JoinedRoomUpdate()), isFalse);
   });
+
+  // Review c1-1: a device in the voice call that also runs a widget activity
+  // (its own legacy membership, another application) is in both.
+  group('c1-1 two applications on one device', () {
+    const whiteboard = 'io.example.whiteboard';
+
+    void app(String user, String device, String application,
+        {DateTime? at, bool left = false}) {
+      final key = '_${user}_${device}_$application';
+      (room.matrixRoom.states[_legacy] ??= {})[key] = matrix.Event(
+        type: _legacy,
+        senderId: user,
+        stateKey: key,
+        eventId: '\$app-$user-$device-$application',
+        originServerTs: at ?? joinedAt,
+        room: room.matrixRoom,
+        content: left
+            ? const {}
+            : {
+                'application': application,
+                'call_id': '',
+                'device_id': device,
+                'scope': 'm.room',
+                'expires': 4 * 3600 * 1000,
+              },
+      );
+    }
+
+    Set<String> applications() =>
+        activities.getSessions().map((s) => s.application).toSet();
+
+    test('widget membership written first: still in the voice call', () {
+      app(_bob, 'BOB', whiteboard);
+      legacy(_bob, 'BOB');
+      expect(channelPage(), [_bob]);
+      expect(sidebar(), {_bob});
+      expect(applications(), {'m.call', whiteboard});
+    });
+
+    test('voice membership written first: the activity is still listed', () {
+      legacy(_bob, 'BOB');
+      app(_bob, 'BOB', whiteboard);
+      expect(applications(), {'m.call', whiteboard});
+    });
+
+    test('an activity that ended does not take its device out of the call', () {
+      sticky(_bob, 'BOB');
+      legacy(_bob, 'BOB');
+      app(_bob, 'BOB', whiteboard,
+          at: joinedAt.add(const Duration(seconds: 30)), left: true);
+      expect(sidebar(), {_bob});
+      expect(applications(), {'m.call'});
+
+      // Nor out of a call it is in by the newer format alone.
+      room.matrixRoom.states[_legacy]!.remove('_${_bob}_BOB_m.call');
+      expect(sidebar(), {_bob});
+    });
+
+    test('a newer format leave of the call leaves the activity alone', () {
+      app(_bob, 'BOB', whiteboard);
+      legacy(_bob, 'BOB');
+      sticky(_bob, 'BOB',
+          at: joinedAt.add(const Duration(seconds: 10)), left: true);
+      expect(applications(), {whiteboard});
+    });
+  });
 }

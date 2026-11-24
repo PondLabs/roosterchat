@@ -158,6 +158,11 @@ class RecordingHomeserver implements matrix.Client {
   /// that says v1.20 and knows only the unstable one.
   bool stableUnknown = false;
 
+  /// How many of the next sticky sends the homeserver refuses, and whether
+  /// they get no answer at all (sent down a connection that died).
+  int stickyRefusals = 0;
+  bool stickyLost = false;
+
   final List<Sent> requests = [];
   final List<Map<String, Object?>> membershipWrites = [];
   int _delays = 0;
@@ -190,6 +195,14 @@ class RecordingHomeserver implements matrix.Client {
           ? jsonDecode(data) as Map<String, Object?>
           : const {},
     ));
+    if (action.contains('/send/')) {
+      if (stickyLost) return Completer<Map<String, Object?>>().future;
+      if (stickyRefusals > 0) {
+        stickyRefusals--;
+        throw matrix.MatrixException.fromJson(
+            {'errcode': 'M_LIMIT_EXCEEDED', 'error': 'Too many requests'});
+      }
+    }
     if (query?.containsKey('delay') == true) {
       if (stableUnknown) {
         throw matrix.MatrixException.fromJson(

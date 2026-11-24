@@ -230,6 +230,93 @@ void main() {
       expect(homeserver.delayedActions.last.body['action'], 'send');
     });
 
+    // Review c1-4: a homeserver that announces sticky events and refuses
+    // ours (rate limited, disallowed) used to be asked at every heartbeat,
+    // every five seconds.
+    test('refused, is tried again half a minute later, then less often',
+        () async {
+      homeserver.features = {'org.matrix.msc4354': true};
+      homeserver.stickyRefusals = 3;
+      await join();
+      expect(homeserver.stickySends, hasLength(1));
+
+      for (var i = 0; i < 5; i++) {
+        await stay(const Duration(seconds: 5));
+      }
+      expect(homeserver.stickySends, hasLength(1), reason: 'not at once');
+      await stay(const Duration(seconds: 5));
+      expect(homeserver.stickySends, hasLength(2), reason: '30 s later');
+
+      await stay(const Duration(seconds: 55));
+      expect(homeserver.stickySends, hasLength(2), reason: 'a minute now');
+      await stay(const Duration(seconds: 5));
+      expect(homeserver.stickySends, hasLength(3));
+
+      await stay(const Duration(minutes: 2));
+      expect(homeserver.stickySends, hasLength(4), reason: 'and it goes out');
+      expect(homeserver.stickySends.last.body['application'], isNotNull);
+      // Back to every half minute once one went through.
+      await stay(const Duration(seconds: 30));
+      expect(homeserver.stickySends, hasLength(5));
+    });
+
+    group('a send that gets no answer', () {
+      late Duration timeout;
+
+      setUp(() {
+        // ignore: invalid_use_of_visible_for_testing_member
+        timeout = MatrixLivekitVoipSession.stickyTimeout;
+        // ignore: invalid_use_of_visible_for_testing_member
+        MatrixLivekitVoipSession.stickyTimeout =
+            const Duration(milliseconds: 100);
+        homeserver.features = {
+          'org.matrix.msc4140': true,
+          'org.matrix.msc4354': true,
+        };
+      });
+
+      // ignore: invalid_use_of_visible_for_testing_member
+      tearDown(() => MatrixLivekitVoipSession.stickyTimeout = timeout);
+
+      test('does not hold up the heartbeats that restart the delayed leave',
+          () async {
+        homeserver.stickyLost = true;
+        await join().timeout(const Duration(seconds: 2));
+        expect(homeserver.stickySends, hasLength(1));
+
+        await stay(const Duration(seconds: 5))
+            .timeout(const Duration(seconds: 2));
+        expect(homeserver.delayedActions.map((r) => r.body['action']),
+            ['restart']);
+      });
+
+      // Review c1-5: the hang up waited for the sticky leave for as long
+      // as the HTTP client did.
+      test('does not hold up the hang up', () async {
+        final call = await join();
+        expect(homeserver.stickySends, hasLength(1));
+
+        homeserver.stickyLost = true;
+        await call.hangUpCall().timeout(const Duration(seconds: 3));
+        expect(call.state, VoipState.ended);
+        expect(homeserver.stickySends.last.body.containsKey('application'),
+            isFalse,
+            reason: 'the sticky leave was sent');
+        expect(homeserver.delayedActions.last.body['action'], 'send',
+            reason: 'the legacy leave went out');
+      });
+
+      test('is taken down on hang up, in case it did arrive', () async {
+        homeserver.stickyLost = true;
+        final call = await join();
+        homeserver.stickyLost = false;
+        await call.hangUpCall().timeout(const Duration(seconds: 3));
+        expect(homeserver.stickySends, hasLength(2));
+        expect(homeserver.stickySends.last.body.containsKey('application'),
+            isFalse);
+      });
+    });
+
     test('is not sent once our legacy membership is gone', () async {
       homeserver.features = {'org.matrix.msc4354': true};
       room.matrixRoom.states[CallMemberships.legacyType]!.clear();

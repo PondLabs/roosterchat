@@ -2688,9 +2688,34 @@ class MatrixLivekitVoipSession
   static const stickyLifetime = Duration(minutes: 2);
   static const stickyRefresh = Duration(seconds: 30);
 
+  /// How long one send of it is waited for, like [restartTimeout]: the
+  /// heartbeat waits for it, and one lost down a dead connection would hold
+  /// up the restarts of the delayed leave behind it until that fired. A
+  /// hang up waits no longer for the sticky leave either.
+  @visibleForTesting
+  static Duration stickyTimeout = const Duration(seconds: 4);
+
   /// When our sticky membership was last sent, by [_membershipTime]; null
   /// while none is out.
   DateTime? _stickySentAt;
+
+  /// Whether a send of it may have reached the homeserver, answered or not:
+  /// there is then one to take down.
+  bool _stickyMaybeOut = false;
+
+  /// When sending it was last tried, and how many times in a row that
+  /// failed (refused, rate limited, timed out): it is tried again 30 s
+  /// later, then a minute, two, and so on up to ten, not at every heartbeat.
+  DateTime? _lastStickyAttempt;
+  int _stickyFailures = 0;
+
+  Duration get _stickyRetryInterval {
+    final doublings = min(max(_stickyFailures - 1, 0), 5);
+    final wait = const Duration(seconds: 30) * (1 << doublings);
+    return wait > const Duration(minutes: 10)
+        ? const Duration(minutes: 10)
+        : wait;
+  }
 
   /// Sends our membership in the newer format too, where the homeserver
   /// has sticky events, beside a live legacy one and never instead of it:
@@ -2708,22 +2733,34 @@ class MatrixLivekitVoipSession
         now.difference(sent) < stickyRefresh) {
       return;
     }
+    if (_stickyFailures > 0 &&
+        !_waited(_lastStickyAttempt, _stickyRetryInterval)) {
+      return;
+    }
+    _lastStickyAttempt = _now();
+    _stickyMaybeOut = true;
     try {
       await _sendSticky(CallMemberships.stickyContent(current.content,
           userId: room.client.self!.identifier,
           deviceId: room.matrixRoom.client.deviceID!,
           stickyKey: _ownMembershipKey));
       _stickySentAt = now;
+      _stickyFailures = 0;
     } catch (e, s) {
+      _stickyFailures++;
       Log.onError(e, s,
-          content: "Could not send our call membership in the newer format");
+          content: "Could not send our call membership in the newer format "
+              "(attempt $_stickyFailures, again in "
+              "${_stickyRetryInterval.inSeconds} s)");
     }
   }
 
-  /// Takes our sticky membership down, if one is out. Never fails: the
-  /// legacy membership's leave is what counts, and this one lapses anyway.
+  /// Takes our sticky membership down, if one may be out. Never fails, and
+  /// is given up on after [stickyTimeout]: the legacy membership's leave is
+  /// what counts, and this one lapses anyway.
   Future<void> _leaveStickyMembership() async {
-    if (_stickySentAt == null) return;
+    if (!_stickyMaybeOut) return;
+    _stickyMaybeOut = false;
     _stickySentAt = null;
     try {
       await _sendSticky(CallMemberships.stickyLeave(_ownMembershipKey,
@@ -2743,7 +2780,7 @@ class MatrixLivekitVoipSession
         query: {
           RoomStickyEvents.durationParameter:
               stickyLifetime.inMilliseconds.toString()
-        });
+        }).timeout(stickyTimeout);
   }
 
   @override

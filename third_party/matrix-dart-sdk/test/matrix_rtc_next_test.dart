@@ -125,7 +125,8 @@ void main() {
   Logs().level = Level.error;
   // To the millisecond, as events carry it.
   final now = DateTime.fromMillisecondsSinceEpoch(
-      DateTime.now().millisecondsSinceEpoch);
+    DateTime.now().millisecondsSinceEpoch,
+  );
 
   group('sticky events (MSC4354)', () {
     test('come from the sticky section and the timeline, once each', () {
@@ -237,6 +238,102 @@ void main() {
         isNotNull,
       );
       await second.dispose();
+    });
+
+    // Review c1-2: this machine's clock three hours ahead of the
+    // homeserver's (the dual boot case of docs/voice-channel-members.md). A
+    // sticky membership the homeserver sent just now, sticky for two more
+    // minutes by its clock, is still live for a reader going by
+    // HomeserverClock.
+    test('c1-2 a live sticky membership survives a local clock hours ahead',
+        () async {
+      final serverNow = now.subtract(const Duration(hours: 3));
+      final client =
+          await _login('c1_2_skew', await getDatabase(), _Homeserver());
+      await _sync(client, {
+        'msc4354_sticky': {
+          'events': [_sticky(r'$live', sentAt: serverNow)],
+        },
+      });
+      final room = client.getRoomById(_roomId)!;
+      expect(
+        room.stickyEventsOfType(_rtcType).map((e) => e.eventId),
+        [r'$live'],
+        reason: 'sticky until serverNow + 2 min by the homeserver clock',
+      );
+      await client.dispose();
+    });
+
+    test(
+        'are forgotten once long over by our homeserver, never by another '
+        "homeserver's clock or this machine's", () async {
+      // The homeserver's clock, days away from this machine's either way.
+      for (final serverNow in [
+        now.subtract(const Duration(days: 2)),
+        now.add(const Duration(days: 2)),
+      ]) {
+        final client = await _login(
+          'c1_2_prune_${serverNow.millisecondsSinceEpoch}',
+          await getDatabase(),
+          _Homeserver(),
+        );
+        Set<String> kept() => client
+            .getRoomById(_roomId)!
+            .stickyEventsOfType(_rtcType)
+            .map((e) => e.eventId)
+            .toSet();
+
+        await _sync(client, {
+          'msc4354_sticky': {
+            'events': [
+              // Over for more than an hour, and still sticky.
+              _sticky(
+                r'$over',
+                device: 'OLD',
+                sentAt: serverNow.subtract(const Duration(hours: 2)),
+              ),
+              _sticky(
+                r'$live',
+                sender: '@carol:example.test',
+                device: 'C',
+                sentAt: serverNow.subtract(const Duration(minutes: 1)),
+              ),
+            ],
+          },
+        });
+        // Another homeserver's clock a day ahead says nothing of ours:
+        // its event forgets nobody's.
+        await _sync(client, {
+          'msc4354_sticky': {
+            'events': [
+              _sticky(
+                r'$remote',
+                sender: '@eve:far.example',
+                device: 'E',
+                sentAt: serverNow.add(const Duration(days: 1)),
+              ),
+            ],
+          },
+        });
+        expect(kept(), {r'$live', r'$remote'});
+
+        // Over, but not for an hour by our homeserver's clock: kept, for
+        // the reader to judge.
+        await _sync(client, {
+          'msc4354_sticky': {
+            'events': [
+              _sticky(
+                r'$newer',
+                sender: '@dave:example.test',
+                device: 'D',
+                sentAt: serverNow.add(const Duration(minutes: 30)),
+              ),
+            ],
+          },
+        });
+        expect(kept(), {r'$live', r'$remote', r'$newer'});
+        await client.dispose();
+      }
     });
 
     test('from Sliding Sync are asked for and land in the same place',

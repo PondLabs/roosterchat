@@ -56,46 +56,45 @@ class CallMemberships {
         ...?update.sticky,
       ].any((event) => types.contains(event.type));
 
-  /// The memberships in [room] that count at [now], once per person's
-  /// device, each as a legacy membership: its content in the legacy shape,
-  /// the newer format's turned into it (application, call id, device,
-  /// `expires` from when it was sent, foci). The legacy one of a device is
-  /// the one kept while both formats say it is in the call: only it has
-  /// Rooster's badges, and a delayed leave behind it. Otherwise the newer
-  /// says, unless one has only lapsed: a legacy membership the delayed leave
-  /// cleared takes down an older sticky one of the same device, a sticky one
-  /// that lapsed does not take down a live legacy one.
+  /// The memberships in [room] that count at [now], once per application
+  /// on a person's device (the call, or a widget's activity: a device in
+  /// the call that also runs an activity is in both), each as a legacy
+  /// membership: its content in the legacy shape, the newer format's turned
+  /// into it (application, call id, device, `expires` from when it was
+  /// sent, foci). The legacy one of a device is the one kept while both
+  /// formats say it is in the call: only it has Rooster's badges, and a
+  /// delayed leave behind it. Otherwise the newer says, unless one has only
+  /// lapsed: a legacy membership the delayed leave cleared takes down an
+  /// older sticky one of the same device, a sticky one that lapsed does not
+  /// take down a live legacy one.
   ///
   /// Lapsed memberships are left in: callers skip them, and log it.
   static List<matrix.StrippedStateEvent> of(matrix.Room room,
       {required DateTime now}) {
-    final byDevice = <(String, String), matrix.StrippedStateEvent>{};
-    final rest = <matrix.StrippedStateEvent>[];
+    // By (person, device, application).
+    final bySlot = <(String, String, String), matrix.StrippedStateEvent>{};
 
-    void offer(matrix.StrippedStateEvent membership, String? deviceId) {
-      if (deviceId == null) {
-        rest.add(membership);
-        return;
-      }
-      final key = (membership.senderId, deviceId);
-      final kept = byDevice[key];
+    void offer(matrix.StrippedStateEvent membership,
+        ({String deviceId, String application}) slot) {
+      final key = (membership.senderId, slot.deviceId, slot.application);
+      final kept = bySlot[key];
       if (kept == null || _prefer(membership, kept: kept, now: now)) {
-        byDevice[key] = membership;
+        bySlot[key] = membership;
       }
     }
 
     final legacy = room.states[legacyType] ?? const {};
     for (final entry in legacy.entries) {
-      offer(entry.value,
-          _legacyDeviceOf(entry.value, entry.key) ?? entry.value.stateKey);
+      offer(entry.value, _legacySlotOf(entry.value, entry.key));
     }
     for (final event in matrix.RtcMemberships.eventsOf(room)) {
-      final membership = _asLegacy(event, room);
-      if (membership != null) {
-        offer(membership, matrix.RtcMemberships.deviceIdOf(event.content));
-      }
+      final deviceId = matrix.RtcMemberships.deviceIdOf(event.content);
+      if (deviceId == null) continue;
+      final application = _newerApplicationOf(event.content);
+      offer(_asLegacy(event, room, deviceId, application),
+          (deviceId: deviceId, application: application));
     }
-    return [...byDevice.values, ...rest];
+    return bySlot.values.toList();
   }
 
   static DateTime? _sentAt(matrix.StrippedStateEvent e) =>
@@ -126,34 +125,54 @@ class CallMemberships {
     return a.isAfter(b);
   }
 
-  /// A cleared legacy membership is empty: its device is in its state key,
-  /// `_<user id>_<device id>_<application>`.
-  static String? _legacyDeviceOf(
+  /// The device and application of a legacy membership. A cleared one is
+  /// empty: they are in its state key,
+  /// `_<user id>_<device id>_<application>`. A state key of another shape
+  /// is a membership of its own.
+  static ({String deviceId, String application}) _legacySlotOf(
       matrix.StrippedStateEvent event, String stateKey) {
+    String? fromKey(bool application) {
+      final prefix = '_${event.senderId}_';
+      if (!stateKey.startsWith(prefix)) return null;
+      final rest = stateKey.substring(prefix.length);
+      final end = rest.lastIndexOf('_');
+      if (end <= 0) return null;
+      return application ? rest.substring(end + 1) : rest.substring(0, end);
+    }
+
     final device = event.content['device_id'];
-    if (device is String) return device;
-    final prefix = '_${event.senderId}_';
-    if (!stateKey.startsWith(prefix)) return null;
-    final rest = stateKey.substring(prefix.length);
-    final end = rest.lastIndexOf('_');
-    return end > 0 ? rest.substring(0, end) : null;
+    final application = event.content['application'];
+    return (
+      deviceId: device is String ? device : fromKey(false) ?? stateKey,
+      application:
+          application is String ? application : fromKey(true) ?? stateKey,
+    );
+  }
+
+  /// The application of a membership of the newer format. One that has
+  /// left names none: it is its slot's (`m.call#...`), or the call.
+  static String _newerApplicationOf(Map<String, Object?> content) {
+    final application = matrix.RtcMemberships.applicationOf(content);
+    if (application != null) return application;
+    final slot = content['slot_id'];
+    final end = slot is String ? slot.indexOf('#') : -1;
+    return end > 0 ? (slot as String).substring(0, end) : 'm.call';
   }
 
   /// Marks a membership turned into the legacy shape, in its `unsigned`.
   static const _formatKey = 'chat.commet.membership_format';
 
-  /// [event], a membership of the newer format, as a legacy one (see
-  /// [of]); null for one that carries no device.
-  static matrix.Event? _asLegacy(matrix.Event event, matrix.Room room) {
+  /// [event], a membership of the newer format of [deviceId] in [slot]
+  /// (an application), as a legacy one (see [of]).
+  static matrix.Event _asLegacy(
+      matrix.Event event, matrix.Room room, String deviceId, String slot) {
     final content = event.content;
-    final deviceId = matrix.RtcMemberships.deviceIdOf(content);
-    if (deviceId == null) return null;
     final application = matrix.RtcMemberships.applicationOf(content);
     final sentAt = event.originServerTs;
     return matrix.Event(
       type: legacyType,
       senderId: event.senderId,
-      stateKey: '_${event.senderId}_${deviceId}_m.call',
+      stateKey: '_${event.senderId}_${deviceId}_$slot',
       eventId: event.eventId,
       originServerTs: sentAt,
       unsigned: {_formatKey: event.type},

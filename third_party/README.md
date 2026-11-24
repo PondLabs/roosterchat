@@ -649,10 +649,17 @@ Changes since the copy:
   decrypted when they come encrypted. An incremental sync hands a sticky
   event out once, so they are written to the custom cache object
   `rooster_msc4354_sticky_events` at the end of a sync that changed them
-  and come back in `Client.init`; those long past their end (an hour, the
-  longest one stays sticky) are pruned when written. Whether one still
-  counts is the reader's to say, by its own clock
-  (`RoomStickyEvents.stickyExpiresAt`); `DatabaseApi` does not change.
+  and come back in `Client.init`. Whether one still counts is the
+  reader's to say, by its own clock (`RoomStickyEvents.stickyExpiresAt`);
+  the SDK asks no clock of its own, since this machine's can be hours off
+  (pruned by it, every sticky event was forgotten as it arrived on a
+  machine three hours ahead). When they are written, a room forgets the
+  ones that ended more than an hour (the longest one stays sticky) before
+  the newest sticky event one of our own homeserver's users sent there: a
+  time that homeserver's clock has reached. Another homeserver's
+  timestamps forget nobody's, and a room with no sticky event from ours
+  keeps the latest of each sender, type and sticky key. `DatabaseApi` does
+  not change.
   Delayed events: `DelayedEventsSupport.of(versions)` is `stable` from
   Matrix v1.20 or with `org.matrix.msc4140.stable`
   (`/_matrix/client/v1/delayed_events`, `?delay=`), else `unstable` with

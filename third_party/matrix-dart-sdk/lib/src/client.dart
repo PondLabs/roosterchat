@@ -3126,11 +3126,15 @@ class Client extends MatrixApi {
 
   Future<void> _storeStickyEvents() async {
     _stickyEventsDirty = false;
-    // Long past their end by any clock: whoever reads the rest decides by
-    // their own (Rooster by the homeserver's).
-    final before = DateTime.now().subtract(RoomStickyEvents.maxDuration);
+    // Never by this machine's clock: one set hours ahead (Windows reading a
+    // dual boot's UTC hardware clock as local time) forgot every sticky
+    // event as it arrived. A room's are forgotten once long over by our
+    // homeserver's own clock, as far as its sticky events there show it;
+    // whoever reads the rest decides by their own clock (Rooster by the
+    // homeserver's).
+    final homeserver = userID?.domain;
     for (final room in rooms) {
-      room.pruneStickyEvents(before);
+      room.pruneStickyEvents(homeserver: homeserver);
     }
     try {
       await database.cacheCustomObject(_stickyEventsCacheKey, {
