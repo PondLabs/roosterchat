@@ -10,6 +10,7 @@ import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/pages/login/login_page_view.dart';
 import 'package:rooster/ui/pages/login/password_reset_view.dart';
+import 'package:rooster/ui/pages/login/qr_code_login.dart';
 import 'package:rooster/ui/pages/login/register_view.dart';
 import 'package:rooster/utils/debounce.dart';
 import 'package:rooster/utils/rng.dart';
@@ -88,6 +89,7 @@ class LoginPageState extends State<LoginPage> {
   int homeserverRequestId = 0;
   matrix.GetAuthMetadataResponse? authMetadata;
   MatrixDeviceAuthFlow? deviceAuthFlow;
+  bool qrLogin = false;
 
   final Debouncer homeserverUpdateDebouncer = Debouncer(
     delay: const Duration(seconds: 1),
@@ -151,6 +153,8 @@ class LoginPageState extends State<LoginPage> {
       authMetadata: authMetadata,
       deviceAuthFlow: deviceAuthFlow,
       doDeviceLogin: doDeviceLogin,
+      doQrLogin: doQrLogin,
+      qrLoginPanel: qrLoginPanel(),
       doPasswordLogin: doPasswordLogin,
       isLoggingIn: isLoggingIn,
       loadingServerInfo: loadingServerInfo,
@@ -279,6 +283,27 @@ class LoginPageState extends State<LoginPage> {
     }
   }
 
+  void doQrLogin() {
+    if (loginClient is! MatrixClient || authMetadata == null) return;
+    setState(() => qrLogin = true);
+  }
+
+  /// QR code login (MSC4108): the panel shows the code, then signs in
+  /// through [doLogin] like every other flow.
+  Widget? qrLoginPanel() {
+    final client = loginClient;
+    final metadata = authMetadata;
+    if (!qrLogin || client is! MatrixClient || metadata == null) return null;
+    return QrLoginPanel(
+      client: client.matrixClient,
+      authMetadata: metadata,
+      onSignIn: (flow) => doLogin(() => client.executeLoginFlow(flow)),
+      onClose: () {
+        if (mounted) setState(() => qrLogin = false);
+      },
+    );
+  }
+
   Future<void> doPasswordLogin(
     PasswordLoginFlow flow,
     String username,
@@ -311,6 +336,7 @@ class LoginPageState extends State<LoginPage> {
     setState(() {
       loginFlows = null;
       authMetadata = null;
+      qrLogin = false;
       loadingServerInfo = true;
       isServerValid = false;
     });
