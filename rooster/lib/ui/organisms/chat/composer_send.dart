@@ -118,15 +118,26 @@ class ComposerSend {
   /// Waits for [attachment]'s files (its picture's preparation, its bytes)
   /// and hands them to the room, which follows them on [send]. Never
   /// throws: a failure is shown on [send].
+  ///
+  /// A file that fails before it reaches the room (moved, deleted, its
+  /// preparation broken) does not take its [caption] with it: the text the
+  /// person typed goes on its own, as it did before captions.
   Future<void> _handOver(PendingFileAttachment attachment, AttachmentSend send,
       {String? caption}) async {
+    var handedOver = false;
+    void sendCaptionAlone() {
+      if (caption != null && !handedOver) _sendText();
+    }
+
     try {
       final processed = await room.processAttachments([attachment]);
       if (processed.isEmpty) {
         // Moved or deleted since it was picked: nothing to send.
         send.failed();
+        sendCaptionAlone();
         return;
       }
+      handedOver = true;
       if (inThread) {
         await threads!.sendMessage(
             threadRootEventId: threadId!,
@@ -145,6 +156,7 @@ class ComposerSend {
     } catch (error, stack) {
       Log.onError(error, stack, content: "Could not send a file");
       send.failed();
+      sendCaptionAlone();
     }
   }
 }
