@@ -24,6 +24,7 @@ import 'package:rooster/client/components/voip/android_screencapture_source.dart
 import 'package:rooster/client/matrix/components/dj/dj_booths.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_membership_writes.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_membership_publisher.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_memberships.dart';
 import 'package:rooster/client/matrix/components/voip_room/livekit_microphone.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_call_membership.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_encryption_key_provider.dart';
@@ -40,7 +41,8 @@ import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/src/widgets/framework.dart';
 import 'package:flutter_background/flutter_background.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:matrix/matrix.dart' show Event;
+import 'package:matrix/matrix.dart'
+    show DelayedEventsSupport, Event, RoomStickyEvents;
 import 'package:matrix/matrix_api_lite.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 
@@ -455,6 +457,7 @@ class MatrixLivekitVoipSession
     if (_lastMembership == null) return;
     Log.w("Livekit has not been connected for ${stepOutAfter.inSeconds} s, "
         "leaving the call's member list until it is back");
+    unawaited(_leaveStickyMembership());
     final delayId = _delayedLeaveId ?? heartbeatDelayId;
     try {
       if (delayId != null) {
@@ -2265,7 +2268,8 @@ class MatrixLivekitVoipSession
         _joinedAt ??
         _startedAt;
     final superseded = MatrixCallMembership.supersededBy(
-      states.values.map((e) => (
+      // Either format: our other device may be a newer MatrixRTC client.
+      CallMemberships.of(room.matrixRoom, now: _membershipTime()).map((e) => (
             sender: e.senderId,
             content: e.content,
             sentAt: e is Event ? e.originServerTs : null,
@@ -2307,10 +2311,7 @@ class MatrixLivekitVoipSession
       return;
     }
 
-    await room.matrixRoom.client.request(RequestType.POST,
-        "/client/unstable/org.matrix.msc4140/delayed_events/${Uri.encodeComponent(delayId)}",
-        contentType: "application/json",
-        data: jsonEncode({"action": "cancel"}));
+    await _delayedLeaveAction(delayId, "cancel");
 
     Log.i("Stopped heartbeat");
   }
@@ -2328,6 +2329,8 @@ class MatrixLivekitVoipSession
     final delayId = _delayedLeaveId ?? heartbeatDelayId;
     _delayedLeaveId = null;
     heartbeatDelayId = null;
+    // Beside the legacy one, never instead: it cannot fail the hang up.
+    final sticky = _leaveStickyMembership();
 
     if (delayId != null) {
       try {
@@ -2335,6 +2338,7 @@ class MatrixLivekitVoipSession
         await CallMembershipWrites.clearing(
             _ownMembershipKey, _delayedLeaveAction(delayId, "send"));
         Log.i("Sent our delayed leave");
+        await sticky;
         return;
       } catch (e) {
         Log.w("Could not send our delayed leave, clearing by hand: $e");
@@ -2351,17 +2355,37 @@ class MatrixLivekitVoipSession
         Log.w("Could not cancel our delayed leave: $e");
       }
     }
+    await sticky;
   }
 
-  Future<void> _delayedLeaveAction(String delayId, String action) =>
-      room.matrixRoom.client.request(RequestType.POST,
-          "/client/unstable/org.matrix.msc4140/delayed_events/${Uri.encodeComponent(delayId)}",
-          contentType: "application/json",
-          data: jsonEncode({"action": action}));
+  /// The API each delayed leave was armed with: it is restarted, sent and
+  /// cancelled there, even once the homeserver says it has the other one
+  /// (an upgrade to Matrix v1.20 mid-call). Asked on the other, a leave
+  /// armed on one is not found, and nothing would clear our membership if
+  /// this client died.
+  final Map<String, DelayedEventsSupport> _delayedLeaveApis = {};
 
-  /// Whether the homeserver has delayed events (MSC4140), once it has said.
-  /// Synapse ships without them.
-  bool? _hasDelayedEvents;
+  Future<Map<String, Object?>> _delayedLeaveAction(
+      String delayId, String action) {
+    final via = _delayedLeaveApis[delayId] ?? DelayedEventsSupport.unstable;
+    return room.matrixRoom.client.request(RequestType.POST,
+        "/${via.endpoint.substring('_matrix/'.length)}/${Uri.encodeComponent(delayId)}",
+        contentType: "application/json", data: jsonEncode({"action": action}));
+  }
+
+  /// Which delayed events (MSC4140) the homeserver has, once it has said:
+  /// the stable API from Matrix v1.20, the unstable one, or none (Synapse
+  /// ships without them).
+  DelayedEventsSupport? _delayedEvents;
+
+  /// Whether the homeserver also offers the unstable API, to fall back to
+  /// if it turns out not to know the stable one.
+  bool _unstableDelayedEventsToo = false;
+
+  /// Whether the homeserver has sticky events (MSC4354), read with
+  /// [_delayedEvents]: our membership then also goes out in the newer
+  /// format, for MatrixRTC clients that read only that.
+  bool? _stickyEvents;
 
   /// When arming the delayed leave was last tried, and how many times in a
   /// row that failed: it is tried again 30 s later, then a minute, two,
@@ -2432,21 +2456,36 @@ class MatrixLivekitVoipSession
     } catch (e, s) {
       Log.onError(e, s, content: "Could not extend our call membership");
     }
+    await _keepStickyMembership();
   }
 
   /// Schedules a delayed leave: the server clears our membership once
   /// [_delayedLeaveTimeout] passes without a heartbeat.
   Future<void> _armDelayedLeave() async {
-    final result = await room.matrixRoom.client.request(RequestType.PUT,
-        "/client/v3/rooms/${Uri.encodeComponent(room.matrixRoom.id)}/state/${Uri.encodeComponent(MatrixVoipRoomComponent.callMemberStateEvent)}/${Uri.encodeComponent(_ownMembershipKey)}",
-        contentType: "application/json",
-        data: "{}",
-        query: {
-          "org.matrix.msc4140.delay":
-              _delayedLeaveTimeout.inMilliseconds.toString()
-        });
+    final via = _delayedEvents ?? DelayedEventsSupport.unstable;
+    final Map<String, Object?> result;
+    try {
+      result = await room.matrixRoom.client.request(RequestType.PUT,
+          "/client/v3/rooms/${Uri.encodeComponent(room.matrixRoom.id)}/state/${Uri.encodeComponent(MatrixVoipRoomComponent.callMemberStateEvent)}/${Uri.encodeComponent(_ownMembershipKey)}",
+          contentType: "application/json",
+          data: "{}",
+          query: {
+            via.delayParameter: _delayedLeaveTimeout.inMilliseconds.toString()
+          });
+    } on MatrixException catch (e) {
+      // Says Matrix v1.20 but knows only the unstable API: use that.
+      if (via != DelayedEventsSupport.stable ||
+          !_unstableDelayedEventsToo ||
+          e.error != MatrixError.M_UNRECOGNIZED) {
+        rethrow;
+      }
+      Log.w("Homeserver does not know the stable delayed events API");
+      _delayedEvents = DelayedEventsSupport.unstable;
+      return _armDelayedLeave();
+    }
 
     final delayId = result["delay_id"] as String;
+    _delayedLeaveApis[delayId] = via;
     _delayedLeaveId = delayId;
     heartbeatDelayId = delayId;
     _publishMembershipState();
@@ -2458,19 +2497,22 @@ class MatrixLivekitVoipSession
   /// rate limited) left the whole call without a delayed leave, without our
   /// LIVE and muted badges, and without its membership ever being restored.
   Future<void> _armDelayedLeaveWhenDue() async {
-    if (_hasDelayedEvents == false) return;
+    if (_delayedEvents == DelayedEventsSupport.none) return;
     if (_armFailures > 0 && !_waited(_lastArmAttempt, _armRetryInterval)) {
       return;
     }
     _lastArmAttempt = _now();
 
     try {
-      if (_hasDelayedEvents == null) {
+      if (_delayedEvents == null) {
         final capabilities = await room.matrixRoom.client.getVersions();
         Log.d("${capabilities}");
-        _hasDelayedEvents =
-            capabilities.unstableFeatures?["org.matrix.msc4140"] == true;
-        if (_hasDelayedEvents == false) {
+        _delayedEvents = DelayedEventsSupport.of(capabilities);
+        _unstableDelayedEventsToo = capabilities
+                .unstableFeatures?[DelayedEventsSupport.unstableFeature] ==
+            true;
+        _stickyEvents = RoomStickyEvents.supportedBy(capabilities);
+        if (_delayedEvents == DelayedEventsSupport.none) {
           Log.e("Homeserver does not support delayed events");
           return;
         }
@@ -2506,10 +2548,10 @@ class MatrixLivekitVoipSession
     if (error is! MatrixException || error.error != MatrixError.M_FORBIDDEN) {
       return false;
     }
-    if (_hasDelayedEvents != false) {
+    if (_delayedEvents != DelayedEventsSupport.none) {
       Log.w("Homeserver refuses delayed events: ${error.errorMessage}");
     }
-    _hasDelayedEvents = false;
+    _delayedEvents = DelayedEventsSupport.none;
     return true;
   }
 
@@ -2531,12 +2573,7 @@ class MatrixLivekitVoipSession
 
     try {
       try {
-        await room.matrixRoom.client
-            .request(RequestType.POST,
-                "/client/unstable/org.matrix.msc4140/delayed_events/${Uri.encodeComponent(delayId)}",
-                contentType: "application/json",
-                data: jsonEncode({"action": "restart"}))
-            .timeout(restartTimeout);
+        await _delayedLeaveAction(delayId, "restart").timeout(restartTimeout);
         if (heartbeatDelayId == null) {
           heartbeatDelayId = delayId;
           _publishMembershipState();
@@ -2639,6 +2676,74 @@ class MatrixLivekitVoipSession
     // Through the publisher, like every other write of it: one at a time,
     // and saying what we advertise now, away included.
     _membershipPublisher.rewrite();
+  }
+
+  /// How long our membership in the newer format (MSC4143, a sticky event)
+  /// stays sticky, and how often it is sent again: half a minute after each
+  /// send. Kept short like a membership without a delayed leave: nothing
+  /// takes it down if this client dies, so a client that reads only that
+  /// format drops us within two minutes. Clients that read both, Rooster
+  /// among them, go by the legacy one and its delayed leave
+  /// (CallMemberships).
+  static const stickyLifetime = Duration(minutes: 2);
+  static const stickyRefresh = Duration(seconds: 30);
+
+  /// When our sticky membership was last sent, by [_membershipTime]; null
+  /// while none is out.
+  DateTime? _stickySentAt;
+
+  /// Sends our membership in the newer format too, where the homeserver
+  /// has sticky events, beside a live legacy one and never instead of it:
+  /// a client that only reads the newer format sees us.
+  Future<void> _keepStickyMembership() async {
+    if (_stickyEvents != true || _leaving || _steppedOut) return;
+    final current =
+        room.matrixRoom.states[MatrixVoipRoomComponent.callMemberStateEvent]
+            ?[_ownMembershipKey];
+    if (current == null || current.content["application"] == null) return;
+    final now = _membershipTime();
+    final sent = _stickySentAt;
+    if (sent != null &&
+        !now.isBefore(sent) &&
+        now.difference(sent) < stickyRefresh) {
+      return;
+    }
+    try {
+      await _sendSticky(CallMemberships.stickyContent(current.content,
+          userId: room.client.self!.identifier,
+          deviceId: room.matrixRoom.client.deviceID!,
+          stickyKey: _ownMembershipKey));
+      _stickySentAt = now;
+    } catch (e, s) {
+      Log.onError(e, s,
+          content: "Could not send our call membership in the newer format");
+    }
+  }
+
+  /// Takes our sticky membership down, if one is out. Never fails: the
+  /// legacy membership's leave is what counts, and this one lapses anyway.
+  Future<void> _leaveStickyMembership() async {
+    if (_stickySentAt == null) return;
+    _stickySentAt = null;
+    try {
+      await _sendSticky(CallMemberships.stickyLeave(_ownMembershipKey,
+          userId: room.client.self!.identifier,
+          deviceId: room.matrixRoom.client.deviceID!));
+    } catch (e) {
+      Log.w("Could not take our newer format call membership down: $e");
+    }
+  }
+
+  Future<void> _sendSticky(Map<String, Object?> content) {
+    final txn = "rooster${DateTime.now().microsecondsSinceEpoch}";
+    return room.matrixRoom.client.request(RequestType.PUT,
+        "/client/v3/rooms/${Uri.encodeComponent(room.matrixRoom.id)}/send/${Uri.encodeComponent(CallMemberships.stickyType)}/$txn",
+        contentType: "application/json",
+        data: jsonEncode(content),
+        query: {
+          RoomStickyEvents.durationParameter:
+              stickyLifetime.inMilliseconds.toString()
+        });
   }
 
   @override

@@ -1252,6 +1252,7 @@
   "promptCallMemberCopyUserId": "Copiar ID do usuário",
   "labelCallMemberMoveTo": "Mover {name} para",
   "errorCallMemberMove": "Não foi possível mover",
+  "labelCallRinging": "{name} está chamando",
   "tooltipCallRoomEncrypted": "Esta sala é criptografada, sua chamada é segura e privada",
   "tooltipCallRoomNotEncrypted": "Esta sala não é criptografada, o operador do servidor pode ter acesso à sua chamada",
   "labelVoiceChannelEmpty": "Está tudo quieto por aqui. Puxe uma cadeira.",

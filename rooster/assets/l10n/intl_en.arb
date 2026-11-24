@@ -8283,6 +8283,14 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelCallRinging": "{name} is calling",
+  "@labelCallRinging": {
+    "description": "Shown on a voice channel's page while someone rings us to its call, beside the Join and Decline buttons. The name is the person ringing",
+    "type": "text",
+    "placeholders": {
+      "name": {}
+    }
+  },
   "tooltipCallRoomEncrypted": "This room is encrypted, your call is secure and private",
   "@tooltipCallRoomEncrypted": {
     "description": "Tooltip of the closed lock at the bottom of a voice channel's page, before joining its call",
