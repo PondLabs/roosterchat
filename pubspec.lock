@@ -618,11 +618,9 @@ packages:
   flutter_angle:
     dependency: "direct overridden"
     description:
-      path: flutter_angle
-      ref: "fix/flutter-3-41-linux"
-      resolved-ref: "4fc2937a26e76e9e60b8835f684ffba2f03148a7"
-      url: "https://github.com/gabriel-s-flores/flutter_angle.git"
-    source: git
+      path: "third_party/flutter_angle"
+      relative: true
+    source: path
     version: "0.4.2"
   flutter_background:
     dependency: transitive
