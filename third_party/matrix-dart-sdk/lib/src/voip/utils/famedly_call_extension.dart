@@ -33,6 +33,23 @@ extension FamedlyCallMemberEventsExtension on Room {
     for (final element in parsedMemberEvents.entries) {
       memberships.addAll({element.key: element.value.memberships});
     }
+    // ROOSTER: and the newer format's (MSC4143, in room state or sticky
+    // events), once per device: a client writing both formats is listed
+    // by its legacy membership (T5.2).
+    final listed = {
+      for (final list in memberships.values)
+        for (final m in list) (m.userId, m.deviceId),
+    };
+    for (final event in RtcMemberships.eventsOf(this)) {
+      final membership = RtcCallMembership.fromRtcMember(event, voip);
+      if (membership == null ||
+          !listed.add((membership.userId, membership.deviceId))) {
+        continue;
+      }
+      memberships['${membership.userId}_${membership.deviceId}_rtc'] = [
+        membership,
+      ];
+    }
     return memberships;
   }
 
@@ -168,6 +185,7 @@ extension FamedlyCallMemberEventsExtension on Room {
       await client.manageDelayedEvent(
         canceller.delayedEventId,
         DelayedEventAction.cancel,
+        via: canceller.via, // ROOSTER: where it was scheduled
       );
     } catch (e, s) {
       Logs().w(
@@ -196,9 +214,9 @@ extension FamedlyCallMemberEventsExtension on Room {
               ? '${client.userID!}_${client.deviceID!}'
               : client.userID!;
 
-      final useDelayedEvents = (await client.getVersions())
-              .unstableFeatures?['org.matrix.msc4140'] ??
-          false;
+      // ROOSTER: the stable API where the homeserver has it (T5.2).
+      final delayedEvents = await client.delayedEventsSupport();
+      final useDelayedEvents = delayedEvents != DelayedEventsSupport.none;
 
       final canceller =
           voip.delayedEventCancellers['$groupCallId|$application|$scope'];
@@ -208,11 +226,13 @@ extension FamedlyCallMemberEventsExtension on Room {
         // get existing ones and cancel them
         final List<ScheduledDelayedEvent> alreadyScheduledEvents = [];
         String? nextBatch;
-        final sEvents = await client.getScheduledDelayedEvents();
+        final sEvents =
+            await client.getScheduledDelayedEvents(via: delayedEvents);
         alreadyScheduledEvents.addAll(sEvents.scheduledEvents);
         nextBatch = sEvents.nextBatch;
         while (nextBatch != null || (nextBatch?.isNotEmpty ?? false)) {
-          final res = await client.getScheduledDelayedEvents();
+          final res =
+              await client.getScheduledDelayedEvents(via: delayedEvents);
           alreadyScheduledEvents.addAll(
             res.scheduledEvents,
           );
@@ -227,6 +247,7 @@ extension FamedlyCallMemberEventsExtension on Room {
           await client.manageDelayedEvent(
             toCancelEvent.delayId,
             DelayedEventAction.cancel,
+            via: delayedEvents, // ROOSTER
           );
         }
 
@@ -263,6 +284,7 @@ extension FamedlyCallMemberEventsExtension on Room {
           stateKey,
           voip.timeouts!.delayedEventApplyLeave.inMilliseconds,
           newContent,
+          via: delayedEvents, // ROOSTER
         );
 
         final restartDelayedLeaveEventTimer = Timer.periodic(
@@ -273,6 +295,7 @@ extension FamedlyCallMemberEventsExtension on Room {
             await client.manageDelayedEvent(
               delayedLeaveEventId,
               DelayedEventAction.restart,
+              via: delayedEvents, // ROOSTER
             );
           }),
         );
@@ -281,6 +304,7 @@ extension FamedlyCallMemberEventsExtension on Room {
             DelayedEventCanceller(
           delayedEventId: delayedLeaveEventId,
           restartTimer: restartDelayedLeaveEventTimer,
+          via: delayedEvents, // ROOSTER
         );
       }
 

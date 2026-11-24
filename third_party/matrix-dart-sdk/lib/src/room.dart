@@ -3395,3 +3395,97 @@ class RoomCreatorPowerLevelException implements Exception {
   String toString() =>
       'Cannot set power level for room creator $userId in room version $roomVersion.';
 }
+
+// ROOSTER: MSC4354 sticky events of a room (T5.2): MatrixRTC memberships
+// sent as timeline events that sync keeps handing out while they are
+// sticky. Kept beside the room rather than in a field of it, so code and
+// test doubles that implement [Room] themselves keep working; the client
+// fills it from sync ([JoinedRoomUpdate.sticky]) and stores it between runs.
+extension RoomStickyEvents on Room {
+  static final _store = Expando<Map<String, Event>>('stickyEvents');
+
+  /// The longest an event stays sticky, whatever it asks for (MSC4354).
+  static const maxDuration = Duration(hours: 1);
+
+  /// The unstable feature a homeserver announces sticky events with.
+  static const unstableFeature = 'org.matrix.msc4354';
+
+  /// The query parameter that makes a sent event sticky, in milliseconds.
+  static const durationParameter = 'org.matrix.msc4354.sticky_duration_ms';
+
+  /// Whether [versions] announce sticky events: only then is one sent.
+  static bool supportedBy(GetVersionsResponse versions) =>
+      versions.unstableFeatures?[unstableFeature] == true;
+
+  /// The key a sticky event replaces others of its sender and type by.
+  static String? stickyKeyOf(Map<String, Object?> content) {
+    final key = content['sticky_key'] ?? content['msc4354_sticky_key'];
+    return key is String ? key : null;
+  }
+
+  /// When [event] stops being sticky: its duration, an hour at most, from
+  /// when it was sent. Null for an event that is not sticky.
+  static DateTime? stickyExpiresAt(MatrixEvent event) {
+    final duration = event.unsigned?[JoinedRoomUpdate.stickyDurationKey];
+    if (duration is! int || duration <= 0) return null;
+    return event.originServerTs.add(
+      Duration(milliseconds: min(duration, maxDuration.inMilliseconds)),
+    );
+  }
+
+  /// The sticky events kept, the latest of each sender, type and sticky
+  /// key. Some may have stopped being sticky: whoever reads them decides by
+  /// [stickyExpiresAt] and their own clock.
+  Iterable<Event> get stickyEvents =>
+      _store[this]?.values ?? const Iterable.empty();
+
+  Iterable<Event> stickyEventsOfType(String type) =>
+      stickyEvents.where((event) => event.type == type);
+
+  /// Keeps [event] in place of the one of its sender, type and sticky key,
+  /// unless that one is newer. Returns whether what is kept changed.
+  bool addStickyEvent(Event event) {
+    if (stickyExpiresAt(event) == null) return false;
+    final key = jsonEncode([
+      event.type,
+      event.senderId,
+      stickyKeyOf(event.content) ?? event.eventId,
+    ]);
+    final store = _store[this] ??= {};
+    final kept = store[key];
+    if (kept != null &&
+        (kept.eventId == event.eventId ||
+            kept.originServerTs.isAfter(event.originServerTs))) {
+      return false;
+    }
+    store[key] = event;
+    return true;
+  }
+
+  /// Forgets the events that stopped being sticky more than [maxDuration]
+  /// before the newest one a user of [homeserver] sent here: that one's
+  /// `origin_server_ts` is a time that homeserver's clock has reached. No
+  /// other clock is asked: this machine's can be hours off, and so can
+  /// another homeserver's, whose one event would then take down everyone's.
+  /// With no sticky event from [homeserver] nothing is forgotten; a newer
+  /// event of the same sender, type and sticky key still replaces an older
+  /// one. Returns whether any were forgotten.
+  bool pruneStickyEvents({required String? homeserver}) {
+    final store = _store[this];
+    if (store == null || homeserver == null) return false;
+    DateTime? reached;
+    for (final event in store.values) {
+      if (event.senderId.domain != homeserver) continue;
+      if (reached == null || event.originServerTs.isAfter(reached)) {
+        reached = event.originServerTs;
+      }
+    }
+    if (reached == null) return false;
+    final before = reached.subtract(maxDuration);
+    final count = store.length;
+    store.removeWhere(
+      (_, event) => !stickyExpiresAt(event)!.isAfter(before),
+    );
+    return store.length != count;
+  }
+}

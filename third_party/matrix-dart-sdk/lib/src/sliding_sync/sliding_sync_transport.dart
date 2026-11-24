@@ -118,6 +118,9 @@ class SlidingSyncTransport {
 
   static const listName = 'all_rooms';
 
+  // ROOSTER: The extension sticky events (MSC4354) come in (T5.2).
+  static const stickyExtension = 'org.matrix.msc4354.sticky_events';
+
   final MatrixApi api;
   final String connId;
   final List<List<String>> requiredState;
@@ -206,6 +209,9 @@ class SlidingSyncTransport {
           'account_data': {'enabled': true},
           'receipts': {'enabled': true},
           'typing': {'enabled': true},
+          // ROOSTER: MSC4354 sticky events, MatrixRTC memberships among
+          // them (T5.2). A server without it ignores the extension.
+          stickyExtension: {'enabled': true},
         },
       };
 
