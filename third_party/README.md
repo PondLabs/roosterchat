@@ -635,3 +635,60 @@ Changes since the copy:
   thread read here), and it has no presence, so other people's presence
   stops changing while Sliding Sync runs (asking `/presence` for the
   people on screen is left for another task).
+- Room keys stored before T3.1b (T6.1): such a session kept, with no claimed
+  keys of its own, the Ed25519 key of the device its sender named in
+  `requesting_device_id` (or any claim the sender wrote) in its content.
+  `SessionKey.fromDb` no longer reads a claim from the content of a session
+  that was not forwarded, so it claims nothing from its first load.
+  `KeyManager.migrateClaimedKeysFromOlmSessions`, started by the first
+  `Encryption.onSync` (device lists loaded and updated), then goes once per
+  database over the stored sessions with that shape: one that a single known
+  device has the Olm session's Curve25519 key for claims that device's key;
+  any other claims nothing. The claim leaves the content either way, and the
+  session is stored again with its own pickle and indexes (nothing is
+  deleted, every message still decrypts; it is queued for the key backup
+  again). The mark is the custom cache object
+  `rooster_claimed_keys_from_olm_session` (`DatabaseApi` does not change);
+  `clearCache` drops it, and the next run finds nothing left to change.
+  `Encryption.megolmSenderTrust(event)` says whether a decrypted message's
+  session proves its sender's device: `verified` or `unverifiedDevice` when
+  the session claims the Ed25519 key of the sender's device that holds its
+  Curve25519 key, `unverifiedOrigin` when it claims none, another device's,
+  or was forwarded.
+- MatrixRTC's newer pieces (T5.2: MSC4354, MSC4140, MSC4143):
+  sticky events come in `JoinedRoomUpdate.sticky`, from a room's `sticky`
+  or `msc4354_sticky` section and from timeline events that carry
+  `sticky`/`msc4354_sticky` on top, once per event id; `MatrixEvent` drops
+  that top-level object, so its `duration_ms` is kept in `unsigned`
+  (`JoinedRoomUpdate.stickyDurationKey`). Sliding Sync asks for them with
+  the `org.matrix.msc4354.sticky_events` extension, and the hydration puts
+  its rooms' events in the same section, so both transports take the same
+  path. `Client` keeps them per room (`RoomStickyEvents`, an extension on
+  `Room` backed by an `Expando`, so the app's test doubles that implement
+  `Room` keep working): the latest of each sender, type and sticky key,
+  decrypted when they come encrypted. An incremental sync hands a sticky
+  event out once, so they are written to the custom cache object
+  `rooster_msc4354_sticky_events` at the end of a sync that changed them
+  and come back in `Client.init`. Whether one still counts is the
+  reader's to say, by its own clock (`RoomStickyEvents.stickyExpiresAt`);
+  the SDK asks no clock of its own, since this machine's can be hours off
+  (pruned by it, every sticky event was forgotten as it arrived on a
+  machine three hours ahead). When they are written, a room forgets the
+  ones that ended more than an hour (the longest one stays sticky) before
+  the newest sticky event one of our own homeserver's users sent there: a
+  time that homeserver's clock has reached. Another homeserver's
+  timestamps forget nobody's, and a room with no sticky event from ours
+  keeps the latest of each sender, type and sticky key. `DatabaseApi` does
+  not change.
+  Delayed events: `DelayedEventsSupport.of(versions)` is `stable` from
+  Matrix v1.20 or with `org.matrix.msc4140.stable`
+  (`/_matrix/client/v1/delayed_events`, `?delay=`), else `unstable` with
+  `org.matrix.msc4140`, else `none`. `setRoomStateWithKeyWithDelay`,
+  `manageDelayedEvent` and `getScheduledDelayedEvents` take a `via`
+  (unstable by default, as before), and `DelayedEventCanceller.via`
+  remembers where the call extension scheduled its leave, so the leave is
+  cancelled there even if `/versions` changes mid-call.
+  `getCallMembershipsFromRoom` also lists `m.rtc.member` and
+  `org.matrix.msc4143.rtc.member` memberships (state or sticky,
+  `RtcMemberships`, `RtcCallMembership.fromRtcMember`), skipping a device
+  the legacy memberships already list.

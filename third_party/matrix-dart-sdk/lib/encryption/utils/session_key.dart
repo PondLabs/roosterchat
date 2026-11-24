@@ -89,16 +89,26 @@ class SessionKey {
         Event.getMapFromPayload(dbEntry.senderClaimedKeys)
             .catchMap((k, v) => MapEntry<String, String>(k, v));
     // we need to try...catch as the map used to be <String, int> and that will throw an error.
+    // ROOSTER: a session received directly never claims what its content
+    // says. Before Rooster took the claim from the Olm session, an
+    // `m.room_key` kept the Ed25519 key of the device its sender named in
+    // `requesting_device_id`, or any claim the sender wrote, in the content,
+    // with no claimed keys of its own when no device had the Olm session's
+    // Curve25519 key yet. Such a session claims nothing until
+    // [KeyManager.migrateClaimedKeysFromOlmSessions] gives it the claim it
+    // can prove.
     senderClaimedKeys = (parsedSenderClaimedKeys.isNotEmpty)
         ? parsedSenderClaimedKeys
-        : (content
-                .tryGetMap<String, dynamic>('sender_claimed_keys')
-                ?.catchMap((k, v) => MapEntry<String, String>(k, v)) ??
-            (content['sender_claimed_ed25519_key'] is String
-                ? <String, String>{
-                    'ed25519': content['sender_claimed_ed25519_key'],
-                  }
-                : <String, String>{}));
+        : forwardingCurve25519KeyChain.isEmpty // ROOSTER
+            ? <String, String>{} // ROOSTER
+            : (content
+                    .tryGetMap<String, dynamic>('sender_claimed_keys')
+                    ?.catchMap((k, v) => MapEntry<String, String>(k, v)) ??
+                (content['sender_claimed_ed25519_key'] is String
+                    ? <String, String>{
+                        'ed25519': content['sender_claimed_ed25519_key'],
+                      }
+                    : <String, String>{}));
 
     try {
       inboundGroupSession = vod.InboundGroupSession.fromPickleEncrypted(

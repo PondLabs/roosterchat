@@ -16,6 +16,7 @@ import 'package:rooster/client/matrix/components/user_presence/matrix_user_prese
 import 'package:rooster/client/components/space_categories/channel_categories.dart';
 import 'package:rooster/client/matrix/components/call_activity/matrix_call_activity_component.dart';
 import 'package:rooster/client/matrix/components/voice_channel_status/matrix_voice_channel_status_component.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_ring.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/database/matrix_database.dart';
@@ -178,6 +179,11 @@ class MatrixClient extends Client {
     );
 
     _matrixClient.onSync.stream.listen(onMatrixClientSync);
+    // Rings and declines (MSC4075, MSC4310), decrypted: the room's call
+    // rings, or stops ringing.
+    _matrixClient.onTimelineEvent.stream
+        .where((event) => CallRings.types.contains(event.type))
+        .listen(_onCallRingEvent);
     componentsInternal = ComponentRegistry.getMatrixComponents(this);
   }
 
@@ -454,6 +460,11 @@ class MatrixClient extends Client {
     }
   }
 
+  void _onCallRingEvent(matrix.Event event) {
+    final room = getRoom(event.room.id);
+    room?.getComponent<MatrixVoipRoomComponent>()?.rings.receive(event);
+  }
+
   void _handleComponentSync(matrix.SyncUpdate update) {
     var roomUpdates = update.rooms?.join;
     if (roomUpdates != null) {
@@ -507,6 +518,8 @@ class MatrixClient extends Client {
         "page.codeberg.everypizza.room.banner",
         "chat.commet.calendar_event",
         MatrixVoipRoomComponent.callMemberStateEvent,
+        // Memberships of newer MatrixRTC clients kept as state (MSC4143).
+        ...matrix.RtcMemberships.types,
         // The sidebar lists channels under these from the first frame.
         ChannelCategories.stateEventType,
         MatrixVoiceChannelStatusComponent.stateEventType,
@@ -679,6 +692,8 @@ class MatrixClient extends Client {
         "events": {
           "org.matrix.msc3401.call": 0,
           "org.matrix.msc3401.call.member": 0,
+          // Newer MatrixRTC clients' memberships, kept as state (MSC4143).
+          for (final type in matrix.RtcMemberships.types) type: 0,
           // Anyone may say what the channel is up to, as on Discord.
           MatrixVoiceChannelStatusComponent.stateEventType: 0,
           // So may anyone start a call activity: the session's state is how

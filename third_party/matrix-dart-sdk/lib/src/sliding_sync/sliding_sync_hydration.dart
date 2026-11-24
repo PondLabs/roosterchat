@@ -41,6 +41,11 @@ Map<String, Object?> slidingSyncToV3Json(
           .tryGetMap<String, Object?>('typing')
           ?.tryGetMap<String, Object?>('rooms') ??
       const {};
+  // ROOSTER: MSC4354 sticky events (T5.2), as `/v3/sync` gives them.
+  final sticky = extensions
+          .tryGetMap<String, Object?>(SlidingSyncTransport.stickyExtension)
+          ?.tryGetMap<String, Object?>('rooms') ??
+      const {};
 
   final join = <String, Object?>{};
   final invite = <String, Object?>{};
@@ -60,6 +65,8 @@ Map<String, Object?> slidingSyncToV3Json(
           },
         if (roomAccountData[roomId] case final List events)
           'account_data': {'events': events},
+        if ((sticky[roomId] as Map?)?['events'] case final List events)
+          'msc4354_sticky': {'events': events}, // ROOSTER: T5.2
       };
 
   final rooms = json.tryGetMap<String, Object?>('rooms') ?? const {};
@@ -148,6 +155,7 @@ Map<String, Object?> slidingSyncToV3Json(
     ...receipts.keys,
     ...typing.keys,
     ...roomAccountData.keys,
+    ...sticky.keys, // ROOSTER: T5.2
   }.where((roomId) => !rooms.containsKey(roomId));
   for (final roomId in extensionOnly) {
     if (isJoinedRoom?.call(roomId) != true) continue;

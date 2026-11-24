@@ -170,3 +170,115 @@ class CallMembership {
     return 'CallMembership(userId: $userId, callId: $callId, application: $application, scope: $scope, backend: $backend, deviceId: $deviceId, eventId: $eventId, expiresTs: $expiresTs, membershipId: $membershipId, feeds: $feeds, voip: $voip, roomId: $roomId)';
   }
 }
+
+// ROOSTER: A membership of the newer MatrixRTC format (MSC4143, T5.2):
+// `m.rtc.member`, `org.matrix.msc4143.rtc.member` while unstable, one per
+// device, in room state or as a sticky event (MSC4354); its content is
+// [RtcMemberContent]. Its `application`
+// is an object (`{"type": "m.call", ...}`), the device is in `member`, the
+// foci are `rtc_transports`, and one without `application` has left.
+class RtcMemberships {
+  static const stableType = EventTypes.RtcMember;
+  static const unstableType = 'org.matrix.msc4143.rtc.member';
+  static const types = {stableType, unstableType};
+
+  /// How long a state membership without `expires` counts, MatrixRTC's
+  /// default window. A sticky one counts while it is sticky.
+  static const defaultLifetime = Duration(hours: 4);
+
+  /// The application's type (`m.call`), or null for one that has left.
+  static String? applicationOf(Map<String, Object?> content) {
+    final application = content['application'];
+    if (application is Map && application['type'] is String) {
+      return application['type'] as String;
+    }
+    return application is String ? application : null;
+  }
+
+  static String callIdOf(Map<String, Object?> content) {
+    final application = content['application'];
+    final id = application is Map
+        ? application['m.call.id'] ?? application['call_id']
+        : content['call_id'];
+    return id is String ? id : '';
+  }
+
+  static String? deviceIdOf(Map<String, Object?> content) {
+    final member = content['member'];
+    final id = member is Map
+        ? member['device_id'] ?? member['claimed_device_id']
+        : content['device_id'];
+    return id is String ? id : null;
+  }
+
+  static String? memberIdOf(Map<String, Object?> content) {
+    final member = content['member'];
+    final id = member is Map ? member['id'] : null;
+    return id is String ? id : null;
+  }
+
+  static List<Map<String, Object?>> transportsOf(Map<String, Object?> content) {
+    final transports = content['rtc_transports'] ?? content['foci_preferred'];
+    return [
+      if (transports is List)
+        for (final t in transports)
+          if (t is Map) Map<String, Object?>.from(t),
+    ];
+  }
+
+  /// When [event]'s membership stops counting: when it stops being sticky,
+  /// else `expires` (or [defaultLifetime]) after it was sent.
+  static DateTime expiresAt(Event event) {
+    final sticky = RoomStickyEvents.stickyExpiresAt(event);
+    if (sticky != null) return sticky;
+    final expires = event.content['expires'];
+    return event.originServerTs.add(
+      expires is int ? Duration(milliseconds: expires) : defaultLifetime,
+    );
+  }
+
+  /// The memberships of this format in [room]: state events and sticky
+  /// events of both types, left ones included.
+  static Iterable<Event> eventsOf(Room room) sync* {
+    for (final type in types) {
+      for (final event
+          in room.states[type]?.values ?? const <StrippedStateEvent>[]) {
+        if (event is Event) yield event;
+      }
+      yield* room.stickyEventsOfType(type);
+    }
+  }
+}
+
+// ROOSTER: A [CallMembership] from a membership of the newer format (T5.2).
+extension RtcCallMembership on CallMembership {
+  static CallMembership? fromRtcMember(Event event, VoIP voip) {
+    final content = event.content;
+    final application = RtcMemberships.applicationOf(content);
+    final deviceId = RtcMemberships.deviceIdOf(content);
+    if (application == null || deviceId == null) return null;
+    final transport = RtcMemberships.transportsOf(content).firstOrNull;
+    try {
+      return CallMembership(
+        userId: event.senderId,
+        roomId: event.roomId ?? event.room.id,
+        callId: RtcMemberships.callIdOf(content),
+        application: application,
+        scope: 'm.room',
+        backend: CallBackend.fromJson({
+          'type': 'livekit',
+          'livekit_alias': event.room.id,
+          ...?transport,
+        }),
+        deviceId: deviceId,
+        eventId: event.eventId,
+        expiresTs: RtcMemberships.expiresAt(event).millisecondsSinceEpoch,
+        membershipId: RtcMemberships.memberIdOf(content) ?? event.eventId,
+        voip: voip,
+      );
+    } catch (e, s) {
+      Logs().w('[VOIP] Ignoring an unreadable rtc membership', e, s);
+      return null;
+    }
+  }
+}
