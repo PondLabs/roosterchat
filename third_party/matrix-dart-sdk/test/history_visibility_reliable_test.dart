@@ -16,6 +16,43 @@ import 'fake_database.dart';
 const _roomId = '!visibility:fakeServer.notExisting';
 const _userId = '@othertest:fakeServer.notExisting';
 
+/// A database that stores what a transaction wrote when it ends, one
+/// transaction at a time, and reads only what is stored: what the app's
+/// databases have in common. It holds what `Room.postLoad` uses.
+class _StoresAtTheEnd implements DatabaseApi {
+  final _stored = <Map<String, dynamic>>[];
+  final _written = <Map<String, dynamic>>[];
+  Future<void> _last = Future.value();
+
+  void write(MatrixEvent event) => _written.add(event.toJson());
+
+  @override
+  Future<void> transaction(Future<void> Function() action) {
+    final previous = _last;
+    final ended = Completer<void>();
+    _last = ended.future;
+    return previous.then((_) async {
+      try {
+        await action();
+        _stored.addAll(_written);
+      } finally {
+        _written.clear();
+        ended.complete();
+      }
+    });
+  }
+
+  @override
+  Future<List<Event>> getUnimportantRoomEventStatesForRoom(
+    List<String> events,
+    Room room,
+  ) async =>
+      [for (final json in _stored) Event.fromJson(json, room)];
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   late Client client;
   var next = 0;
@@ -215,6 +252,49 @@ void main() {
       });
       expect(room.partial, isFalse);
       expect(room.historyVisibility, HistoryVisibility.shared);
+    });
+  });
+
+  // Whatever the database: the SDK's own lets a read see what an open
+  // transaction wrote, the others do not.
+  group('Room.postLoad and a database that stores at the end', () {
+    late _StoresAtTheEnd database;
+    late Room room;
+
+    setUp(() {
+      database = _StoresAtTheEnd();
+      room = Room(
+        id: _roomId,
+        client: Client(
+          'visibility${next++}',
+          httpClient: FakeMatrixApi(),
+          database: database,
+        ),
+      );
+    });
+
+    test('a load started while a sync is stored reads what it wrote', () async {
+      late Future<void> load;
+      await database.transaction(() async {
+        database.write(visibility('joined'));
+        load = room.postLoad();
+        await Future.delayed(const Duration(milliseconds: 20));
+        expect(room.partial, isTrue);
+      });
+      await load;
+      expect(room.partial, isFalse);
+      expect(room.historyVisibility, HistoryVisibility.joined);
+    });
+
+    test('the room is loaded before the next sync is handled', () async {
+      final load = room.postLoad();
+      // A sync puts state in memory only once the room is loaded.
+      bool? partialInSync;
+      final sync = database.transaction(() async {
+        partialInSync = room.partial;
+      });
+      await Future.wait([load, sync]);
+      expect(partialInSync, isFalse);
     });
   });
 
