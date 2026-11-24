@@ -30,6 +30,10 @@ class _Database implements matrix.DatabaseApi {
   @override
   Future<void> close() async {}
 
+  /// `Room.postLoad` reads the room's state in a transaction.
+  @override
+  Future<void> transaction(Future<void> Function() action) => action();
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

@@ -18,6 +18,10 @@ class MemoryCacheDatabase implements matrix.DatabaseApi {
     _cache[cacheKey] = (content: object, savedAt: DateTime.now());
   }
 
+  /// `Room.postLoad` reads the room's state in a transaction.
+  @override
+  Future<void> transaction(Future<void> Function() action) => action();
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
