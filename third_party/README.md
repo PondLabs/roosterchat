@@ -655,3 +655,19 @@ Changes since the copy:
   the session claims the Ed25519 key of the sender's device that holds its
   Curve25519 key, `unverifiedOrigin` when it claims none, another device's,
   or was forwarded.
+- Room state loaded while a sync is stored (T6.4): `Room.postLoad` reads
+  the room's state from the database inside `DatabaseApi.transaction`, and
+  marks the room loaded before that transaction ends. A sync stores its
+  events in a transaction and, while a room is partial, keeps the state it
+  brings out of memory; a read that overlapped it saw the database without
+  that sync's writes, so a new room read no `m.room.history_visibility`
+  after `postLoad` and one that turned `joined` went on saying `shared` in
+  memory. Now the read waits for the sync to be stored, and a later sync
+  finds the room loaded. From inside a transaction (a page of history
+  checked during the sync) it runs at once, as nested transactions do.
+  The race the T3.2 entry above describes is closed there;
+  `RoomKeyBundleManager.historyVisibilityOf` stays as a second word, and
+  its note of the syncs no longer skips an `m.room.history_visibility`
+  dated before the last one seen when it lets out less history (another
+  server's clock may run behind): only one that would let out more is
+  skipped. `DatabaseApi` does not change.

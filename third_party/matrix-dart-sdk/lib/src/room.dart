@@ -146,16 +146,28 @@ class Room {
     if (!partial) {
       return;
     }
-    final allStates =
-        await client.database.getUnimportantRoomEventStatesForRoom(
-      client.importantStateEvents.toList(),
-      this,
-    );
+    // ROOSTER: read in a database transaction. A sync stores its events in
+    // one, and keeps the state it brings out of memory while the room is
+    // partial; a read that overlapped it saw the database without that
+    // sync's writes, and the room was marked loaded all the same, so that
+    // state never reached memory (a new room read no history visibility,
+    // and one that turned `joined` went on saying `shared`). Now the read
+    // waits for that sync to be stored, and a sync after it finds the room
+    // loaded and puts its state in memory. From inside a transaction (a
+    // page of history checked during the sync) it runs at once.
+    await client.database.transaction(() async {
+      if (!partial) return;
+      final allStates =
+          await client.database.getUnimportantRoomEventStatesForRoom(
+        client.importantStateEvents.toList(),
+        this,
+      );
 
-    for (final state in allStates) {
-      setState(state);
-    }
-    partial = false;
+      for (final state in allStates) {
+        setState(state);
+      }
+      partial = false;
+    });
   }
 
   /// Returns the [Event] for the given [typeKey] and optional [stateKey].
