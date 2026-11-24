@@ -13214,6 +13214,50 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelDeveloperSync": "Sync",
+  "@labelDeveloperSync": {
+    "description": "Title of the Developer settings section that shows how each account gets new messages from its server (the Matrix sync)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeveloperSyncSlidingSync": "Simplified Sliding Sync",
+  "@labelDeveloperSyncSlidingSync": {
+    "description": "In Developer settings > Sync: the account syncs with Simplified Sliding Sync (MSC4186, Matrix 2.0), the newer and faster way to get new messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeveloperSyncClassic": "Classic sync (/v3/sync)",
+  "@labelDeveloperSyncClassic": {
+    "description": "In Developer settings > Sync: the account syncs the older way, with the /v3/sync endpoint (keep '/v3/sync' as it is)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeveloperSyncFellBack": "Classic sync (/v3/sync): the server refused Sliding Sync ({reason})",
+  "@labelDeveloperSyncFellBack": {
+    "description": "In Developer settings > Sync: the account tried Simplified Sliding Sync, the server refused it, and it went back to the older /v3/sync. The reason is the server's error code or HTTP status, like M_UNRECOGNIZED or HTTP 404 (keep '/v3/sync' as it is)",
+    "type": "text",
+    "placeholders": {
+      "reason": {}
+    }
+  },
+  "labelDeveloperSyncNoAccounts": "No account is signed in",
+  "@labelDeveloperSyncNoAccounts": {
+    "description": "In Developer settings > Sync, when there is no account to show the sync of",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeveloperForceClassicSync": "Force classic sync",
+  "@labelDeveloperForceClassicSync": {
+    "description": "Title of a developer setting that keeps every account on the older /v3/sync, even where the server offers Simplified Sliding Sync",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeveloperForceClassicSyncDescription": "Uses /v3/sync even where the server offers Simplified Sliding Sync. Applies from the next sync, without losing encryption keys or messages",
+  "@labelDeveloperForceClassicSyncDescription": {
+    "description": "Description under the developer setting 'Force classic sync' (keep '/v3/sync' as it is)",
+    "type": "text",
+    "placeholders": {}
+  },
   "promptRoomSetTopicPlaceholder": "Set a topic",
   "@promptRoomSetTopicPlaceholder": {
     "description": "In a room's (or space's) appearance settings, shown in place of the topic while there is none; tapping it opens the topic editor",

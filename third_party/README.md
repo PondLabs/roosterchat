@@ -573,3 +573,65 @@ Changes since the copy:
   next sync; an unreadable cache is skipped. Without this, a room with
   unread thread replies looked read after a restart until a sync brought
   its counts again.
+- Simplified Sliding Sync (T5.1, MSC4186, Matrix 2.0): `lib/src/sliding_sync/`
+  holds the request and connection (`sliding_sync_transport.dart`), the
+  answer turned into the `/v3/sync` shape (`sliding_sync_hydration.dart`)
+  and what keeps E2EE whole across a change of transport
+  (`sync_transport_continuity.dart`); `Client._innerSync` picks the
+  transport. The loop uses Sliding Sync only when `/_matrix/client/versions`
+  announces `org.matrix.simplified_msc3575` (the unstable path) or
+  `org.matrix.simplified_msc3575.stable` (`/_matrix/client/v5/sync`, tried
+  first; a refusal there falls to the unstable path) and
+  `Client.forceLegacySync` is off. Everywhere else `/v3/sync` runs as
+  before: no request, no write, and one custom cache read per run. A
+  request sends `conn_id`, one list (`all_rooms`, every state event as
+  `/v3/sync` gives, its range grown 50 rooms a request until it covers
+  every room, without waiting while it grows), the room subscriptions
+  (`Client.slidingSync?.subscribeRoom`) and the `to_device`, `e2ee`,
+  `account_data`, `receipts` and `typing` extensions. The answer becomes
+  a `SyncUpdate` handled by the same `_handleSync` (`required_state` is
+  the state after the timeline, so it goes in as `state_after`), so
+  rooms, account data, to-device messages, one-time key counts and device
+  lists take the path they take from `/v3/sync`. `pos` and the to-device
+  `since` move only after the answer is processed. `M_UNKNOWN_POS` drops
+  `pos` (never the to-device `since`) and asks once more at once; a second
+  refusal is a sync error, waited out like any other, never a logout. A
+  404, 405 or `M_UNRECOGNIZED` sends the loop back to `/v3/sync` for the
+  rest of the run (`Client.slidingSyncFallbackReason`).
+  How the change keeps to-device messages and device lists: the two
+  transports have independent positions. `/v3/sync` keeps its own token
+  while Sliding Sync runs (the one stored stays the `/v3` one; `prevBatch`
+  only holds `pos` in memory, so notifications know the session is past
+  its first sync), saved as `legacy_since` when Sliding Sync takes over,
+  and goes on from it when it comes back. The custom cache object
+  `rooster_sliding_sync`, written in the sync's transaction, holds the
+  transport, `pos`, the to-device `since`, the to-device messages of the
+  last sync (a short hash of sender, type and canonical content) and the
+  users Sliding Sync reported in `device_lists`. The server deletes
+  to-device messages only when the next request of the same transport
+  acknowledges them, so the first sync of the other transport gets the
+  last batch again: it is dropped by its hashes. A `/v3/sync` from the old
+  token reports again every device list change Sliding Sync reported: the
+  repeats are dropped, and a tracked user among them whose keys were
+  downloaded since gets them downloaded once more, since the old token
+  cannot tell a repeat from a newer change. A sync that cannot say what
+  changed (a Sliding Sync connection without `pos`, after `M_UNKNOWN_POS`
+  or taking over from `/v3/sync`, and an initial `/v3/sync` when there was
+  no `/v3` token) marks every tracked device list outdated, so their keys
+  are downloaded again. The state survives a restart, so a change of
+  transport between runs is handled the same way. `clearCache` drops
+  `pos` and `legacy_since` and keeps the to-device position. `DatabaseApi`
+  does not change.
+  A room sent `initial` (the first time on a connection: a new
+  connection, or the range growing over it) brings the room as it is, so
+  its events notify no one and raise no call event, as in an initial
+  `/v3/sync`; a `limited` timeline that overlaps the newest stored events
+  keeps them (no gap), one that does not drops them as `/v3/sync` does.
+  An answer without `count` stops growing the range, and one without
+  `pos` still waits for news: no polling. Limits of MSC4186: it has no
+  per-thread unread counts, so a Sliding Sync update leaves
+  `Room.unreadThreadNotifications` as they are (the room's own counts come
+  from the server; the per-thread ones change only from `/v3/sync` or a
+  thread read here), and it has no presence, so other people's presence
+  stops changing while Sliding Sync runs (asking `/presence` for the
+  people on screen is left for another task).
