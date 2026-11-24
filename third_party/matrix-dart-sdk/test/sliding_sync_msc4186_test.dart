@@ -949,75 +949,217 @@ void main() {
       await client.dispose();
     });
 
-    test('c1-2: per-thread unread counts survive the change to Sliding Sync',
-        () async {
-      final server = _Homeserver();
-      final client = await _client(server, forceLegacySync: true);
-      final room = Room(id: _roomId, client: client);
-      await client.database.transaction(
-        () => client.handleSync(
-          SyncUpdate.fromJson({
-            'next_batch': 'v3_0_0',
-            'rooms': {
-              'join': {
-                _roomId: {
-                  'state': {
-                    'events': [
-                      _state(
-                        'm.room.member',
-                        {'membership': 'join'},
-                        stateKey: _alice,
-                      ),
-                    ],
-                  },
-                  'unread_notifications': {
-                    'notification_count': 0,
-                    'highlight_count': 0,
-                  },
-                  'unread_thread_notifications': {
-                    r'$thread_root': {
-                      'notification_count': 2,
-                      'highlight_count': 0,
-                    },
+    // ROOSTER: T6.6. MSC4186 has no per-thread unread counts, so under
+    // Sliding Sync the room's own counts from the server are the
+    // authority: the per-thread ones `/v3/sync` left are dropped, and not
+    // stored, instead of adding to the badge until a thread is read here.
+    group('per-thread unread counts', () {
+      const otherRoomId = '!other:example.test';
+
+      /// A `/v3/sync` naming [roomIds] with a room count of 1 and an
+      /// unread thread of 2 notifications, 1 highlight.
+      Future<void> v3ThreadCounts(Client client, List<String> roomIds) =>
+          client.database.transaction(
+            () => client.handleSync(
+              SyncUpdate.fromJson({
+                'next_batch': 'v3_0_0',
+                'rooms': {
+                  'join': {
+                    for (final roomId in roomIds)
+                      roomId: {
+                        'state': {
+                          'events': [
+                            _state(
+                              'm.room.member',
+                              {'membership': 'join'},
+                              stateKey: _alice,
+                            ),
+                          ],
+                        },
+                        'unread_notifications': {
+                          'notification_count': 1,
+                          'highlight_count': 0,
+                        },
+                        'unread_thread_notifications': {
+                          r'$thread_root': {
+                            'notification_count': 2,
+                            'highlight_count': 1,
+                          },
+                        },
+                      },
                   },
                 },
-              },
-            },
-          }),
-        ),
-      );
-      expect(
-        client
-            .getRoomById(room.id)!
-            .unreadThreadNotifications[r'$thread_root']
-            ?.notificationCount,
-        2,
-      );
+              }),
+            ),
+          );
 
-      client.forceLegacySync = false;
-      server.rooms = {
-        _roomId: {
-          'initial': true,
-          'required_state': [
-            _state('m.room.member', {'membership': 'join'}, stateKey: _alice),
-          ],
-          'timeline': [],
-          // MSC4186 only has the room's own counts.
-          'notification_count': 0,
-          'highlight_count': 0,
-        },
-      };
-      await client.oneShotSync();
-      expect(client.syncTransport, SyncTransport.slidingSync);
-      expect(
-        client
-            .getRoomById(room.id)!
-            .unreadThreadNotifications[r'$thread_root']
-            ?.notificationCount,
-        2,
-        reason: 'Sliding Sync says nothing about threads',
-      );
-      await client.dispose();
+      Map<String, Object?> slidingRoom(int count, {bool initial = false}) => {
+            if (initial) 'initial': true,
+            if (initial)
+              'required_state': [
+                _state(
+                  'm.room.member',
+                  {'membership': 'join'},
+                  stateKey: _alice,
+                ),
+              ],
+            'timeline': [],
+            // MSC4186 only has the room's own counts.
+            'notification_count': count,
+            'highlight_count': 0,
+          };
+
+      Map<String, UnreadNotificationCounts> threadsOf(
+        Client client,
+        String roomId,
+      ) =>
+          client.getRoomById(roomId)!.unreadThreadNotifications;
+
+      test(
+          'after the change to Sliding Sync a room has only the count from '
+          'the server, a read on another device clears it, and a restart '
+          'does not bring the old thread counts back', () async {
+        final server = _Homeserver();
+        final database = await getDatabase();
+        const name = 'sliding_sync_thread_counts';
+        final client = await _client(
+          server,
+          database: database,
+          name: name,
+          forceLegacySync: true,
+        );
+        await v3ThreadCounts(client, [_roomId]);
+        expect(
+          threadsOf(client, _roomId)[r'$thread_root']?.notificationCount,
+          2,
+        );
+
+        client.forceLegacySync = false;
+        server.rooms = {_roomId: slidingRoom(3, initial: true)};
+        await client.oneShotSync();
+        expect(client.syncTransport, SyncTransport.slidingSync);
+        final room = client.getRoomById(_roomId)!;
+        expect(room.notificationCount, 3);
+        expect(
+          room.unreadThreadNotifications,
+          isEmpty,
+          reason: 'the thread counts /v3/sync left no longer count',
+        );
+
+        // Read on another device: the server's count drops to zero.
+        server.rooms = {_roomId: slidingRoom(0)};
+        await client.oneShotSync();
+        expect(room.notificationCount, 0);
+        expect(room.unreadThreadNotifications, isEmpty);
+        await client.dispose(closeDatabase: false);
+
+        final restarted = await _client(
+          server,
+          database: database,
+          name: name,
+          restart: true,
+        );
+        expect(
+          threadsOf(restarted, _roomId),
+          isEmpty,
+          reason: 'the stored thread counts were cleared',
+        );
+        await restarted.dispose();
+      });
+
+      test(
+          'a room the Sliding Sync answer leaves out loses its thread counts '
+          'too', () async {
+        final server = _Homeserver();
+        final client = await _client(server, forceLegacySync: true);
+        await v3ThreadCounts(client, [_roomId, otherRoomId]);
+
+        client.forceLegacySync = false;
+        server.rooms = {_roomId: slidingRoom(0, initial: true)};
+        await client.oneShotSync();
+        expect(client.syncTransport, SyncTransport.slidingSync);
+        expect(threadsOf(client, otherRoomId), isEmpty);
+        expect(threadsOf(client, _roomId), isEmpty);
+        await client.dispose();
+      });
+
+      test(
+          'counts restored at a restart on Sliding Sync are cleared before '
+          'its first answer, and not stored again', () async {
+        final server = _Homeserver();
+        final database = await getDatabase();
+        const name = 'sliding_sync_thread_counts_restart';
+        final first = await _client(
+          server,
+          database: database,
+          name: name,
+          forceLegacySync: true,
+        );
+        await v3ThreadCounts(first, [_roomId]);
+        await first.dispose(closeDatabase: false);
+
+        // The app starts again on a server that now offers Sliding Sync,
+        // which does not answer this time.
+        final second = await _client(
+          server,
+          database: database,
+          name: name,
+          restart: true,
+        );
+        expect(threadsOf(second, _roomId), isNotEmpty);
+        server.broken = true;
+        await second.oneShotSync();
+        expect(
+          threadsOf(second, _roomId),
+          isEmpty,
+          reason: 'Sliding Sync is the transport even before it answers',
+        );
+        await second.dispose(closeDatabase: false);
+
+        final third = await _client(
+          server,
+          database: database,
+          name: name,
+          restart: true,
+        );
+        expect(threadsOf(third, _roomId), isEmpty);
+        await third.dispose();
+      });
+
+      test('back on /v3/sync the thread counts come from the server again',
+          () async {
+        final server = _Homeserver();
+        final database = await getDatabase();
+        const name = 'sliding_sync_thread_counts_back';
+        final client = await _client(server, database: database, name: name);
+        server.rooms = {_roomId: slidingRoom(0, initial: true)};
+        await client.oneShotSync();
+        expect(client.syncTransport, SyncTransport.slidingSync);
+
+        client.forceLegacySync = true;
+        await client.oneShotSync();
+        expect(client.syncTransport, SyncTransport.v3);
+        await v3ThreadCounts(client, [_roomId]);
+        expect(
+          threadsOf(client, _roomId)[r'$thread_root']?.notificationCount,
+          2,
+        );
+        await client.dispose(closeDatabase: false);
+
+        final restarted = await _client(
+          server,
+          database: database,
+          name: name,
+          forceLegacySync: true,
+          restart: true,
+        );
+        expect(
+          threadsOf(restarted, _roomId)[r'$thread_root']?.highlightCount,
+          1,
+          reason: '/v3/sync stores them as before',
+        );
+        await restarted.dispose();
+      });
     });
 
     test('b-1: without a count or a pos the requests wait instead of polling',
