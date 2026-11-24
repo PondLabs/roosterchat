@@ -139,9 +139,14 @@ jobs:
           wait $FFMPEG_PID 2>/dev/null || true
           exit $INTEGRATION_TEST_EXIT_CODE
 
+      # Every run's recording, not only a failing one's: the e2e passes
+      # whatever the 3D surface shows, and the recording is how a Linux
+      # surface that draws nothing (Sunny Side Putt's green, one flat
+      # colour) gets seen.
       - name: Upload Artifact
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: result.mkv
           path: rooster/video.mkv
+          retention-days: 7

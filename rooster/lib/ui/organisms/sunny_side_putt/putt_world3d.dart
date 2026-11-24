@@ -2128,7 +2128,9 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface>
         // The GL context would not start (a machine without the GL it
         // needs): the plain panel, as for a missing plugin; the game itself
         // keeps working.
-        onStartFailed: (_) {
+        onStartFailed: (error) {
+          // What a player's log needs to say why the green is a plain panel.
+          Log.w('[Sunny Side Putt] the GL surface did not start: $error');
           if (_failed || !mounted) return;
           _failed = true;
           setState(() {});
@@ -2170,9 +2172,10 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface>
         three.dispose();
         return;
       }
-    } on Object {
+    } on Object catch (error) {
       // A missing ANGLE plugin (or a headless surprise): fall back to the
       // plain panel; the game itself keeps working.
+      Log.w('[Sunny Side Putt] the GL surface did not start: $error');
       _failed = true;
       _failOver(size);
       widget.onFailed?.call();
