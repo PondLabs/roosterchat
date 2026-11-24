@@ -411,7 +411,10 @@ Changes since the copy:
   leaves out (it has no notifications) is no longer counted. `Room.topic`,
   `Room.topicHtml`, and `Room.setDescription(plain, {html})` read and write
   MSC3765 `m.topic` (`m.text` with `text/plain` and `text/html`) while keeping
-  legacy `topic` compatibility on both read and write.
+  legacy `topic` compatibility on both read and write. The static
+  `Room.richTopicRepresentation(content, mimetype)` (T4.4b) is the same parser
+  over any `m.room.topic` content, so the app reads each topic change in the
+  timeline as it reads the room's current topic.
 - Claimed Ed25519 key of `m.room_key` (T3.1b): `KeyManager.handleToDeviceEvent`
   (`lib/encryption/key_manager.dart`) takes the key a received room key
   claims from the sender's device whose Curve25519 key is the Olm session's

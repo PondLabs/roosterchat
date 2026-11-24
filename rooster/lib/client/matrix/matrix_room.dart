@@ -44,6 +44,16 @@ import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_powe
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_redaction.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_sticker.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_tombstone.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_canonical_alias.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_guest_access.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_history_visibility.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_join_rules.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_room_avatar.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_room_encryption.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_room_name.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_room_topic.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_server_acl.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_third_party_invite.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_unknown.dart';
 import 'package:rooster/client/member.dart';
 import 'package:rooster/client/permissions.dart';
@@ -806,6 +816,26 @@ class MatrixRoom extends Room implements RoomSendPreparation {
           MatrixTimelineEventPinnedMessages(event, client: c),
         matrix.EventTypes.RoomTombstone =>
           MatrixTimelineEventTombstone(event, client: c),
+        matrix.EventTypes.RoomName =>
+          MatrixTimelineEventRoomName(event, client: c),
+        matrix.EventTypes.RoomTopic =>
+          MatrixTimelineEventRoomTopic(event, client: c),
+        matrix.EventTypes.RoomAvatar =>
+          MatrixTimelineEventRoomAvatar(event, client: c),
+        matrix.EventTypes.Encryption =>
+          MatrixTimelineEventRoomEncryption(event, client: c),
+        matrix.EventTypes.RoomJoinRules =>
+          MatrixTimelineEventJoinRules(event, client: c),
+        matrix.EventTypes.HistoryVisibility =>
+          MatrixTimelineEventHistoryVisibility(event, client: c),
+        matrix.EventTypes.GuestAccess =>
+          MatrixTimelineEventGuestAccess(event, client: c),
+        matrix.EventTypes.RoomCanonicalAlias =>
+          MatrixTimelineEventCanonicalAlias(event, client: c),
+        // The SDK has no constants for these two.
+        "m.room.server_acl" => MatrixTimelineEventServerAcl(event, client: c),
+        "m.room.third_party_invite" =>
+          MatrixTimelineEventThirdPartyInvite(event, client: c),
         "chat.commet.calendar_events" =>
           MatrixTimelineEventEditCalendar(event, client: c),
         _ => null
