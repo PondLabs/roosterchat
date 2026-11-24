@@ -130,6 +130,45 @@ void main() {
         _fails(MegolmExportError.damaged));
   });
 
+  group('a round count above the ceiling', () {
+    /// A good 1000-round file whose header now asks for [rounds].
+    Future<Uint8List> asking(int rounds) async {
+      final file = await MegolmExportFormat.encrypt(_sessions, _passphrase,
+          rounds: 1000, random: Random(3));
+      final data = _body(file);
+      ByteData.sublistView(data, 33, 37).setUint32(0, rounds);
+      return _bytes(_armor(data));
+    }
+
+    // Deriving the key for that many rounds takes from minutes to hours:
+    // the timeout fails the test if anything starts it.
+    for (final rounds in [0xFFFFFFFF, MegolmExportFormat.maxRounds + 1]) {
+      test('$rounds is a damaged file, refused before any key derivation',
+          timeout: const Timeout(Duration(seconds: 10)), () async {
+        final file = await asking(rounds);
+        final clock = Stopwatch()..start();
+        await expectLater(MegolmExportFormat.decrypt(file, _passphrase),
+            _fails(MegolmExportError.damaged));
+        expect(clock.elapsed, lessThan(const Duration(seconds: 1)));
+      });
+    }
+
+    test('the ceiling is well above what clients write', () {
+      expect(MegolmExportFormat.maxRounds, 10000000);
+      expect(MegolmExportFormat.maxRounds,
+          greaterThan(MegolmExportFormat.defaultRounds));
+    });
+
+    test('is never written', timeout: const Timeout(Duration(seconds: 10)),
+        () async {
+      for (final rounds in [0, MegolmExportFormat.maxRounds + 1]) {
+        await expectLater(
+            MegolmExportFormat.encrypt(_sessions, _passphrase, rounds: rounds),
+            throwsArgumentError);
+      }
+    });
+  });
+
   test('broken base64 fails', () async {
     final broken =
         '${MegolmExportFormat.header}\nnot*base64!\n${MegolmExportFormat.trailer}';
