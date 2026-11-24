@@ -1328,6 +1328,78 @@
     "type": "text",
     "placeholders": {}
   },
+  "errorQrLoginExpired": "The QR code expired or was closed. Start again to get a new one.",
+  "@errorQrLoginExpired": {
+    "description": "When signing in with a QR code stops because the short-lived connection between the two devices on the server expired or was closed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginTimedOut": "The other device did not answer in time. Start again.",
+  "@errorQrLoginTimedOut": {
+    "description": "When signing in with a QR code stops because the other device sent nothing for several minutes",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginInsecure": "The connection to the other device could not be trusted, so nothing was shared. Start again.",
+  "@errorQrLoginInsecure": {
+    "description": "When signing in with a QR code stops because a message between the two devices did not decrypt (changed, replayed or out of order): no keys were sent or used",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginCheckCodeMismatch": "The numbers did not match, so the sign-in was stopped and nothing was shared.",
+  "@errorQrLoginCheckCodeMismatch": {
+    "description": "When signing in with a QR code, after the person typed a 2-digit number different from the one the other device shows",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginCancelled": "The sign-in was cancelled on the other device.",
+  "@errorQrLoginCancelled": {
+    "description": "When signing in with a QR code stops because the other device cancelled or refused it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginUnsupported": "The other device cannot sign in this way.",
+  "@errorQrLoginUnsupported": {
+    "description": "When signing in with a QR code stops because the other device offers no sign-in method Rooster knows",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginHomeserverMismatch": "The other device uses a different server. Enter that server and try again.",
+  "@errorQrLoginHomeserverMismatch": {
+    "description": "On the login screen, when the signed-in device that read the QR code is on another homeserver than the one typed in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginDeviceExists": "Your account already has a device with that ID. Start again.",
+  "@errorQrLoginDeviceExists": {
+    "description": "When signing in with a QR code stops because the new device asked for a device ID that the account already uses",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginDeviceNotFound": "The new device did not show up on your account, so no keys were shared.",
+  "@errorQrLoginDeviceNotFound": {
+    "description": "On the signed-in device, when the new device said it signed in but the server does not list it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginNotApproved": "The sign-in was not approved in time. Start again.",
+  "@errorQrLoginNotApproved": {
+    "description": "When signing in with a QR code stops because the sign-in page of the server was not approved before it expired",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginNotALoginCode": "That is not a sign-in code from Rooster or another Matrix app.",
+  "@errorQrLoginNotALoginCode": {
+    "description": "When the text pasted to link a new device is not the code shown under a sign-in QR code",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginFailed": "Signing in with a QR code did not work. Try again.",
+  "@errorQrLoginFailed": {
+    "description": "When signing in with a QR code fails for another reason",
+    "type": "text",
+    "placeholders": {}
+  },
   "errorDjNoSourceForLink": "no installed source plays links from {host}",
   "@errorDjNoSourceForLink": {
     "description": "Why a link pasted in the DJ booth could not be added: no installed source extension takes links from that site (the placeholder). Follows \"Couldn't add <link>:\"",
@@ -4003,6 +4075,24 @@
       }
     }
   },
+  "labelVoiceMessage": "Voice message",
+  "@labelVoiceMessage": {
+    "description": "Title of the player of a voice message recorded in the chat",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageAudioCouldNotPlay": "This audio could not be played",
+  "@messageAudioCouldNotPlay": {
+    "description": "Shown in the player of an audio message in the chat when its file could not be downloaded or played",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelAudioPlaybackPosition": "Playback position",
+  "@labelAudioPlaybackPosition": {
+    "description": "Read by screen readers for the bar that moves through an audio message in the chat",
+    "type": "text",
+    "placeholders": {}
+  },
   "messagePlaceholderSticker": "{user} sent a sticker",
   "@messagePlaceholderSticker": {
     "description": "Message body for when a user sends a sticker",
@@ -4031,9 +4121,64 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelLocation": "Location",
+  "@labelLocation": {
+    "description": "Title of a place shared in the chat, when the sender gave it no description",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptOpenLocationInMap": "Open in map",
+  "@promptOpenLocationInMap": {
+    "description": "Button on a place shared in the chat that opens it on OpenStreetMap in the web browser",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageLocationInvalid": "This location cannot be shown: its coordinates are not valid",
+  "@messageLocationInvalid": {
+    "description": "Shown in the chat for a shared place whose coordinates could not be read",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelLocationCoordinates": "{latitude}, {longitude}",
+  "@labelLocationCoordinates": {
+    "description": "The latitude and the longitude of a place shared in the chat, in decimal degrees, already formatted as numbers in the app's language",
+    "type": "text",
+    "placeholders": {
+      "latitude": {},
+      "longitude": {}
+    }
+  },
+  "labelLocationAccuracy": "Within {meters} m",
+  "@labelLocationAccuracy": {
+    "description": "Under a place shared in the chat: how far off it may be, in metres, already formatted as a number",
+    "type": "text",
+    "placeholders": {
+      "meters": {}
+    }
+  },
+  "labelLocationAltitude": "Altitude {meters} m",
+  "@labelLocationAltitude": {
+    "description": "Under a place shared in the chat: its height above sea level, in metres, already formatted as a number",
+    "type": "text",
+    "placeholders": {
+      "meters": {}
+    }
+  },
   "messageFailedToDecrypt": "Failed to decrypt event",
   "@messageFailedToDecrypt": {
     "description": "Placeholde text for when a message fails to decrypt",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotice": "Automated notice",
+  "@labelNotice": {
+    "description": "Marks a message in the chat that a bot or a service sent (a Matrix notice), not a person",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipNotice": "Sent by a bot or a service, not typed by a person",
+  "@tooltipNotice": {
+    "description": "Tooltip of the mark on a message that a bot or a service sent (a Matrix notice)",
     "type": "text",
     "placeholders": {}
   },
@@ -5128,6 +5273,42 @@
   "promptGoToReplacementRoom": "Go to new room",
   "@promptGoToReplacementRoom": {
     "description": "Button on the banner of an upgraded room that joins and opens the room that replaced it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSendLocation": "Send a location",
+  "@labelSendLocation": {
+    "description": "Title of the dialog, and tooltip of the composer's button, that sends a place to the chat",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSendLocationCoordinates": "Coordinates",
+  "@labelSendLocationCoordinates": {
+    "description": "Label of the field where the coordinates of a place to send are typed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintSendLocationCoordinates": "Latitude, longitude (e.g. -23.5505, -46.6333)",
+  "@hintSendLocationCoordinates": {
+    "description": "Hint in the field where the coordinates of a place to send are typed. Keep the example numbers as they are: they are typed with a dot",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSendLocationDescription": "Description (optional)",
+  "@labelSendLocationDescription": {
+    "description": "Label of the field where the person may say what the place they send is",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorSendLocationCoordinates": "Type a latitude from -90 to 90 and a longitude from -180 to 180, separated by a comma, or a geo: link",
+  "@errorSendLocationCoordinates": {
+    "description": "Shown under the coordinates of a place to send when they cannot be read. Keep \"geo:\" as it is",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptSendLocation": "Send",
+  "@promptSendLocation": {
+    "description": "Button that sends the place typed in the dialog to the chat",
     "type": "text",
     "placeholders": {}
   },
@@ -9103,6 +9284,60 @@
     "type": "text",
     "placeholders": {}
   },
+  "promptLoginWithQrCode": "Sign in with QR code",
+  "@promptLoginWithQrCode": {
+    "description": "Button on the login screen that shows a QR code to scan with a device where the person is already signed in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLoginWaitingForScan": "On a device where you are signed in, open Settings, Account, Security, Link a new device, and scan this QR code or paste the code under it.",
+  "@labelQrLoginWaitingForScan": {
+    "description": "On the login screen, above the QR code that a signed-in device scans to sign this device in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLoginEnterCheckCode": "Type the 2-digit number your other device shows.",
+  "@labelQrLoginEnterCheckCode": {
+    "description": "On the login screen, after the other device read the QR code: the person types the number it shows, which proves no one is in between",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLoginCheckCodeField": "Number",
+  "@labelQrLoginCheckCodeField": {
+    "description": "Label of the field for the 2-digit number shown on the other device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLoginWaitingForApproval": "Approve the sign-in on your other device.",
+  "@labelQrLoginWaitingForApproval": {
+    "description": "On the login screen, while the signed-in device opens the server's page to approve this device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLoginSigningIn": "Signing in…",
+  "@labelQrLoginSigningIn": {
+    "description": "On the login screen, once the other device approved and this device gets its session",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLoginSharingKeys": "Getting your keys from your other device…",
+  "@labelQrLoginSharingKeys": {
+    "description": "On the login screen, while the signed-in device sends the keys that let this device read encrypted messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginServerUnsupported": "Your server does not support signing in with a QR code.",
+  "@errorQrLoginServerUnsupported": {
+    "description": "On the login screen, after the QR code button, when the server has no rendezvous for QR code login",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptQrLoginTryAgain": "Try again",
+  "@promptQrLoginTryAgain": {
+    "description": "Button that starts signing in with a QR code again after it failed",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelReauthenticateTitle": "Sign in again",
   "@labelReauthenticateTitle": {
     "description": "Title of the dialog, and of the alert on the Home screen, when the server no longer accepts this device's session and the person has to sign in again",
@@ -11198,6 +11433,78 @@
   "labelSettingsSessionUnverified": "Unverified",
   "@labelSettingsSessionUnverified": {
     "description": "Settings > Security: title of the warning that this session has not been verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLinkDevice": "Link a new device",
+  "@labelQrLinkDevice": {
+    "description": "Settings > Security: title of the row that signs a new device in from this one with the QR code the new device shows",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLinkDeviceExplanation": "Sign in on a new device without your password: choose \"Sign in with QR code\" there, then paste the code it shows here.",
+  "@labelQrLinkDeviceExplanation": {
+    "description": "Settings > Security: under \"Link a new device\"; \"Sign in with QR code\" is the login screen button of the same name",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptQrLinkDevice": "Link",
+  "@promptQrLinkDevice": {
+    "description": "Settings > Security: button that starts signing a new device in from this one",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLinkPasteCode": "Code from the new device",
+  "@labelQrLinkPasteCode": {
+    "description": "Label of the field where the code shown under the new device's QR code is pasted",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptQrLinkPaste": "Paste",
+  "@promptQrLinkPaste": {
+    "description": "Tooltip of the button that pastes the new device's code from the clipboard",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptQrLinkConnect": "Connect",
+  "@promptQrLinkConnect": {
+    "description": "Button that connects to the new device with the pasted code",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLinkCheckCode": "Type this number on the new device:",
+  "@labelQrLinkCheckCode": {
+    "description": "Above the 2-digit number the person types on the new device to prove no one is in between",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLinkApprove": "Approve the new device on your server's page, then come back here.",
+  "@labelQrLinkApprove": {
+    "description": "While the server's page that approves the new device is open in the browser",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptQrLinkOpenPage": "Open the page",
+  "@promptQrLinkOpenPage": {
+    "description": "Button that opens the server's page that approves the new device, in case it did not open by itself",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLinkSharingKeys": "Sending your keys to the new device…",
+  "@labelQrLinkSharingKeys": {
+    "description": "While this device sends the new one the keys to read encrypted messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLinkDone": "The new device is signed in and has your keys.",
+  "@labelQrLinkDone": {
+    "description": "After a new device was signed in from this one, with the cross-signing and backup keys",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLinkDoneWithoutKeys": "The new device is signed in. This device had no keys to send, so verify the new one to read encrypted messages there.",
+  "@labelQrLinkDoneWithoutKeys": {
+    "description": "After a new device was signed in from this one, when this device did not have the cross-signing keys unlocked",
     "type": "text",
     "placeholders": {}
   },

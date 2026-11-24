@@ -136,8 +136,13 @@ void main() {
     final txid = send.transactionId!;
     expect(echoes.lastWhere((e) => e.eventId == txid).status.isError, isTrue);
     expect(AttachmentSends.instance.byTransaction(room.localId, txid), send);
-    // The text went on its own.
-    expect(transport.sentEvents.map((e) => e['body']), ['see below']);
+    // The text is the photo's caption (Matrix v1.10): it failed with it,
+    // and is kept on its failed message.
+    expect(transport.sentEvents, isEmpty);
+    expect(echoes.lastWhere((e) => e.eventId == txid).content['body'],
+        'see below');
+    expect(echoes.lastWhere((e) => e.eventId == txid).content['filename'],
+        'photo.jpg');
     await events.cancel();
   });
 

@@ -9,6 +9,7 @@ import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/matrix/media/async_photo_send.dart';
 import 'package:rooster/client/matrix/media/interrupted_photo_uploads.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_message.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event_encrypted.dart';
 import 'package:rooster/client/timeline_events/timeline_event_feature_reactions.dart';
@@ -21,6 +22,9 @@ import 'package:rooster/main.dart';
 import 'package:rooster/ui/molecules/read_indicator.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/pending_attachment_status.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_attachments.dart';
+import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_audio.dart';
+import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_location.dart';
+import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_notice.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_reactions.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_reply.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_sticker.dart';
@@ -93,6 +97,9 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
   String? displayId;
   ImageProvider? senderAvatar;
   List<Attachment>? attachments;
+
+  /// An `m.audio` message sent: its player, in place of the file.
+  MatrixAudioMetadata? audio;
   ImageProvider? sticker;
   bool hasReactions = false;
   bool isInResponse = false;
@@ -187,10 +194,15 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
       },
       attachments: attachments != null
           ? withPendingStatus(
-              TimelineEventViewAttachments(
-                attachments: attachments!,
-                previewMedia: widget.previewMedia,
-              ),
+              audio != null && attachments!.first is FileAttachment
+                  ? TimelineEventViewAudio(
+                      key: ValueKey("audio-$eventId"),
+                      metadata: audio!,
+                      file: (attachments!.first as FileAttachment).file)
+                  : TimelineEventViewAttachments(
+                      attachments: attachments!,
+                      previewMedia: widget.previewMedia,
+                    ),
               room)
           : null,
       readReceipts: room != null
@@ -382,6 +394,20 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
             key: const ValueKey("interrupted-photo-upload"));
       }
 
+      // A place is a card, never its raw `geo_uri`; a bot's notice is
+      // marked as such.
+      if (shown is MatrixTimelineEventMessage) {
+        if (shown.isLocation) {
+          content = TimelineEventViewLocation(
+              location: shown.location,
+              description: shown.locationDescription,
+              clientId: room.client.identifier,
+              roomId: room.identifier);
+        } else if (shown.isNotice) {
+          content = TimelineEventViewNotice(child: content);
+        }
+      }
+
       if (content == null) {
         formattedContent = null;
       } else {
@@ -390,6 +416,13 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
     }
 
     attachments = event.attachments;
+    final Object message = event;
+    // Still being sent from here: the file as it is, not a player.
+    audio = message is MatrixTimelineEventMessage &&
+            (event.status == TimelineEventStatus.sent ||
+                event.status == TimelineEventStatus.synced)
+        ? message.audio
+        : null;
 
     // Outside a timeline (pinned messages, search results) the room's own
     // preview setting decides, and the preview is fetched by its link.

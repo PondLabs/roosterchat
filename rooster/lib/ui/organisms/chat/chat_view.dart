@@ -12,6 +12,7 @@ import 'package:rooster/ui/organisms/chat/chat.dart';
 import 'package:rooster/ui/organisms/chat/knock_request_banner.dart';
 import 'package:rooster/ui/organisms/chat/pending_attachments.dart';
 import 'package:rooster/ui/organisms/chat/room_tombstone_banner.dart';
+import 'package:rooster/ui/organisms/chat/send_location_dialog.dart';
 import 'package:rooster/ui/organisms/particle_player/particle_player.dart';
 import 'package:rooster/utils/autofill_utils.dart';
 import 'package:rooster/utils/event_bus.dart';
@@ -147,6 +148,8 @@ class ChatView extends StatelessWidget {
         onInputStarted: state.onInputStarted,
         addAttachment: state.addAttachment,
         removeAttachment: state.removeAttachment,
+        onSendLocation: state.room is MatrixRoom ? state.sendLocation : null,
+        sendLocationTooltip: SendLocationForm.labelSendLocation,
         size: MediaQuery.sizeOf(context).mobile ? 40 : 35,
         iconScale: MediaQuery.sizeOf(context).mobile ? 0.6 : 0.5,
         isProcessing: state.processing,
