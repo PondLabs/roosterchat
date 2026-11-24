@@ -19,7 +19,11 @@ enum TokenRefreshState {
 /// The server signed in another account or device than this one, so its
 /// token was not used.
 class ReauthenticationMismatch implements Exception {
-  const ReauthenticationMismatch();
+  const ReauthenticationMismatch({this.newDevice = false});
+
+  /// The same account on a new device: an OAuth sign-in where the server did
+  /// not grant the device it was asked for.
+  final bool newDevice;
 }
 
 /// Renews an account's access token after a soft logout (`401
@@ -175,34 +179,104 @@ class MatrixTokenRefresher {
     }
 
     final expiresInMs = response.expiresInMs;
-    final expiresAt = expiresInMs != null && expiresInMs > 0
-        ? DateTime.now().add(Duration(milliseconds: expiresInMs))
-        : null;
+    await _swapTokens(
+      client,
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+      expiresAt: expiresInMs != null && expiresInMs > 0
+          ? DateTime.now().add(Duration(milliseconds: expiresInMs))
+          : null,
+      oidcClientId: null,
+    );
+  }
+
+  /// Signs this same device in again with the tokens of an OAuth 2.0
+  /// sign-in that asked for this device (`urn:matrix:client:device:<id>`),
+  /// keeping the database and the keys. The server says whose token it is
+  /// (`whoami`) before anything is stored: [ReauthenticationMismatch] when it
+  /// is another account or device, and the old session stays as it was.
+  Future<void> reauthenticateWithOAuth({
+    required String accessToken,
+    required String? refreshToken,
+    required int? expiresInSeconds,
+    required String oidcClientId,
+  }) async {
+    final client = _client();
+    final userId = client.userID!;
+    final deviceId = client.deviceID!;
+    // Not through this session's renewal: a refusal of the new token must
+    // not be sent again with this session's token, nor its lock or
+    // suspension be reported as this account's.
+    final owner = await matrix.MatrixApi(
+      homeserver: client.homeserver,
+      accessToken: accessToken,
+      httpClient: _outsideSession(client.httpClient),
+    ).getTokenOwner();
+    if (owner.userId != userId) throw const ReauthenticationMismatch();
+    if (owner.deviceId != deviceId) {
+      throw const ReauthenticationMismatch(newDevice: true);
+    }
+
+    await _swapTokens(
+      client,
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      expiresAt: expiresInSeconds != null && expiresInSeconds > 0
+          ? DateTime.now().add(Duration(seconds: expiresInSeconds))
+          : null,
+      oidcClientId: oidcClientId,
+    );
+  }
+
+  /// [httpClient] without the [TokenRefreshingHttpClient] in it, keeping the
+  /// SDK's timeout and what is under it (the speed log, the transport).
+  static http.Client _outsideSession(http.Client httpClient) {
+    if (httpClient is matrix.TimeoutHttpClient) {
+      return matrix.FixedTimeoutHttpClient(
+          _outsideSession(httpClient.inner), httpClient.timeout);
+    }
+    if (httpClient is TokenRefreshingHttpClient) return httpClient._inner;
+    return httpClient;
+  }
+
+  /// Puts the new tokens on the session this device has, without a new
+  /// login: the device, its Olm account and the database stay.
+  Future<void> _swapTokens(
+    matrix.Client client, {
+    required String accessToken,
+    required String? refreshToken,
+    required DateTime? expiresAt,
+    required String? oidcClientId,
+  }) async {
+    final homeserver = client.homeserver!;
+    final userId = client.userID!;
+    final deviceId = client.deviceID!;
     // Soft logged out, init only swaps the tokens of the session it has.
     client.onLoginStateChanged.add(matrix.LoginState.softLoggedOut);
     await client.init(
-      newToken: response.accessToken,
+      newToken: accessToken,
       newTokenExpiresAt: expiresAt,
-      newRefreshToken: response.refreshToken,
+      newRefreshToken: refreshToken,
       newHomeserver: homeserver,
       newUserID: userId,
       newDeviceID: deviceId,
       newDeviceName: client.deviceName,
+      newOidcClientId: oidcClientId,
       waitForFirstSync: false,
     );
     // init keeps the old refresh token when the answer has none, and
     // stores nothing without one.
     await client.database.updateClient(
       homeserver.toString(),
-      response.accessToken,
+      accessToken,
       expiresAt,
-      response.refreshToken,
+      refreshToken,
       userId,
       deviceId,
       client.deviceName,
       client.prevBatch,
       client.encryption?.pickledOlmAccount,
-      null,
+      oidcClientId,
     );
     client.onLoginStateChanged.add(matrix.LoginState.loggedIn);
     _resumeSync(client);
