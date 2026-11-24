@@ -22,17 +22,21 @@ void main() {
 
   /// A session of [_userId]; with [restarting], the same one again, started
   /// from that client's database.
-  Future<Client> newClient({Client? restarting}) async {
+  Future<Client> newClient({
+    Client? restarting,
+    DatabaseApi? database,
+    bool signIn = true,
+  }) async {
     final c = Client(
       'visibility${next++}',
       httpClient: FakeMatrixApi(),
-      database: restarting?.database ?? await getDatabase(),
+      database: database ?? restarting?.database ?? await getDatabase(),
     );
     await c.checkHomeserver(
       Uri.parse('https://fakeserver.notexisting'),
       checkWellKnown: false,
     );
-    if (restarting != null) {
+    if (restarting != null || !signIn) {
       await c.init();
     } else {
       await c.init(
@@ -48,6 +52,18 @@ void main() {
     return c;
   }
 
+  /// Reopens a fresh [MatrixSdkDatabase] over the same SQLite handle so reads
+  /// come from disk with cold caches.
+  Future<Client> reopenFromDisk(Client previous) async {
+    final sqliteDb = (previous.database as MatrixSdkDatabase).database!;
+    await previous.dispose(closeDatabase: false);
+    final freshDb = await MatrixSdkDatabase.init(
+      'visibility_disk_${next++}',
+      database: sqliteDb,
+    );
+    return newClient(database: freshDb, signIn: false);
+  }
+
   MatrixEvent stateEvent(
     String type,
     Map<String, Object?> content, {
@@ -59,7 +75,7 @@ void main() {
         content: content,
         stateKey: stateKey,
         senderId: _userId,
-        eventId: '\$$type${content.values.join()}${at ?? ''}',
+        eventId: '\$$type${content.values.join()}${at ?? ''}_${next++}',
         originServerTs: at ?? DateTime.now(),
       );
 
@@ -306,5 +322,126 @@ void main() {
       );
       expect(marked(await say('still under joined')), isNull);
     });
+  });
+
+  // T6.4 review c1-1, the reviewer's reproductions: the SDK's own database
+  // (the app's in a browser) lost what a transaction wrote after a nested
+  // one, and a load inside a transaction missed what it had just written.
+  group('nested transactions on MatrixSdkDatabase (c1-1)', () {
+    setUp(() async => client = await newClient());
+    tearDown(() async => client.dispose(closeDatabase: true));
+
+    test(
+      'c1-1a: nested postLoad in a transaction does not revert later joined visibility to shared on disk',
+      () async {
+        await client.database.transaction(() async {
+          await client.handleSync(syncOf(newRoom('shared')));
+        });
+        client = await reopenFromDisk(client);
+        final room = client.getRoomById(_roomId)!;
+        expect(room.partial, isTrue);
+
+        await client.database.transaction(() async {
+          await client.database.storeEventUpdate(
+            _roomId,
+            visibility('shared'),
+            EventUpdateType.state,
+            client,
+          );
+          await room.postLoad();
+          await client.database.storeEventUpdate(
+            _roomId,
+            visibility('joined'),
+            EventUpdateType.state,
+            client,
+          );
+        });
+
+        client = await reopenFromDisk(client);
+        final diskRoom = client.getRoomById(_roomId)!;
+        await diskRoom.postLoad();
+        expect(diskRoom.historyVisibility, HistoryVisibility.joined);
+      },
+    );
+
+    test(
+      'c1-1b: nested postLoad inside requestHistory(Direction.b) transaction does not overwrite room on disk',
+      () async {
+        await client.database.transaction(() async {
+          await client.handleSync(
+            SyncUpdate(
+              nextBatch: 'b_init',
+              rooms: RoomsUpdate(
+                join: {
+                  _roomId: JoinedRoomUpdate(
+                    state: newRoom('shared'),
+                    timeline: TimelineUpdate(prevBatch: 'tok_0', events: []),
+                    summary: RoomSummary.fromJson({'m.joined_member_count': 1}),
+                  ),
+                },
+              ),
+            ),
+          );
+        });
+        client = await reopenFromDisk(client);
+        final room = client.getRoomById(_roomId)!;
+        expect(room.partial, isTrue);
+
+        final oldMsg = MatrixEvent(
+          type: EventTypes.Message,
+          content: {'msgtype': 'm.text', 'body': 'older message'},
+          senderId: _userId,
+          eventId: '\$old_msg',
+          originServerTs: DateTime.now().subtract(const Duration(minutes: 10)),
+        );
+        await client.database.transaction(() async {
+          room.prev_batch = 'tok_1';
+          await client.database.setRoomPrevBatch('tok_1', _roomId, client);
+          room.lastEvent = Event.fromMatrixEvent(oldMsg, room);
+          await client.handleSync(
+            SyncUpdate(
+              nextBatch: '',
+              rooms: RoomsUpdate(
+                join: {
+                  _roomId: JoinedRoomUpdate(
+                    state: [
+                      visibility(
+                        'shared',
+                        at: DateTime.now().subtract(const Duration(hours: 1)),
+                      ),
+                    ],
+                    timeline: TimelineUpdate(
+                      limited: false,
+                      events: [oldMsg],
+                      prevBatch: 'tok_1',
+                    ),
+                  ),
+                },
+              ),
+            ),
+            direction: Direction.b,
+          );
+        });
+
+        client = await reopenFromDisk(client);
+        final diskRoom = client.getRoomById(_roomId)!;
+        expect(diskRoom.lastEvent?.eventId, '\$old_msg');
+      },
+    );
+
+    test(
+      'c1-1c: nested postLoad inside a transaction sees uncommitted history_visibility even with cold key cache',
+      () async {
+        await client.database.transaction(() async {
+          await client.handleSync(syncOf(newRoom('joined')));
+          final room = client.getRoomById(_roomId)!;
+          expect(room.partial, isTrue);
+          await room.postLoad();
+        });
+
+        final room = client.getRoomById(_roomId)!;
+        expect(room.historyVisibility, HistoryVisibility.joined);
+      },
+    );
   });
 }

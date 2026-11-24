@@ -714,6 +714,16 @@ Changes since the copy:
   memory. Now the read waits for the sync to be stored, and a later sync
   finds the room loaded. From inside a transaction (a page of history
   checked during the sync) it runs at once, as nested transactions do.
+  For that, `BoxCollection.transaction` of the SDK's own database
+  (`lib/src/database/sqflite_box.dart` and `indexeddb_box.dart`, the app's
+  database in a browser) takes a transaction inside another: it used to
+  start a second batch over the outer one's and end both, so what the outer
+  one wrote afterwards went straight to the database and its batch, stored
+  last, put older values back over it. A nested one now writes to the outer
+  batch, which ends in `try/finally` (one that threw left every later write
+  in a batch nobody stored). `Box.getAllKeys`, the first time it lists a
+  box, adds the keys written and takes out the ones deleted since, in the
+  open transaction too; it used to list the stored ones only and keep that.
   The race the T3.2 entry above describes is closed there;
   `RoomKeyBundleManager.historyVisibilityOf` stays as a second word, and
   its note of the syncs no longer skips an `m.room.history_visibility`
