@@ -163,6 +163,10 @@ class RecordingHomeserver implements matrix.Client {
   int stickyRefusals = 0;
   bool stickyLost = false;
 
+  /// While set, sticky sends are only answered once it completes: a slow
+  /// homeserver.
+  Completer<void>? stickyHold;
+
   final List<Sent> requests = [];
   final List<Map<String, Object?>> membershipWrites = [];
   int _delays = 0;
@@ -197,6 +201,7 @@ class RecordingHomeserver implements matrix.Client {
     ));
     if (action.contains('/send/')) {
       if (stickyLost) return Completer<Map<String, Object?>>().future;
+      await stickyHold?.future;
       if (stickyRefusals > 0) {
         stickyRefusals--;
         throw matrix.MatrixException.fromJson(

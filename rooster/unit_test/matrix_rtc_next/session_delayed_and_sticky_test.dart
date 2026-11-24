@@ -5,6 +5,8 @@
 // Where the homeserver has sticky events (MSC4354), and only there, our
 // membership also goes out in the newer format (MSC4143), beside the legacy
 // one and taken down with it.
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:matrix/matrix.dart' as matrix;
@@ -316,6 +318,35 @@ void main() {
             isFalse);
       });
     });
+
+    // Review c2-1: the heartbeat no longer waits for the send, so a hang up
+    // can find one on its way. The leave goes after it: sent beside it, it
+    // could land first, and the join after it would list us for two more
+    // minutes.
+    test('still on its way at hang up is waited for before the sticky leave',
+        () async {
+      homeserver.features = {
+        'org.matrix.msc4140': true,
+        'org.matrix.msc4354': true,
+      };
+      final hold = homeserver.stickyHold = Completer<void>();
+      final call = await join();
+      expect(homeserver.stickySends, hasLength(1));
+
+      final hungUp = call.hangUpCall();
+      // The legacy leave goes out at once, beside it.
+      while (homeserver.delayedActions.lastOrNull?.body['action'] != 'send') {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(homeserver.stickySends, hasLength(1),
+          reason: 'the sticky leave waits for the send to be answered');
+
+      hold.complete();
+      await hungUp.timeout(const Duration(seconds: 3));
+      expect(homeserver.stickySends, hasLength(2));
+      expect(
+          homeserver.stickySends.last.body.containsKey('application'), isFalse);
+    }, timeout: const Timeout(Duration(seconds: 20)));
 
     test('is not sent once our legacy membership is gone', () async {
       homeserver.features = {'org.matrix.msc4354': true};
