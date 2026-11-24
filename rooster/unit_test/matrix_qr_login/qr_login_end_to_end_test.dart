@@ -24,6 +24,7 @@ class _NewDevice implements QrLoginNewDeviceHost {
   QrLoginSecrets? imported;
   Uri? grantHomeserver;
   bool cancelled = false;
+  Uri verification = Uri.parse('https://auth.example/device?code=ABCD');
 
   @override
   Future<QrLoginGrant> startGrant(Uri homeserver) async {
@@ -31,8 +32,7 @@ class _NewDevice implements QrLoginNewDeviceHost {
     return QrLoginGrant(
       deviceId: 'NEWDEVICE',
       verificationUri: Uri.parse('https://auth.example/device'),
-      verificationUriComplete:
-          Uri.parse('https://auth.example/device?code=ABCD'),
+      verificationUriComplete: verification,
       signedIn: approved.future,
       cancel: () => cancelled = true,
     );
@@ -65,6 +65,10 @@ class _ExistingDevice implements QrLoginExistingDeviceHost {
   @override
   Future<bool> deviceExists(String deviceId) async =>
       devices.contains(deviceId);
+
+  @override
+  Future<bool> trusts(Uri verificationUri) async =>
+      verificationUri.host == 'auth.example';
 
   @override
   Future<QrLoginSecrets> exportSecrets() async {
@@ -250,6 +254,22 @@ void main() {
             .having((e) => e.error, 'error', QrLoginError.deviceAlreadyExists));
     expect(existing.approvedAt, isNull);
     expect(existing.exports, 0);
+  });
+
+  test('an approval page off the account\'s server is never opened', () async {
+    newDevice.verification = Uri.parse('https://phishing.example/login');
+    final (g, s) = await connect();
+    final sent = settle(runExisting(s));
+    await expectLater(
+        runQrLoginNewDevice(g, newDevice, typedCheckCode: s.checkCode.digits),
+        throwsA(isA<QrLoginException>()));
+    expect(
+        await sent,
+        isA<QrLoginException>()
+            .having((e) => e.error, 'error', QrLoginError.unsupported));
+    expect(existing.approvedAt, isNull);
+    expect(existing.exports, 0);
+    expect(newDevice.cancelled, isTrue);
   });
 
   group('an expired channel ends with a localized message', () {

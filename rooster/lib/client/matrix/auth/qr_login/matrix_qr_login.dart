@@ -62,8 +62,11 @@ class MatrixQrLoginFlow implements LoginFlow, QrLoginNewDeviceHost {
   Client? _client;
   LoginResult? _signIn;
   MatrixDeviceAuthFlow? _grant;
+  bool _cancelled = false;
 
+  /// The person closed the panel: stops the grant and the channel.
   void cancel() {
+    _cancelled = true;
     _grant?.cancel();
     unawaited(channel.close());
   }
@@ -87,8 +90,8 @@ class MatrixQrLoginFlow implements LoginFlow, QrLoginNewDeviceHost {
         Log.w("QR code login: signed in without keys (${e.error.name})");
         return _signIn!;
       }
-      return _signIn is LoginResultCancelled
-          ? _signIn!
+      return _cancelled
+          ? LoginResultCancelled()
           : LoginResultError(e.error.message);
     } catch (e, s) {
       await channel.close();
@@ -228,6 +231,21 @@ class MatrixQrLoginExistingDevice implements QrLoginExistingDeviceHost {
 
   @override
   Future<void> approve(Uri verificationUri) => onApprove(verificationUri);
+
+  @override
+  Future<bool> trusts(Uri verificationUri) async {
+    try {
+      final metadata = await mx.getAuthMetadata();
+      return {
+        metadata.issuer.host,
+        metadata.authorizationEndpoint.host,
+        metadata.deviceAuthorizationEndpoint?.host,
+      }.contains(verificationUri.host);
+    } catch (_) {
+      // No OAuth 2.0 server: no page to trust.
+      return false;
+    }
+  }
 
   @override
   Future<bool> deviceExists(String deviceId) async {

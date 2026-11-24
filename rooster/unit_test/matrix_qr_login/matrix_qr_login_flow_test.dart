@@ -37,6 +37,9 @@ class _SignedInDevice implements QrLoginExistingDeviceHost {
   }
 
   @override
+  Future<bool> trusts(Uri verificationUri) async => true;
+
+  @override
   Future<QrLoginSecrets> exportSecrets() async => secrets;
 }
 
@@ -120,6 +123,24 @@ void main() {
       expect(server.grant.deviceRequests, isEmpty);
       expect(await sent, isA<QrLoginException>());
       expect(existing.approved, isFalse);
+    });
+
+    test('the signed-in device opens approval pages of its own server only',
+        () async {
+      final server = QrHomeserver(DeviceGrantServer());
+      final client = await newAccount(server);
+      await client.setHomeserver(Uri.https(homeserverHost));
+      final host = MatrixQrLoginExistingDevice(client.getMatrixClient(),
+          onApprove: (_) async {});
+      expect(
+          await host.trusts(Uri.parse(
+              deviceAuthorizationJson()['verification_uri_complete']
+                  as String)),
+          isTrue);
+      expect(await host.trusts(Uri.parse('https://auth.example.org.evil/link')),
+          isFalse);
+      expect(await host.trusts(Uri.parse('https://phishing.example/link')),
+          isFalse);
     });
 
     test('a wrong check code: no grant, nothing signed in', () async {

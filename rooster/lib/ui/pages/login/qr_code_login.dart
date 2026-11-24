@@ -134,6 +134,7 @@ class _QrLoginPanelState extends State<QrLoginPanel> {
   }
 
   Future<void> start() async {
+    invite?.cancel();
     setState(() {
       stage = _Stage.starting;
       error = null;

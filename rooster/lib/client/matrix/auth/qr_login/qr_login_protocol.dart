@@ -134,7 +134,16 @@ Future<void> runQrLoginNewDevice(
   QrLoginNewDeviceHost host, {
   required int typedCheckCode,
   void Function(QrLoginStep step)? onStep,
-}) async {
+}) =>
+    _closingOnError(
+        channel, () => _newDevice(channel, host, typedCheckCode, onStep));
+
+Future<void> _newDevice(
+  QrSecureChannel channel,
+  QrLoginNewDeviceHost host,
+  int typedCheckCode,
+  void Function(QrLoginStep step)? onStep,
+) async {
   if (typedCheckCode != channel.checkCode.digits) {
     await channel.fail('user_cancelled');
     throw const QrLoginException(QrLoginError.checkCodeMismatch);
@@ -197,6 +206,11 @@ abstract class QrLoginExistingDeviceHost {
 
   Future<bool> deviceExists(String deviceId);
 
+  /// Whether [verificationUri] is a page of this account's own
+  /// authorization server: the new device chooses the URL, and a page
+  /// elsewhere could be someone else's sign-in form.
+  Future<bool> trusts(Uri verificationUri);
+
   /// The page where the person approves the new device; awaited until it
   /// was opened (or offered to open).
   Future<void> approve(Uri verificationUri);
@@ -213,7 +227,20 @@ Future<QrLoginSecrets> runQrLoginExistingDevice(
   Duration deviceWait = const Duration(seconds: 2),
   int deviceChecks = 10,
   Future<void> Function(Duration delay) sleep = _sleep,
-}) async {
+}) =>
+    _closingOnError(
+        channel,
+        () => _existingDevice(
+            channel, host, onStep, deviceWait, deviceChecks, sleep));
+
+Future<QrLoginSecrets> _existingDevice(
+  QrSecureChannel channel,
+  QrLoginExistingDeviceHost host,
+  void Function(QrLoginStep step)? onStep,
+  Duration deviceWait,
+  int deviceChecks,
+  Future<void> Function(Duration delay) sleep,
+) async {
   onStep?.call(QrLoginStep.confirmCheckCode);
   await channel.send({
     'type': 'm.login.protocols',
@@ -233,6 +260,10 @@ Future<QrLoginSecrets> runQrLoginExistingDevice(
       deviceId is! String ||
       deviceId.isEmpty ||
       uri == null) {
+    await channel.fail('unsupported_protocol');
+    throw const QrLoginException(QrLoginError.unsupported);
+  }
+  if (!await host.trusts(uri)) {
     await channel.fail('unsupported_protocol');
     throw const QrLoginException(QrLoginError.unsupported);
   }
@@ -258,6 +289,17 @@ Future<QrLoginSecrets> runQrLoginExistingDevice(
   await channel.send(secrets.toMessage());
   onStep?.call(QrLoginStep.done);
   return secrets;
+}
+
+/// Any other error (the server, the host) ends the channel too.
+Future<T> _closingOnError<T>(
+    QrSecureChannel channel, Future<T> Function() run) async {
+  try {
+    return await run();
+  } catch (_) {
+    await channel.close();
+    rethrow;
+  }
 }
 
 /// Time for a person to read, type or approve.
