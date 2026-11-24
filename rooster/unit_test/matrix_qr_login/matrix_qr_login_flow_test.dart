@@ -143,6 +143,26 @@ void main() {
           isFalse);
     });
 
+    test('the issuer\'s host is not enough: its scheme and port too', () async {
+      final server = QrHomeserver(DeviceGrantServer());
+      final client = await newAccount(server);
+      await client.setHomeserver(Uri.https(homeserverHost));
+      final host = MatrixQrLoginExistingDevice(client.getMatrixClient(),
+          onApprove: (_) async {});
+      // The issuer is https://auth.example.org/.
+      expect(await host.trusts(Uri.parse('https://auth.example.org/link')),
+          isTrue);
+      expect(await host.trusts(Uri.parse('https://auth.example.org:443/link')),
+          isTrue,
+          reason: 'the port https implies');
+      expect(
+          await host.trusts(Uri.parse('http://auth.example.org/link?code=AB')),
+          isFalse,
+          reason: 'anyone on the network can answer a plain http page');
+      expect(await host.trusts(Uri.parse('https://auth.example.org:8443/link')),
+          isFalse);
+    });
+
     test('a wrong check code: no grant, nothing signed in', () async {
       final (server, client, g, s) = await connect();
       final flow = MatrixQrLoginFlow(

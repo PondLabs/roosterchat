@@ -443,6 +443,110 @@ class KeyManager {
     return roomInboundGroupSessions[sessionId] = dbSess;
   }
 
+  // ROOSTER: sessions stored before Rooster took an `m.room_key`'s claimed
+  // Ed25519 key from its Olm session kept, with no claimed keys of their
+  // own, the key of the device the sender named in `requesting_device_id`
+  // (or any claim the sender wrote) in their content, which
+  // [SessionKey.fromDb] now ignores. Once per database, each such session
+  // claims the key of the one device known with the Olm session's Curve25519
+  // key, or nothing when no single device has it (its messages then have no
+  // verified origin), and the claim leaves its content. Nothing is deleted:
+  // the session is stored again with its own pickle and indexes, so every
+  // message it decrypted still decrypts.
+  static const claimedKeysMigrationCacheKey =
+      'rooster_claimed_keys_from_olm_session';
+  Future<void>? _claimedKeysMigration;
+
+  /// The migration of the claimed keys, once started ([Encryption.onSync]).
+  Future<void>? get claimedKeysMigration => _claimedKeysMigration;
+
+  /// Starts the migration, once per run; the database's mark keeps it from
+  /// running again on later starts.
+  Future<void> migrateClaimedKeysFromOlmSessions() =>
+      _claimedKeysMigration ??= _migrateClaimedKeys();
+
+  static bool _claimsOnlyInContent(StoredInboundGroupSession entry) {
+    final content = Event.getMapFromPayload(entry.content);
+    final chain = content['forwarding_curve25519_key_chain'];
+    return Event.getMapFromPayload(entry.senderClaimedKeys).isEmpty &&
+        (chain is! List || chain.isEmpty) &&
+        (content.containsKey('sender_claimed_ed25519_key') ||
+            content.containsKey('sender_claimed_keys'));
+  }
+
+  /// The Ed25519 key of the one device known with [curve25519Key]: ours, or
+  /// any user's as long as no other device lists the same key.
+  String? _claimOfCurve25519Key(String curve25519Key) {
+    if (curve25519Key == encryption.identityKey) {
+      return encryption.fingerprintKey;
+    }
+    final devices = client.userDeviceKeys.values
+        .expand((list) => list.deviceKeys.values)
+        .where((d) => d.curve25519Key == curve25519Key)
+        .toList();
+    return devices.length == 1 ? devices.single.ed25519Key : null;
+  }
+
+  Future<void> _migrateClaimedKeys() async {
+    final database = client.database;
+    try {
+      final done = await database.getCustomCacheObject(
+        claimedKeysMigrationCacheKey,
+      );
+      if (done?.content['version'] == 1) return;
+      var proven = 0, unproven = 0;
+      for (final listed in await database.getAllInboundGroupSessions()) {
+        if (!_claimsOnlyInContent(listed)) continue;
+        // Read again just before storing, with no await in between: a
+        // session stored meanwhile (a better one, new indexes) is kept.
+        final entry = await database.getInboundGroupSession(
+          listed.roomId,
+          listed.sessionId,
+        );
+        if (entry == null || !_claimsOnlyInContent(entry)) continue;
+        final claim = _claimOfCurve25519Key(entry.senderKey);
+        final claimed = {if (claim != null) 'ed25519': claim};
+        final content = Event.getMapFromPayload(entry.content)
+          ..remove('sender_claimed_ed25519_key')
+          ..remove('sender_claimed_keys');
+        final stored = database.storeInboundGroupSession(
+          entry.roomId,
+          entry.sessionId,
+          entry.pickle,
+          json.encode(content),
+          entry.indexes,
+          entry.allowedAtIndex,
+          entry.senderKey,
+          json.encode(claimed),
+        );
+        final inMemory = getInboundGroupSession(entry.roomId, entry.sessionId);
+        if (inMemory != null &&
+            inMemory.senderKey == entry.senderKey &&
+            inMemory.senderClaimedKeys.isEmpty &&
+            inMemory.forwardingCurve25519KeyChain.isEmpty) {
+          inMemory.senderClaimedKeys = Map.of(claimed);
+          inMemory.content
+            ..remove('sender_claimed_ed25519_key')
+            ..remove('sender_claimed_keys');
+        }
+        await stored;
+        claim == null ? unproven++ : proven++;
+      }
+      await database.cacheCustomObject(
+        claimedKeysMigrationCacheKey,
+        {'version': 1},
+      );
+      Logs().i(
+        '[KeyManager] Claimed keys taken from the Olm session: $proven '
+        'session(s) proven, $unproven left with no verified origin',
+      );
+    } catch (e, s) {
+      // Tried again on the next start; until then such sessions claim
+      // nothing ([SessionKey.fromDb]).
+      Logs().w('[KeyManager] Could not migrate the claimed keys', e, s);
+    }
+  }
+
   Map<String, Map<String, bool>> _getDeviceKeyIdMap(
     List<DeviceKeys> deviceKeys,
   ) {

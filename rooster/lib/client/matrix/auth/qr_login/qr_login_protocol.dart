@@ -307,6 +307,8 @@ const _personTimeout = Duration(minutes: 10);
 
 Future<void> _sleep(Duration delay) => Future.delayed(delay);
 
+/// [value] if it is a web address at all. Whether it is the account's own
+/// page, its scheme included, is for [QrLoginExistingDeviceHost.trusts].
 Uri? _webUri(Object? value) {
   final uri = value is String ? Uri.tryParse(value) : null;
   return uri != null &&
