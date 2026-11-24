@@ -20,6 +20,7 @@ import 'cross_signing/cross_signing_page.dart';
 import 'dehydrated_device/matrix_dehydrated_device_panel.dart';
 import 'key_backup/matrix_key_backup_panel.dart';
 import 'key_portability/matrix_key_portability_panel.dart';
+import 'qr_login/qr_link_device.dart';
 
 class MatrixSecurityTab extends StatefulWidget {
   const MatrixSecurityTab(this.client, {super.key});
@@ -542,7 +543,12 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
                 ),
               crossSigning(),
               const tiamat.Seperator(),
-              messageBackup()
+              messageBackup(),
+              // MSC4108: sign a new device in from this one.
+              if (widget.client.getMatrixClient().encryption != null) ...[
+                const tiamat.Seperator(),
+                QrLinkDeviceRow(client: widget.client.getMatrixClient()),
+              ],
             ],
           ),
         ));

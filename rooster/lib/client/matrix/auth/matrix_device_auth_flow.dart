@@ -64,12 +64,18 @@ class MatrixDeviceAuthFlow implements LoginFlow {
     required this.authMetadata,
     this.clock = const SystemDeviceGrantClock(),
     Uri? clientMetadataDocumentUri,
-  }) : clientMetadataDocumentUri = clientMetadataDocumentUri ??
-            MatrixOidcLoginFlow.defaultClientMetadataDocumentUri;
+    String? deviceId,
+  })  : clientMetadataDocumentUri = clientMetadataDocumentUri ??
+            MatrixOidcLoginFlow.defaultClientMetadataDocumentUri,
+        deviceId = deviceId ?? matrix.generateRandomDeviceId();
 
   final matrix.GetAuthMetadataResponse authMetadata;
   final DeviceGrantClock clock;
   final Uri? clientMetadataDocumentUri;
+
+  /// The device ID asked for in the scopes. QR code login (MSC4108) tells
+  /// the signed-in device which one to expect.
+  final String deviceId;
 
   static const deviceCodeGrantType =
       'urn:ietf:params:oauth:grant-type:device_code';
@@ -132,7 +138,7 @@ class MatrixDeviceAuthFlow implements LoginFlow {
 
       final scopes = matrix.negotiateOidcScopes(
         scopesSupported: authMetadata.scopesSupported,
-        deviceId: matrix.generateRandomDeviceId(),
+        deviceId: deviceId,
       );
       final authorization = await _untilCancelled(mx.httpClient.post(
         authMetadata.deviceAuthorizationEndpoint!,
