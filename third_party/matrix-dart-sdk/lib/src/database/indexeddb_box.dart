@@ -76,11 +76,22 @@ class BoxCollection with ZoneTransactionMixin {
     bool readOnly = false,
   }) =>
       zoneTransaction(() async {
+        // ROOSTER: nested transactions reuse the outer queue so a nested
+        // `Room.postLoad()` does not overwrite or clear `_txnCache`, which
+        // made later writes commit immediately and get reverted by the outer
+        // transaction.
+        if (_txnCache != null) {
+          await action();
+          return;
+        }
         final txnCache = _txnCache = [];
-        await action();
+        try {
+          await action();
+        } finally {
+          _txnCache = null;
+        }
         final cache =
             List<Future<void> Function(IDBTransaction txn)>.from(txnCache);
-        _txnCache = null;
         if (cache.isEmpty) return;
 
         final transactionCompleter = Completer<void>();
@@ -205,9 +216,19 @@ class Box<V> {
       getAllKeysCompleter.complete();
     }.toJS;
     await getAllKeysCompleter.future;
-    final keys = (request.result?.dartify() as List?)?.cast<String>() ?? [];
-    _quickAccessCachedKeys = keys.toSet();
-    return keys;
+    final dbKeys = (request.result?.dartify() as List?)?.cast<String>() ?? [];
+    final keys = dbKeys.toSet();
+    // ROOSTER: merge pending writes and deletes from `_quickAccessCache` so a
+    // cold `getAllKeys()` inside a transaction sees uncommitted keys.
+    for (final entry in _quickAccessCache.entries) {
+      if (entry.value == null) {
+        keys.remove(entry.key);
+      } else {
+        keys.add(entry.key);
+      }
+    }
+    _quickAccessCachedKeys = keys;
+    return keys.toList();
   }
 
   Future<Map<String, V>> getAllValues([IDBTransaction? txn]) async {

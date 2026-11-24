@@ -728,3 +728,29 @@ Changes since the copy:
   of falling back to `/v3/login`. In a browser `fetch` follows the
   redirects and the app does not see them; an HTTPS page blocks the
   mixed content.
+- Room state loaded while a sync is stored (T6.4): `Room.postLoad` reads
+  the room's state from the database inside `DatabaseApi.transaction`, and
+  marks the room loaded before that transaction ends. A sync stores its
+  events in a transaction and, while a room is partial, keeps the state it
+  brings out of memory; a read that overlapped it saw the database without
+  that sync's writes, so a new room read no `m.room.history_visibility`
+  after `postLoad` and one that turned `joined` went on saying `shared` in
+  memory. Now the read waits for the sync to be stored, and a later sync
+  finds the room loaded. From inside a transaction (a page of history
+  checked during the sync) it runs at once, as nested transactions do.
+  For that, `BoxCollection.transaction` of the SDK's own database
+  (`lib/src/database/sqflite_box.dart` and `indexeddb_box.dart`, the app's
+  database in a browser) takes a transaction inside another: it used to
+  start a second batch over the outer one's and end both, so what the outer
+  one wrote afterwards went straight to the database and its batch, stored
+  last, put older values back over it. A nested one now writes to the outer
+  batch, which ends in `try/finally` (one that threw left every later write
+  in a batch nobody stored). `Box.getAllKeys`, the first time it lists a
+  box, adds the keys written and takes out the ones deleted since, in the
+  open transaction too; it used to list the stored ones only and keep that.
+  The race the T3.2 entry above describes is closed there;
+  `RoomKeyBundleManager.historyVisibilityOf` stays as a second word, and
+  its note of the syncs no longer skips an `m.room.history_visibility`
+  dated before the last one seen when it lets out less history (another
+  server's clock may run behind): only one that would let out more is
+  skipped. `DatabaseApi` does not change.

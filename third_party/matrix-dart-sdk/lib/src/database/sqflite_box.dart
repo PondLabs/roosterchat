@@ -51,10 +51,20 @@ class BoxCollection with ZoneTransactionMixin {
     bool readOnly = false,
   }) =>
       zoneTransaction(() async {
+        // ROOSTER: nested transactions reuse the outer batch so a nested
+        // `Room.postLoad()` does not overwrite or clear `_activeBatch`, which
+        // made later writes bypass the batch and get reverted on commit.
+        if (_activeBatch != null) {
+          await action();
+          return;
+        }
         final batch = _db.batch();
         _activeBatch = batch;
-        await action();
-        _activeBatch = null;
+        try {
+          await action();
+        } finally {
+          _activeBatch = null;
+        }
         await batch.commit(noResult: true);
       });
 
@@ -152,10 +162,19 @@ class Box<V> {
     final executor = txn ?? boxCollection._db;
 
     final result = await executor.query(name, columns: ['k']);
-    final keys = result.map((row) => row['k'] as String).toList();
+    final keys = result.map((row) => row['k'] as String).toSet();
+    // ROOSTER: merge pending writes and deletes from `_quickAccessCache` so a
+    // cold `getAllKeys()` inside a transaction sees uncommitted keys.
+    for (final entry in _quickAccessCache.entries) {
+      if (entry.value == null) {
+        keys.remove(entry.key);
+      } else {
+        keys.add(entry.key);
+      }
+    }
 
-    _quickAccessCachedKeys = keys.toSet();
-    return keys;
+    _quickAccessCachedKeys = keys;
+    return keys.toList();
   }
 
   Future<Map<String, V>> getAllValues([Transaction? txn]) async {

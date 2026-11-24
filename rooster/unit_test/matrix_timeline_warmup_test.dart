@@ -14,6 +14,10 @@ class _NoDatabase implements matrix.DatabaseApi {
           List<String> types, matrix.Room room) async =>
       [];
 
+  /// `Room.postLoad` reads the room's state in a transaction.
+  @override
+  Future<void> transaction(Future<void> Function() action) => action();
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
