@@ -619,3 +619,16 @@ Changes since the copy:
   transport between runs is handled the same way. `clearCache` drops
   `pos` and `legacy_since` and keeps the to-device position. `DatabaseApi`
   does not change.
+  A room sent `initial` (the first time on a connection: a new
+  connection, or the range growing over it) brings the room as it is, so
+  its events notify no one and raise no call event, as in an initial
+  `/v3/sync`; a `limited` timeline that overlaps the newest stored events
+  keeps them (no gap), one that does not drops them as `/v3/sync` does.
+  An answer without `count` stops growing the range, and one without
+  `pos` still waits for news: no polling. Limits of MSC4186: it has no
+  per-thread unread counts, so a Sliding Sync update leaves
+  `Room.unreadThreadNotifications` as they are (the room's own counts come
+  from the server; the per-thread ones change only from `/v3/sync` or a
+  thread read here), and it has no presence, so other people's presence
+  stops changing while Sliding Sync runs (asking `/presence` for the
+  people on screen is left for another task).

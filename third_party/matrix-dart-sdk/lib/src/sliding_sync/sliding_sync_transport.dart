@@ -92,6 +92,15 @@ class SlidingSyncResponse {
       .tryGetMap<String, Object?>('to_device')
       ?.tryGet<String>('next_batch');
 
+  /// The rooms sent for the first time on this connection.
+  Set<String> get initialRooms => {
+        for (final entry
+            in (json.tryGetMap<String, Object?>('rooms') ?? const {}).entries)
+          if (fromScratch ||
+              (entry.value is Map && (entry.value as Map)['initial'] == true))
+            entry.key,
+      };
+
   int? listCount(String name) => json
       .tryGetMap<String, Object?>('lists')
       ?.tryGetMap<String, Object?>(name)
@@ -131,6 +140,9 @@ class SlidingSyncTransport {
   int _rangeEnd;
   int? _roomCount;
 
+  /// An answer was processed since the connection started.
+  bool _answered = false;
+
   final Map<String, SlidingSyncRoomSubscription> roomSubscriptions = {};
 
   SlidingSyncTransport(
@@ -148,9 +160,14 @@ class SlidingSyncTransport {
   /// Whether some rooms are still outside the list's range.
   bool get loadingRooms => _roomCount == null || _rangeEnd + 1 < _roomCount!;
 
+  /// Whether the next request waits for news: not on a new connection, nor
+  /// while the range grows.
+  bool get waitsForNews => _answered && !loadingRooms;
+
   /// Forgets the connection, not the to-device `since`.
   void resetConnection() {
     pos = null;
+    _answered = false;
     _roomCount = null;
     _rangeEnd = rangeStep - 1;
   }
@@ -219,8 +236,7 @@ class SlidingSyncTransport {
         throw const SlidingSyncUnavailableException('no endpoint announced');
       }
       final fromScratch = pos == null;
-      // A new connection, or one still growing its range, does not wait.
-      final wait = fromScratch || loadingRooms ? Duration.zero : timeout;
+      final wait = waitsForNews ? timeout : Duration.zero;
       final uri = api.baseUri!.resolveUri(
         Uri(
           path: paths.first,
@@ -268,9 +284,15 @@ class SlidingSyncTransport {
   /// Applies [response] to the connection, once the client processed it.
   void commit(SlidingSyncResponse response) {
     pos = response.pos ?? pos;
+    _answered = true;
     toDeviceSince = response.toDeviceNextBatch ?? toDeviceSince;
     final count = response.listCount(listName);
-    if (count == null) return;
+    if (count == null) {
+      // No count to grow to: the range stays, and the requests wait for
+      // news instead of polling.
+      _roomCount = _rangeEnd + 1;
+      return;
+    }
     _roomCount = count;
     if (_rangeEnd + 1 < count) {
       _rangeEnd = (_rangeEnd + rangeStep).clamp(0, count - 1);

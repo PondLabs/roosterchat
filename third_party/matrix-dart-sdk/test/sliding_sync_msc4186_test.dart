@@ -56,6 +56,10 @@ class _Homeserver {
   var _posSeq = 0;
   int roomCount = 1;
 
+  /// Answers without `lists.<name>.count`, or without `pos`.
+  bool omitCount = false;
+  bool omitPos = false;
+
   /// The rooms and extensions of the next Sliding Sync answer.
   Map<String, Object?> rooms = {};
   Map<String, Object?> extensions = {};
@@ -116,9 +120,9 @@ class _Homeserver {
       final newPos = 'p${++_posSeq}';
       _positions[newPos] = _deviceSeq;
       final answer = {
-        'pos': newPos,
+        if (!omitPos) 'pos': newPos,
         'lists': {
-          'all_rooms': {'count': roomCount},
+          'all_rooms': {if (!omitCount) 'count': roomCount},
         },
         'rooms': rooms,
         'extensions': {
@@ -811,6 +815,232 @@ void main() {
         isTrue,
         reason: 'an initial /v3/sync reports no device list change',
       );
+      await client.dispose();
+    });
+  });
+
+  group('review c1', () {
+    Map<String, Object?> pushRules() => {
+          'type': 'm.push_rules',
+          'content': {
+            'global': {
+              'underride': [
+                {
+                  'rule_id': '.m.rule.message',
+                  'default': true,
+                  'enabled': true,
+                  'conditions': [
+                    {
+                      'kind': 'event_match',
+                      'key': 'type',
+                      'pattern': 'm.room.message',
+                    },
+                  ],
+                  'actions': ['notify'],
+                },
+              ],
+            },
+          },
+        };
+
+    Map<String, Object?> message(String id, int ts) => {
+          'type': 'm.room.message',
+          'sender': _bob,
+          'event_id': id,
+          'origin_server_ts': ts,
+          'content': {'msgtype': 'm.text', 'body': id},
+        };
+
+    Map<String, Object?> room(
+      List<Map<String, Object?>> timeline, {
+      bool initial = true,
+      bool limited = false,
+    }) =>
+        {
+          if (initial) 'initial': true,
+          if (initial)
+            'required_state': [
+              _state('m.room.create', {'creator': _alice}),
+              _state('m.room.member', {'membership': 'join'}, stateKey: _alice),
+            ],
+          'timeline': timeline,
+          'limited': limited,
+          'notification_count': 1,
+        };
+
+    Future<(_Homeserver, Client, List<String>)> started() async {
+      final server = _Homeserver()
+        ..rooms = {
+          _roomId: room([message(r'$older', 1000), message(r'$old', 2000)]),
+        }
+        ..extensions = {
+          'account_data': {
+            'global': [pushRules()],
+          },
+        };
+      final client = await _client(server);
+      final notified = <String>[];
+      client.onNotification.stream.listen((e) => notified.add(e.eventId));
+      await client.oneShotSync();
+      await client.oneShotSync();
+      return (server, client, notified);
+    }
+
+    test(
+        'c1-1: an event already delivered does not notify again on a new '
+        'connection', () async {
+      final (server, client, notified) = await started();
+      expect(client.getRoomById(_roomId)?.lastEvent?.eventId, r'$old');
+      // The server forgets pos and sends the room as it is now.
+      server
+        ..forgetPos = 1
+        ..rooms = {
+          _roomId: room([message(r'$old', 2000)], limited: true),
+        };
+      await client.oneShotSync();
+      await _settle();
+      expect(
+        notified,
+        isEmpty,
+        reason: r'$old was already in the room before the new connection',
+      );
+      await client.dispose();
+    });
+
+    test('c1-1: a new message on the same connection still notifies', () async {
+      final (server, client, notified) = await started();
+      server.rooms = {
+        _roomId: room([message(r'$new', 3000)], initial: false),
+      };
+      await client.oneShotSync();
+      await _settle();
+      expect(notified, [r'$new']);
+      await client.dispose();
+    });
+
+    test(
+        'c1-1: a limited timeline that overlaps the stored one keeps it; '
+        'one with a gap drops it', () async {
+      final (server, client, _) = await started();
+      final stored = client.getRoomById(_roomId)!;
+      server
+        ..forgetPos = 1
+        ..rooms = {
+          _roomId: room([message(r'$old', 2000)], limited: true),
+        };
+      await client.oneShotSync();
+      expect(
+        await client.database.getEventIdList(stored),
+        contains(r'$older'),
+        reason: 'no gap: the stored timeline stays',
+      );
+
+      server
+        ..forgetPos = 1
+        ..rooms = {
+          _roomId: room([message(r'$after_gap', 9000)], limited: true),
+        };
+      await client.oneShotSync();
+      expect(
+        await client.database.getEventIdList(stored),
+        isNot(contains(r'$older')),
+        reason: 'a gap: dropped, as /v3/sync does',
+      );
+      await client.dispose();
+    });
+
+    test('c1-2: per-thread unread counts survive the change to Sliding Sync',
+        () async {
+      final server = _Homeserver();
+      final client = await _client(server, forceLegacySync: true);
+      final room = Room(id: _roomId, client: client);
+      await client.database.transaction(
+        () => client.handleSync(
+          SyncUpdate.fromJson({
+            'next_batch': 'v3_0_0',
+            'rooms': {
+              'join': {
+                _roomId: {
+                  'state': {
+                    'events': [
+                      _state(
+                        'm.room.member',
+                        {'membership': 'join'},
+                        stateKey: _alice,
+                      ),
+                    ],
+                  },
+                  'unread_notifications': {
+                    'notification_count': 0,
+                    'highlight_count': 0,
+                  },
+                  'unread_thread_notifications': {
+                    r'$thread_root': {
+                      'notification_count': 2,
+                      'highlight_count': 0,
+                    },
+                  },
+                },
+              },
+            },
+          }),
+        ),
+      );
+      expect(
+        client
+            .getRoomById(room.id)!
+            .unreadThreadNotifications[r'$thread_root']
+            ?.notificationCount,
+        2,
+      );
+
+      client.forceLegacySync = false;
+      server.rooms = {
+        _roomId: {
+          'initial': true,
+          'required_state': [
+            _state('m.room.member', {'membership': 'join'}, stateKey: _alice),
+          ],
+          'timeline': [],
+          // MSC4186 only has the room's own counts.
+          'notification_count': 0,
+          'highlight_count': 0,
+        },
+      };
+      await client.oneShotSync();
+      expect(client.syncTransport, SyncTransport.slidingSync);
+      expect(
+        client
+            .getRoomById(room.id)!
+            .unreadThreadNotifications[r'$thread_root']
+            ?.notificationCount,
+        2,
+        reason: 'Sliding Sync says nothing about threads',
+      );
+      await client.dispose();
+    });
+
+    test('b-1: without a count or a pos the requests wait instead of polling',
+        () async {
+      final server = _Homeserver()
+        ..omitCount = true
+        ..omitPos = true;
+      final client = await _client(server);
+      await client.oneShotSync();
+      await client.oneShotSync();
+      await client.oneShotSync();
+      final timeouts = server.slidingRequests
+          .map((r) => r.$1.queryParameters['timeout'])
+          .toList();
+      expect(timeouts, ['0', '30000', '30000']);
+      final ranges = server.slidingRequests
+          .map(
+            (r) => jsonEncode(
+              ((r.$2['lists'] as Map)['all_rooms'] as Map)['ranges'],
+            ),
+          )
+          .toSet();
+      expect(ranges, hasLength(1), reason: 'the range does not grow blindly');
       await client.dispose();
     });
   });

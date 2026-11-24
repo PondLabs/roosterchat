@@ -2742,6 +2742,39 @@ class Client extends MatrixApi {
   bool _syncContinuityLoaded = false;
   bool _slidingSyncAnnounced = false;
 
+  /// ROOSTER: The rooms a Sliding Sync answer brings for the first time on
+  /// its connection (`initial`), while it is processed: their events are
+  /// the room as it is, not news, so they notify no one (like an initial
+  /// `/v3/sync`).
+  Set<String> _quietSlidingSyncRooms = const {};
+
+  /// ROOSTER: Set while a Sliding Sync answer is processed: MSC4186 has no
+  /// per-thread unread counts, so the ones held stay as they are.
+  bool _syncWithoutThreadCounts = false;
+
+  /// ROOSTER: Whether events of [room] in this sync are news to announce
+  /// (notifications, call events).
+  bool _announcesNewEvents(Room room) =>
+      prevBatch != null && !_quietSlidingSyncRooms.contains(room.id);
+
+  /// ROOSTER: A limited timeline that overlaps what the database holds has
+  /// no gap: a new Sliding Sync connection sends the latest events of a
+  /// room the client knows with `limited`, which is not a reason to drop
+  /// the stored timeline.
+  Future<void> _keepTimelinesWithoutGap(SyncUpdate update) async {
+    for (final entry in update.rooms?.join?.entries ??
+        const <MapEntry<String, JoinedRoomUpdate>>[]) {
+      final timeline = entry.value.timeline;
+      final room = getRoomById(entry.key);
+      if (timeline?.limited != true || room == null) continue;
+      // The newest events of the stored timeline, where an overlap is.
+      final stored = (await database.getEventIdList(room, limit: 100)).toSet();
+      if (timeline!.events?.any((e) => stored.contains(e.eventId)) ?? false) {
+        timeline.limited = false;
+      }
+    }
+  }
+
   void _setSyncTransport(SyncTransport transport) {
     if (onSyncTransportChanged.value != transport) {
       onSyncTransportChanged.add(transport);
@@ -2824,7 +2857,7 @@ class Client extends MatrixApi {
     await ensureNotSoftLoggedOut(timeout * 2);
     if (!isLogged() || _disposed || _aborted) return;
 
-    final waits = transport.pos != null && !transport.loadingRooms;
+    final waits = transport.waitsForNews;
     final request = transport.sync(timeout: timeout, setPresence: syncPresence);
     _currentSyncId = request.hashCode;
     onSyncStatus.add(SyncStatusUpdate(SyncStatus.waitingForResponse));
@@ -2872,7 +2905,15 @@ class Client extends MatrixApi {
       if (response.fromScratch) {
         await _markDeviceListsOutdated(_userDeviceKeys.keys);
       }
-      await _handleSync(update, direction: Direction.f);
+      await _keepTimelinesWithoutGap(update);
+      _quietSlidingSyncRooms = response.initialRooms;
+      _syncWithoutThreadCounts = true;
+      try {
+        await _handleSync(update, direction: Direction.f);
+      } finally {
+        _quietSlidingSyncRooms = const {};
+        _syncWithoutThreadCounts = false;
+      }
       next.record(
         update,
         SyncTransport.slidingSync,
@@ -3769,7 +3810,7 @@ class Client extends MatrixApi {
               room.forgetFileSend(txid); // ROOSTER
             } // ROOSTER
             onTimelineEvent.add(timelineEvent);
-            if (prevBatch != null &&
+            if (_announcesNewEvents(room) && // ROOSTER
                 timelineEvent.senderId != userID &&
                 room.notificationCount > 0 &&
                 pushruleEvaluator.match(timelineEvent).notify) {
@@ -3785,7 +3826,7 @@ class Client extends MatrixApi {
       }
 
       // Trigger local notification for a new invite:
-      if (prevBatch != null &&
+      if (_announcesNewEvents(room) && // ROOSTER
           type == EventUpdateType.inviteState &&
           event.type == EventTypes.RoomMember &&
           event.stateKey == userID) {
@@ -3802,7 +3843,7 @@ class Client extends MatrixApi {
         );
       }
 
-      if (prevBatch != null &&
+      if (_announcesNewEvents(room) && // ROOSTER
           (type == EventUpdateType.timeline ||
               type == EventUpdateType.decryptedTimelineQueue)) {
         if (event is MatrixEvent &&
@@ -3890,7 +3931,8 @@ class Client extends MatrixApi {
             rooms[roomIndex].highlightCount !=
                 (chatUpdate.unreadNotifications?.highlightCount ?? 0) ||
             // ROOSTER: or the per-thread counts change.
-            _threadNotificationsChange(rooms[roomIndex], chatUpdate) ||
+            (!_syncWithoutThreadCounts &&
+                _threadNotificationsChange(rooms[roomIndex], chatUpdate)) ||
             chatUpdate.summary != null ||
             chatUpdate.timeline?.prevBatch != null)) {
       /// 1. [InvitedRoomUpdate] doesn't have prev_batch, so we want to set it in case
@@ -3911,7 +3953,10 @@ class Client extends MatrixApi {
 
       // ROOSTER: Per-thread unread counts from /sync (v1.4) replace the ones
       // we hold, so a thread the server left out is no longer counted.
-      if (_carriesThreadNotifications(chatUpdate)) {
+      // A Sliding Sync update has no per-thread counts (MSC4186): it says
+      // nothing about them.
+      if (!_syncWithoutThreadCounts &&
+          _carriesThreadNotifications(chatUpdate)) {
         if (_threadNotificationsChange(rooms[roomIndex], chatUpdate)) {
           _threadNotificationsDirty = true;
         }
