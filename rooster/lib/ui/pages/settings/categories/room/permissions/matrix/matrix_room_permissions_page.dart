@@ -3,6 +3,7 @@ import 'package:rooster/client/matrix/matrix_room_permissions.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/pages/settings/categories/room/permissions/matrix/matrix_room_permissions_view.dart';
+import 'package:rooster/ui/pages/settings/categories/room/permissions/matrix/room_moderation_section.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' as matrix;
@@ -705,16 +706,14 @@ class _MatrixRoomPermissionsPageState extends State<MatrixRoomPermissionsPage> {
       canEdit: canEdit,
     );
 
-    if (!MatrixRoomPermissionsPage.isPrivilegedCreatorsRoomVersion(
-      widget.room.roomVersion,
-    )) {
-      return view;
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildImmutableCreatorsSection(context),
+        RoomModerationSection(widget.room),
+        if (MatrixRoomPermissionsPage.isPrivilegedCreatorsRoomVersion(
+          widget.room.roomVersion,
+        ))
+          _buildImmutableCreatorsSection(context),
         Expanded(child: view),
       ],
     );
