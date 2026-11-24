@@ -692,3 +692,15 @@ Changes since the copy:
   `org.matrix.msc4143.rtc.member` memberships (state or sticky,
   `RtcMemberships`, `RtcCallMembership.fromRtcMember`), skipping a device
   the legacy memberships already list.
+- Discovery never drops TLS (T6.2): in `lib/src/client.dart` the
+  `/.well-known/matrix/client` redirects and, through the same hand-run
+  follower, `getAuthMetadata`'s (no longer the generated call, which let
+  `dart:io` follow redirects to any scheme) are refused from `https` to
+  `http` before the `http` URL is asked for, and `checkHomeserver` refuses a
+  well-known whose `m.homeserver.base_url` is `http` on another machine
+  unless the server was given as `http://`; `localhost`, `127.x.x.x` and
+  `::1` pass. Both throw `InsecureDiscoveryException`, which
+  `checkHomeserver` passes on, from the `auth_metadata` step too, instead
+  of falling back to `/v3/login`. In a browser `fetch` follows the
+  redirects and the app does not see them; an HTTPS page blocks the
+  mixed content.

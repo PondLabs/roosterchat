@@ -322,6 +322,7 @@
   "labelAppAccountLoadFailed": "Não foi possível carregar a conta",
   "messageAppAccountLoadFailed": "Uma das contas registradas ({account}…) não carregou direito. Confira os logs para mais detalhes",
   "labelLoginSsoHomeserver": "o servidor",
+  "errorLoginHomeserverInsecure": "Este servidor tenta levar a conexão de HTTPS para HTTP sem criptografia, por isso foi recusado.",
   "labelRoomRoleOwner": "Dono",
   "labelRoomRoleAdmin": "Administrador",
   "labelRoomRoleModerator": "Moderador",

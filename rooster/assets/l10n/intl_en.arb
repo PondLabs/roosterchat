@@ -2141,6 +2141,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "errorLoginHomeserverInsecure": "This server tries to move the connection from HTTPS to unencrypted HTTP, so it was refused.",
+  "@errorLoginHomeserverInsecure": {
+    "description": "Under the homeserver field on the login screen when the server's discovery redirects from a secure (HTTPS) address to an insecure (HTTP) one, or names an HTTP server, and the app refused to connect",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelRoomRoleOwner": "Owner",
   "@labelRoomRoleOwner": {
     "description": "Role of someone in a room or space (shown next to their name): one of its creators, above the admins",
