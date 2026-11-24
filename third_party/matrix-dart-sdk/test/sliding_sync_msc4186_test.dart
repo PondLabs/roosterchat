@@ -26,6 +26,8 @@ http.Response _json(Object body, [int status = 200]) => http.Response(
       headers: {'content-type': 'application/json'},
     );
 
+http.Response _notFound() => http.Response('Not Found', 404);
+
 /// A homeserver with a to-device inbox (a message is deleted once a
 /// request acknowledges it) and a stream of device list changes, both
 /// readable through `/v3/sync` tokens and Sliding Sync positions.
@@ -36,6 +38,9 @@ class _Homeserver {
 
   /// Sliding Sync answers 404 `M_UNRECOGNIZED` from now on.
   bool slidingSyncGone = false;
+
+  /// Sliding Sync answers a bare 404 page, as a reverse proxy does.
+  bool slidingSyncNotFound = false;
 
   /// How many requests with a `pos` get `M_UNKNOWN_POS`.
   int forgetPos = 0;
@@ -94,6 +99,7 @@ class _Homeserver {
     if (path == _ssPath || path == _stablePath) {
       final body = jsonDecode(request.body) as Map<String, Object?>;
       slidingRequests.add((request.url, body));
+      if (slidingSyncNotFound) return _notFound();
       if (slidingSyncGone || (path == _stablePath && stableGone)) {
         return _json({'errcode': 'M_UNRECOGNIZED', 'error': 'gone'}, 404);
       }
@@ -689,6 +695,19 @@ void main() {
         reason: 'each change once, none lost',
       );
       expect(server.inbox, isEmpty);
+      await client.dispose();
+    });
+
+    test('a bare 404 from a proxy also sends the loop back', () async {
+      final server = _Homeserver();
+      final client = await _client(server);
+      await client.oneShotSync();
+      server.slidingSyncNotFound = true;
+      await client.oneShotSync();
+      expect(client.slidingSyncFallbackReason, 'HTTP 404');
+      await client.oneShotSync();
+      expect(server.v3Requests, hasLength(1));
+      expect(client.syncTransport, SyncTransport.v3);
       await client.dispose();
     });
 
