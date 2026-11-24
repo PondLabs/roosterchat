@@ -26,8 +26,8 @@ enum MegolmExportError {
   /// No `BEGIN`/`END MEGOLM SESSION DATA` lines: some other file.
   notAKeyExport,
 
-  /// Broken base64, too short, or a version this app does not know: a
-  /// truncated or damaged file.
+  /// Broken base64, too short, a version this app does not know, or a
+  /// round count no client writes: a truncated or damaged file.
   damaged,
 
   /// The HMAC does not match: the passphrase is wrong (or the encrypted
@@ -53,6 +53,12 @@ class MegolmExportFormat {
 
   /// Element's round count: it takes a guesser that long per passphrase.
   static const defaultRounds = 500000;
+
+  /// The most rounds a file may ask for: twenty times Element's. The count
+  /// is in the file, so without a ceiling a file saying 0xFFFFFFFF would
+  /// keep the device deriving the key for hours before the HMAC could
+  /// tell anything.
+  static const maxRounds = 10000000;
 
   static const _version = 1;
   static const _saltLength = 16;
@@ -81,6 +87,9 @@ class MegolmExportFormat {
     int rounds = defaultRounds,
     Random? random,
   }) async {
+    if (rounds < 1 || rounds > maxRounds) {
+      throw ArgumentError.value(rounds, 'rounds', 'not in 1..$maxRounds');
+    }
     final rng = random ?? Random.secure();
     List<int> randomBytes(int n) => List.generate(n, (_) => rng.nextInt(256));
     final salt = randomBytes(_saltLength);
@@ -137,7 +146,8 @@ class MegolmExportFormat {
     final iv = data.sublist(1 + _saltLength, 1 + _saltLength + _ivLength);
     final rounds = ByteData.sublistView(data, _headerLength - 4, _headerLength)
         .getUint32(0);
-    if (rounds == 0) {
+    // Checked before any key derivation, which is what the count costs.
+    if (rounds == 0 || rounds > maxRounds) {
       throw const MegolmExportException(MegolmExportError.damaged);
     }
     final signed = Uint8List.sublistView(data, 0, data.length - _macLength);
