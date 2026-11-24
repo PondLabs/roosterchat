@@ -204,10 +204,13 @@ class MatrixTokenRefresher {
     final client = _client();
     final userId = client.userID!;
     final deviceId = client.deviceID!;
+    // Not through this session's renewal: a refusal of the new token must
+    // not be sent again with this session's token, nor its lock or
+    // suspension be reported as this account's.
     final owner = await matrix.MatrixApi(
       homeserver: client.homeserver,
       accessToken: accessToken,
-      httpClient: client.httpClient,
+      httpClient: _outsideSession(client.httpClient),
     ).getTokenOwner();
     if (owner.userId != userId) throw const ReauthenticationMismatch();
     if (owner.deviceId != deviceId) {
@@ -223,6 +226,17 @@ class MatrixTokenRefresher {
           : null,
       oidcClientId: oidcClientId,
     );
+  }
+
+  /// [httpClient] without the [TokenRefreshingHttpClient] in it, keeping the
+  /// SDK's timeout and what is under it (the speed log, the transport).
+  static http.Client _outsideSession(http.Client httpClient) {
+    if (httpClient is matrix.TimeoutHttpClient) {
+      return matrix.FixedTimeoutHttpClient(
+          _outsideSession(httpClient.inner), httpClient.timeout);
+    }
+    if (httpClient is TokenRefreshingHttpClient) return httpClient._inner;
+    return httpClient;
   }
 
   /// Puts the new tokens on the session this device has, without a new
