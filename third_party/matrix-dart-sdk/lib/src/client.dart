@@ -33,6 +33,7 @@ import 'package:matrix/matrix.dart';
 import 'package:matrix/matrix_api_lite/generated/fixed_model.dart';
 import 'package:matrix/msc_extensions/msc_unpublished_custom_refresh_token_lifetime/msc_unpublished_custom_refresh_token_lifetime.dart';
 import 'package:matrix/src/models/timeline_chunk.dart';
+import 'package:matrix/src/sliding_sync/sync_transport_continuity.dart'; // ROOSTER
 import 'package:matrix/src/utils/cached_stream_controller.dart';
 import 'package:matrix/src/utils/client_init_exception.dart';
 import 'package:matrix/src/utils/multilock.dart';
@@ -42,6 +43,10 @@ import 'package:matrix/src/utils/run_in_root.dart';
 import 'package:matrix/src/utils/sync_update_item_count.dart';
 import 'package:matrix/src/utils/try_get_push_rule.dart';
 import 'package:matrix/src/utils/versions_comparator.dart';
+
+// ROOSTER: Simplified Sliding Sync (MSC4186), for the app and tests.
+export 'package:matrix/src/sliding_sync/sliding_sync_hydration.dart';
+export 'package:matrix/src/sliding_sync/sliding_sync_transport.dart';
 
 typedef RoomSorter = int Function(Room a, Room b);
 
@@ -2694,9 +2699,268 @@ class Client extends MatrixApi {
     _rooms = [];
     _eventsPendingDecryption.clear();
     _unansweredKeyQueries.clear(); // ROOSTER
+    // ROOSTER: Sliding Sync starts again with the next login.
+    _syncContinuity = _slidingSync = _slidingSyncFallbackReason = null;
+    _syncContinuityLoaded = false;
     await encryption?.dispose();
     _encryption = null;
     onLoginStateChanged.add(LoginState.loggedOut);
+  }
+
+  // ROOSTER: Simplified Sliding Sync (MSC4186, Matrix 2.0). The loop uses
+  // it when the homeserver announces it in `/_matrix/client/versions` and
+  // [forceLegacySync] is off; `/v3/sync` otherwise, as before. A refusal
+  // (404, 405, M_UNRECOGNIZED) sends the loop back to `/v3/sync` for the
+  // rest of the run. See third_party/README.md, "Simplified Sliding Sync".
+
+  /// ROOSTER: Keeps the sync loop on `/v3/sync` even where the homeserver
+  /// offers Simplified Sliding Sync. Set while Sliding Sync runs, the next
+  /// request goes to `/v3/sync`, losing and repeating no to-device message.
+  bool forceLegacySync = false;
+
+  /// ROOSTER: Why this run went back to `/v3/sync` from Sliding Sync, or
+  /// null.
+  String? get slidingSyncFallbackReason => _slidingSyncFallbackReason;
+  String? _slidingSyncFallbackReason;
+
+  /// ROOSTER: The transport the sync loop uses now.
+  SyncTransport get syncTransport =>
+      onSyncTransportChanged.value ?? SyncTransport.v3;
+
+  /// ROOSTER: Each change of [syncTransport].
+  final CachedStreamController<SyncTransport> onSyncTransportChanged =
+      CachedStreamController();
+
+  /// ROOSTER: The Sliding Sync connection while the loop uses it (room
+  /// subscriptions go on it).
+  SlidingSyncTransport? get slidingSync => _slidingSync;
+  SlidingSyncTransport? _slidingSync;
+
+  /// ROOSTER: Null for an account that never could use Sliding Sync: the
+  /// `/v3/sync` loop is then the one it always was.
+  SyncTransportContinuity? _syncContinuity;
+  bool _syncContinuityLoaded = false;
+  bool _slidingSyncAnnounced = false;
+
+  /// ROOSTER: The rooms a Sliding Sync answer brings for the first time on
+  /// its connection (`initial`), while it is processed: their events are
+  /// the room as it is, not news, so they notify no one (like an initial
+  /// `/v3/sync`).
+  Set<String> _quietSlidingSyncRooms = const {};
+
+  /// ROOSTER: Set while a Sliding Sync answer is processed: MSC4186 has no
+  /// per-thread unread counts, so the ones held stay as they are.
+  bool _syncWithoutThreadCounts = false;
+
+  /// ROOSTER: Whether events of [room] in this sync are news to announce
+  /// (notifications, call events).
+  bool _announcesNewEvents(Room room) =>
+      prevBatch != null && !_quietSlidingSyncRooms.contains(room.id);
+
+  /// ROOSTER: A limited timeline that overlaps what the database holds has
+  /// no gap: a new Sliding Sync connection sends the latest events of a
+  /// room the client knows with `limited`, which is not a reason to drop
+  /// the stored timeline.
+  Future<void> _keepTimelinesWithoutGap(SyncUpdate update) async {
+    for (final entry in update.rooms?.join?.entries ??
+        const <MapEntry<String, JoinedRoomUpdate>>[]) {
+      final timeline = entry.value.timeline;
+      final room = getRoomById(entry.key);
+      if (timeline?.limited != true || room == null) continue;
+      // The newest events of the stored timeline, where an overlap is.
+      final stored = (await database.getEventIdList(room, limit: 100)).toSet();
+      if (timeline!.events?.any((e) => stored.contains(e.eventId)) ?? false) {
+        timeline.limited = false;
+      }
+    }
+  }
+
+  void _setSyncTransport(SyncTransport transport) {
+    if (onSyncTransportChanged.value != transport) {
+      onSyncTransportChanged.add(transport);
+    }
+  }
+
+  /// ROOSTER: Whether this sync goes through Sliding Sync.
+  Future<bool> _chooseSlidingSync() async {
+    var paths = const <String>[];
+    try {
+      paths = SlidingSyncEndpoint.pathsFor(await getVersions());
+    } catch (e, s) {
+      Logs().v('Unable to check the server versions for Sliding Sync', e, s);
+    }
+    _slidingSyncAnnounced = paths.isNotEmpty;
+    if (!_syncContinuityLoaded) {
+      _syncContinuityLoaded = true;
+      try {
+        final stored = await database
+            .getCustomCacheObject(SyncTransportContinuity.cacheKey);
+        if (stored != null) {
+          _syncContinuity = SyncTransportContinuity.fromJson(stored.content);
+        }
+      } catch (e, s) {
+        Logs().w('Unable to read the sync transport state', e, s);
+      }
+    }
+    if (paths.isEmpty ||
+        forceLegacySync ||
+        _slidingSyncFallbackReason != null) {
+      return false;
+    }
+    final continuity = _syncContinuity;
+    _slidingSync ??= SlidingSyncTransport(this, paths: [...paths])
+      ..pos = continuity?.transport == SyncTransport.slidingSync
+          ? continuity?.pos
+          : null
+      ..toDeviceSince = continuity?.toDeviceSince;
+    return true;
+  }
+
+  /// ROOSTER: The users' device lists are marked outdated, so their keys
+  /// are downloaded again: what a sync that cannot say what changed since
+  /// the last one (a new Sliding Sync connection, an initial `/v3/sync`)
+  /// leaves to do.
+  Future<void> _markDeviceListsOutdated(Iterable<String> userIds) async {
+    for (final userId in userIds.toList()) {
+      final keys = _userDeviceKeys[userId];
+      if (keys == null || keys.outdated) continue;
+      keys.outdated = true;
+      await database.storeUserDeviceKeysInfo(userId, true);
+    }
+  }
+
+  /// ROOSTER: Stores [next] if it changed, in the sync's transaction.
+  Future<void> _storeSyncContinuity(
+    SyncTransportContinuity? before,
+    SyncTransportContinuity next,
+  ) async {
+    final json = next.toJson();
+    if (before != null && jsonEncode(before.toJson()) == jsonEncode(json)) {
+      return;
+    }
+    await database.cacheCustomObject(SyncTransportContinuity.cacheKey, json);
+  }
+
+  /// ROOSTER: One Sliding Sync request, processed like a `/v3/sync`.
+  Future<void> _innerSlidingSync(Duration? timeout) async {
+    final transport = _slidingSync!;
+    final previous = _syncContinuity;
+    final continuity = previous ?? SyncTransportContinuity();
+    if (continuity.transport != SyncTransport.slidingSync) {
+      // Taking over: a new connection, and the `/v3/sync` token to go on
+      // from if `/v3/sync` comes back.
+      continuity.legacySince = _prevBatch;
+      transport.resetConnection();
+    }
+    _setSyncTransport(SyncTransport.slidingSync);
+    timeout ??= const Duration(seconds: 30);
+    await ensureNotSoftLoggedOut(timeout * 2);
+    if (!isLogged() || _disposed || _aborted) return;
+
+    final waits = transport.waitsForNews;
+    final request = transport.sync(timeout: timeout, setPresence: syncPresence);
+    _currentSyncId = request.hashCode;
+    onSyncStatus.add(SyncStatusUpdate(SyncStatus.waitingForResponse));
+    final SlidingSyncResponse response;
+    try {
+      response = waits
+          ? await request.timeout(timeout + const Duration(seconds: 10))
+          : await request;
+    } on SlidingSyncUnavailableException catch (e) {
+      Logs().w('Sliding Sync refused (${e.reason}), back to /v3/sync');
+      _slidingSyncFallbackReason = e.reason;
+      _setSyncTransport(SyncTransport.v3);
+      _slidingSync = null;
+      _syncContinuity = continuity;
+      _retryDelay = Future.value();
+      return;
+    } on MatrixException {
+      rethrow;
+    } catch (e) {
+      throw SyncConnectionException(e);
+    }
+    onSyncStatus.add(SyncStatusUpdate(SyncStatus.processing));
+    if (_currentSyncId != request.hashCode) {
+      Logs().w('Current sync request ID has changed. Dropping this sync loop!');
+      return;
+    }
+
+    final update = slidingSyncToSyncUpdate(
+      response.json,
+      userId: userID!,
+      isJoinedRoom: (roomId) =>
+          getRoomById(roomId)?.membership == Membership.join,
+    );
+    final delivered = [...?update.toDevice];
+    continuity.dropRepeats(update, SyncTransport.slidingSync);
+    final next = SyncTransportContinuity.fromJson(continuity.toJson())
+      ..pos = response.pos ?? transport.pos
+      ..toDeviceSince = response.toDeviceNextBatch ?? transport.toDeviceSince;
+
+    await userDeviceKeysLoading;
+    await roomsLoading;
+    await _accountDataLoading;
+    _currentTransaction = database.transaction(() async {
+      // A new connection cannot say which device lists changed before it.
+      if (response.fromScratch) {
+        await _markDeviceListsOutdated(_userDeviceKeys.keys);
+      }
+      await _keepTimelinesWithoutGap(update);
+      _quietSlidingSyncRooms = response.initialRooms;
+      _syncWithoutThreadCounts = true;
+      try {
+        await _handleSync(update, direction: Direction.f);
+      } finally {
+        _quietSlidingSyncRooms = const {};
+        _syncWithoutThreadCounts = false;
+      }
+      next.record(
+        update,
+        SyncTransport.slidingSync,
+        delivered: delivered,
+      );
+      await _storeSyncContinuity(previous, next);
+    });
+    await runBenchmarked(
+      'Process sync',
+      () async => await _currentTransaction,
+      update.itemCount,
+    );
+    if (_disposed || _aborted) return;
+    transport.commit(response);
+    _syncContinuity = next;
+    // The session is past its first sync (notifications, connection
+    // status). Only kept in memory: the stored token stays the `/v3` one.
+    _prevBatch = transport.pos ?? _prevBatch;
+    onSyncStatus.add(SyncStatusUpdate(SyncStatus.cleaningUp));
+    // ignore: unawaited_futures
+    database.deleteOldFiles(
+      DateTime.now().subtract(Duration(days: 30)).millisecondsSinceEpoch,
+    );
+    await updateUserDeviceKeys();
+    if (encryptionEnabled) {
+      encryption?.onSync();
+    }
+    try {
+      await processToDeviceQueue();
+    } catch (_) {} // we want to dispose any errors this throws
+    _retryDelay = Future.value();
+    onSyncStatus.add(SyncStatusUpdate(SyncStatus.finished));
+  }
+
+  /// ROOSTER: The continuity of a `/v3/sync` request, or null when this
+  /// account never could use Sliding Sync. Back from Sliding Sync, the
+  /// request goes on from the `/v3` token it had before.
+  SyncTransportContinuity? _legacySyncContinuity() {
+    _setSyncTransport(SyncTransport.v3);
+    final continuity = _syncContinuity ??
+        (_slidingSyncAnnounced
+            ? _syncContinuity = SyncTransportContinuity()
+            : null);
+    if (continuity?.transport == SyncTransport.slidingSync) {
+      _prevBatch = continuity!.legacySince;
+    }
+    return continuity;
   }
 
   bool _backgroundSync = true;
@@ -2890,6 +3154,15 @@ class Client extends MatrixApi {
       }
       Object? syncError;
 
+      // ROOSTER: Simplified Sliding Sync (MSC4186) where the server offers
+      // it; else `/v3/sync`, going on from its own token.
+      if (await _chooseSlidingSync()) {
+        if (!isLogged() || _disposed || _aborted) return;
+        await _innerSlidingSync(timeout);
+        return;
+      }
+      final continuity = _legacySyncContinuity(); // ROOSTER
+
       // The timeout we send to the server for the sync loop. It says to the
       // server that we want to receive an empty sync response after this
       // amount of time if nothing happens.
@@ -2945,10 +3218,36 @@ class Client extends MatrixApi {
       await userDeviceKeysLoading;
       await roomsLoading;
       await _accountDataLoading;
+      // ROOSTER: The first `/v3/sync` after Sliding Sync drops what Sliding
+      // Sync delivered already (to-device messages it had not acknowledged,
+      // device lists it reported).
+      final delivered = [...?syncResp.toDevice];
+      final fromSlidingSync =
+          continuity?.transport == SyncTransport.slidingSync;
+      final checkKeys = continuity?.dropRepeats(syncResp, SyncTransport.v3);
+      final next = continuity == null
+          ? null
+          : SyncTransportContinuity.fromJson(continuity.toJson());
       _currentTransaction = database.transaction(() async {
+        // ROOSTER: An initial `/v3/sync` says no device list changes, and a
+        // repeat after keys were downloaded may hide a newer change.
+        if (fromSlidingSync) {
+          await _markDeviceListsOutdated(
+            prevBatch == null ? _userDeviceKeys.keys : checkKeys ?? const {},
+          );
+        }
         await _handleSync(syncResp, direction: Direction.f);
         if (prevBatch != syncResp.nextBatch) {
           await database.storePrevBatch(syncResp.nextBatch);
+        }
+        if (next != null) {
+          // ROOSTER
+          next.record(
+            syncResp,
+            SyncTransport.v3,
+            delivered: delivered,
+          );
+          await _storeSyncContinuity(continuity, next);
         }
       });
       await runBenchmarked(
@@ -2958,6 +3257,7 @@ class Client extends MatrixApi {
       );
       if (_disposed || _aborted) return;
       _prevBatch = syncResp.nextBatch;
+      if (next != null) _syncContinuity = next; // ROOSTER
       onSyncStatus.add(SyncStatusUpdate(SyncStatus.cleaningUp));
       // ignore: unawaited_futures
       database.deleteOldFiles(
@@ -3510,7 +3810,7 @@ class Client extends MatrixApi {
               room.forgetFileSend(txid); // ROOSTER
             } // ROOSTER
             onTimelineEvent.add(timelineEvent);
-            if (prevBatch != null &&
+            if (_announcesNewEvents(room) && // ROOSTER
                 timelineEvent.senderId != userID &&
                 room.notificationCount > 0 &&
                 pushruleEvaluator.match(timelineEvent).notify) {
@@ -3526,7 +3826,7 @@ class Client extends MatrixApi {
       }
 
       // Trigger local notification for a new invite:
-      if (prevBatch != null &&
+      if (_announcesNewEvents(room) && // ROOSTER
           type == EventUpdateType.inviteState &&
           event.type == EventTypes.RoomMember &&
           event.stateKey == userID) {
@@ -3543,7 +3843,7 @@ class Client extends MatrixApi {
         );
       }
 
-      if (prevBatch != null &&
+      if (_announcesNewEvents(room) && // ROOSTER
           (type == EventUpdateType.timeline ||
               type == EventUpdateType.decryptedTimelineQueue)) {
         if (event is MatrixEvent &&
@@ -3631,7 +3931,8 @@ class Client extends MatrixApi {
             rooms[roomIndex].highlightCount !=
                 (chatUpdate.unreadNotifications?.highlightCount ?? 0) ||
             // ROOSTER: or the per-thread counts change.
-            _threadNotificationsChange(rooms[roomIndex], chatUpdate) ||
+            (!_syncWithoutThreadCounts &&
+                _threadNotificationsChange(rooms[roomIndex], chatUpdate)) ||
             chatUpdate.summary != null ||
             chatUpdate.timeline?.prevBatch != null)) {
       /// 1. [InvitedRoomUpdate] doesn't have prev_batch, so we want to set it in case
@@ -3652,7 +3953,10 @@ class Client extends MatrixApi {
 
       // ROOSTER: Per-thread unread counts from /sync (v1.4) replace the ones
       // we hold, so a thread the server left out is no longer counted.
-      if (_carriesThreadNotifications(chatUpdate)) {
+      // A Sliding Sync update has no per-thread counts (MSC4186): it says
+      // nothing about them.
+      if (!_syncWithoutThreadCounts &&
+          _carriesThreadNotifications(chatUpdate)) {
         if (_threadNotificationsChange(rooms[roomIndex], chatUpdate)) {
           _threadNotificationsDirty = true;
         }
@@ -4502,9 +4806,25 @@ class Client extends MatrixApi {
   Future<void> clearCache() async {
     await abortSync();
     _prevBatch = null;
+    // ROOSTER: A clean sync on either transport, keeping the to-device
+    // position, which is not cache.
+    final continuity = _syncContinuity;
+    if (continuity != null) {
+      continuity
+        ..legacySince = null
+        ..pos = null;
+      _slidingSync?.resetConnection();
+    }
     _trackedUserIds = null;
     rooms.clear();
     await database.clearCache();
+    if (continuity != null) {
+      // ROOSTER
+      await database.cacheCustomObject(
+        SyncTransportContinuity.cacheKey,
+        continuity.toJson(),
+      );
+    }
     encryption?.keyManager.clearOutboundGroupSessions();
     _eventsPendingDecryption.clear();
     onCacheCleared.add(true);
