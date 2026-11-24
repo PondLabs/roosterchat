@@ -10,6 +10,7 @@ import 'package:rooster/client/matrix/matrix_room_permissions.dart';
 import 'package:rooster/client/matrix/media/interrupted_photo_uploads.dart';
 import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 import 'package:rooster/client/matrix/matrix_timeline.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_location_uri.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_mixin_reactions.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_mixin_related.dart';
@@ -100,6 +101,9 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
     var e = getDisplayEvent(timeline);
 
     if (["m.file", "m.image", "m.video", "m.audio"].contains(e.messageType)) {
+      // A caption (v1.10: `body` apart from `filename`) without its own
+      // formatted body, sent with mentions: its text, not nothing.
+      if (e.formattedText == "") return _getPlaintextBody(timeline: timeline);
       return e.formattedText;
     }
 
@@ -152,6 +156,54 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
     }
 
     return null;
+  }
+
+  /// `m.notice`: a message from a bot or a service, drawn apart from
+  /// people's messages.
+  bool get isNotice => event.messageType == matrix.MessageTypes.Notice;
+
+  /// `m.location`: a place, drawn as a card, never as its raw text.
+  bool get isLocation => event.messageType == matrix.MessageTypes.Location;
+
+  /// The place of an `m.location` message: its `geo_uri`, else the
+  /// extensible-events location (MSC3488). Null when neither is a valid
+  /// `geo:` URI, or for any other message.
+  MatrixLocationUri? get location {
+    if (!isLocation) return null;
+    final extensible =
+        event.content.tryGetMap<String, Object?>("org.matrix.msc3488.location");
+    return MatrixLocationUri.tryParse(event.content["geo_uri"]) ??
+        MatrixLocationUri.tryParse(extensible?["uri"]);
+  }
+
+  /// What the sender says the place is: MSC3488's description, else the
+  /// body when it is more than the URI (Element writes "Location geo:...
+  /// at ..." there).
+  String? get locationDescription {
+    if (!isLocation) return null;
+    final extensible =
+        event.content.tryGetMap<String, Object?>("org.matrix.msc3488.location");
+    final description = extensible?["description"];
+    if (description is String && description.trim().isNotEmpty) {
+      return description.trim();
+    }
+    final body = event.content["body"];
+    if (body is String &&
+        body.trim().isNotEmpty &&
+        !body.toLowerCase().contains("geo:")) {
+      return body.trim();
+    }
+    return null;
+  }
+
+  /// The player's details for an `m.audio` message with a file, a voice
+  /// message (MSC3245) or any other audio.
+  MatrixAudioMetadata? get audio {
+    if (event.messageType != matrix.MessageTypes.Audio) return null;
+    final file = attachments?.firstOrNull;
+    if (file is! FileAttachment) return null;
+    return MatrixAudioMetadata.fromContent(event.content,
+        name: file.name, mimeType: file.mimeType, size: file.fileSize);
   }
 
   @override
@@ -298,5 +350,71 @@ class PlaintextMessageBody extends StatelessWidget {
         style: TextStyle(fontSize: big ? 34 : null),
         children: TextUtils.linkifyString(content,
             context: context, clientId: clientIdentifier)));
+  }
+}
+
+/// What an `m.audio` message says about its sound: its length (`info`, or
+/// the extensible-events audio of MSC1767), its waveform when sent, and
+/// whether it is a voice message (MSC3245). Every field is optional: a
+/// message without them still plays.
+class MatrixAudioMetadata {
+  const MatrixAudioMetadata({
+    this.duration,
+    this.waveform,
+    this.isVoice = false,
+    this.name,
+    this.mimeType,
+    this.size,
+  });
+
+  /// The longest a message's sound is believed to be: a longer one is
+  /// taken as not said.
+  static const maxDuration = Duration(hours: 24);
+
+  /// The most waveform points read; more are dropped.
+  static const maxWaveformPoints = 4096;
+
+  final Duration? duration;
+
+  /// From 0 to 1, one per point the sender measured.
+  final List<double>? waveform;
+  final bool isVoice;
+  final String? name;
+  final String? mimeType;
+  final int? size;
+
+  static MatrixAudioMetadata fromContent(Map<String, Object?> content,
+      {String? name, String? mimeType, int? size}) {
+    final info = content["info"];
+    final extensible = content["org.matrix.msc1767.audio"];
+    final audio = extensible is Map ? extensible : const {};
+
+    return MatrixAudioMetadata(
+      duration: _duration(info is Map ? info["duration"] : null) ??
+          _duration(audio["duration"]),
+      waveform: _waveform(audio["waveform"]),
+      isVoice: content.containsKey("org.matrix.msc3245.voice"),
+      name: name,
+      mimeType: mimeType,
+      size: size,
+    );
+  }
+
+  static Duration? _duration(Object? ms) {
+    if (ms is! num || !ms.isFinite || ms <= 0) return null;
+    final duration = Duration(milliseconds: ms.round());
+    return duration > maxDuration ? null : duration;
+  }
+
+  /// MSC1767's waveform: whole numbers from 0 to 1024. Anything else, or
+  /// a waveform with nothing in it, is taken as not sent.
+  static List<double>? _waveform(Object? points) {
+    if (points is! List || points.isEmpty) return null;
+    final values = <double>[];
+    for (final point in points.take(maxWaveformPoints)) {
+      if (point is! num || !point.isFinite || point < 0) return null;
+      values.add(point.clamp(0, 1024) / 1024);
+    }
+    return values;
   }
 }

@@ -278,11 +278,13 @@ void main() {
         expect(file.location, LocationAnswer.none);
 
         await typeAndSend(tester, 'look');
-        expect(sent.first.message, 'look',
+        expect(composerText(tester), '',
             reason: 'sent at once, with no question');
         expect(
             find.text(chatState(tester).promptChatDontSendFile), findsNothing);
         await settle(tester);
+        // The text is the photo's caption (Matrix v1.10): one message.
+        expect(sent.single.message, 'look');
         expect([for (final m in sent) ...m.files.map((f) => f.file.name)],
             ['black.jpg']);
 
