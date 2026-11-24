@@ -17,6 +17,7 @@ import 'package:rooster/ui/pages/settings/categories/app/boolean_preference_togg
 import 'package:rooster/ui/pages/settings/categories/app/double_preference_slider.dart';
 import 'package:rooster/ui/pages/settings/categories/developer/cumulative_diagnostics_widget.dart';
 import 'package:rooster/ui/pages/settings/categories/developer/speed_log_panel.dart';
+import 'package:rooster/ui/pages/settings/categories/developer/sync_transport_panel.dart';
 import 'package:rooster/utils/background_tasks/background_task_manager.dart';
 import 'package:rooster/utils/background_tasks/mock_tasks.dart';
 import 'package:rooster/utils/system_processes_utils.dart';
@@ -273,6 +274,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
         children: [
       performance(),
       SpeedLogPanel(),
+      SyncTransportPanel(),
       benchmarks(),
       windowSize(),
       notificationTests(),

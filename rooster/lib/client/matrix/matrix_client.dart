@@ -23,6 +23,7 @@ import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/matrix_native_implementations.dart';
 import 'package:rooster/client/matrix/matrix_room_preview.dart';
 import 'package:rooster/client/room_preview.dart';
+import 'package:rooster/config/preferences/bool_preference.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/global_config.dart';
 import 'package:rooster/debug/log.dart';
@@ -522,10 +523,18 @@ class MatrixClient extends Client {
       // SDK message went through print on every sync.
     );
 
+    // Simplified Sliding Sync (MSC4186) where the homeserver offers it,
+    // unless Settings > Developer > Sync keeps the account on /v3/sync.
+    client.forceLegacySync = forceV3Sync.value;
     client.onSyncStatus.stream.listen(onSyncStatusChanged);
 
     return client;
   }
+
+  /// Keeps every account on `/v3/sync` even where the homeserver offers
+  /// Simplified Sliding Sync (Settings > Developer > Sync).
+  static final BoolPreference forceV3Sync =
+      BoolPreference("force_v3_sync", defaultValue: false);
 
   /// The SDK's own sync filter, plus the per-thread unread counts (Matrix
   /// v1.4, MSC3773) the threads' badges show. The server then leaves the
