@@ -107,24 +107,45 @@ class RoomKeyBundleManager {
 
   RoomKeyBundleManager(this.encryption);
 
-  /// A room event came in a sync: the history visibility is noted here too.
-  /// `Room.historyVisibility` alone is not enough: the state the room keeps
-  /// in memory misses an event stored while `Room.postLoad` was reading the
-  /// database, and then says nothing, or what the room was before.
+  /// A room event came in a sync: the history visibility is noted here too,
+  /// as a second word next to `Room.historyVisibility`. The room's state in
+  /// memory used to miss an event stored while `Room.postLoad` was reading
+  /// the database (fixed there, T6.4); this note stays so that a gap of
+  /// that kind, or a database that drops a write, never lets out more than
+  /// the two agree on.
   void handleEventUpdate(Event event) {
     if (event.type != EventTypes.HistoryVisibility || event.stateKey != '') {
       return;
     }
     final roomId = event.room.id;
-    // Not over a later one: paginating may bring state from before.
-    final seen = _seenVisibility[roomId];
-    if (seen != null && seen.$2.isAfter(event.originServerTs)) return;
     final text = event.content.tryGet<String>('history_visibility');
+    final visibility =
+        HistoryVisibility.values.singleWhereOrNull((v) => v.text == text);
+    final seen = _seenVisibility[roomId];
+    // ROOSTER (T6.4): one dated before the last seen is left out only when
+    // it lets out more history than that one (state from before may come
+    // late). One that lets out less always counts: another server's clock
+    // may run behind, and a `joined` it sent must not leave the room
+    // `shared` here.
+    final earlier = seen != null && seen.$2.isAfter(event.originServerTs);
+    if (earlier && _historyLetOut(visibility) > _historyLetOut(seen.$1)) {
+      return;
+    }
     _seenVisibility[roomId] = (
-      HistoryVisibility.values.singleWhereOrNull((v) => v.text == text),
-      event.originServerTs,
+      visibility,
+      earlier ? seen.$2 : event.originServerTs,
     );
   }
+
+  /// How much of a room's history [visibility] lets a newcomer have through
+  /// a bundle: none under `joined` or none stated, then `invited`, then
+  /// `shared` and `world_readable`.
+  static int _historyLetOut(HistoryVisibility? visibility) =>
+      switch (visibility) {
+        HistoryVisibility.invited => 1,
+        HistoryVisibility.shared || HistoryVisibility.worldReadable => 2,
+        _ => 0,
+      };
 
   /// [room]'s history visibility as far as sharing goes, once its state is
   /// loaded (`Room.postLoad`): what the room's state says, or what the syncs
