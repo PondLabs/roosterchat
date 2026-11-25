@@ -152,9 +152,13 @@ Object get skipWithoutVodozemac =>
         ? 'VODOZEMAC_LIB_DIR is not set: PKCE hashes with vodozemac'
         : false;
 
-Future<void> initVodozemac() async {
-  if (vod.isInitialized()) return;
-  var path = Platform.environment['VODOZEMAC_LIB_DIR']!.replaceAll(r'\', '/');
+/// Loads vodozemac from `VODOZEMAC_LIB_DIR` (read from [environment], the
+/// process's by default). Without it this does nothing, so a `setUpAll` can
+/// call it in a file whose tests are skipped by [skipWithoutVodozemac].
+Future<void> initVodozemac({Map<String, String>? environment}) async {
+  final dir = (environment ?? Platform.environment)['VODOZEMAC_LIB_DIR'];
+  if (dir == null || vod.isInitialized()) return;
+  var path = dir.replaceAll(r'\', '/');
   if (!path.startsWith('/')) path = '/$path';
   if (!path.endsWith('/')) path = '$path/';
   await vod.init(libraryPath: path);
