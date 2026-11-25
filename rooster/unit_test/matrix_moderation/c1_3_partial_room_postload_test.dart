@@ -27,6 +27,12 @@ class _StoredStateDatabase extends MemoryCacheDatabase {
     matrix.Room room,
   ) async =>
       [for (final build in _builders) build(room)];
+
+  /// `Room.postLoad` reads the room's state in a transaction. Only here:
+  /// [MemoryCacheDatabase] stores nothing a sync writes, so a sync that ran
+  /// its transaction on it would fail halfway, with nobody to catch it.
+  @override
+  Future<void> transaction(Future<void> Function() action) => action();
 }
 
 class _PartialClient extends matrix.Client {
