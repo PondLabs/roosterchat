@@ -418,6 +418,12 @@ class MatrixRoom extends Room implements RoomSendPreparation {
       _matrixRoom.client.onSync.stream
           .where((i) => i.rooms?.join?.containsKey(_matrixRoom.id) == true)
           .listen(onRoomSyncUpdate),
+      // Before Sliding Sync is used, the SDK drops the per-thread counts
+      // `/v3/sync` left (MSC4186 has none), also in rooms its answers do
+      // not name yet: their badges are drawn again without them.
+      _matrixRoom.client.onSyncTransportChanged.stream
+          .where((transport) => transport == matrix.SyncTransport.slidingSync)
+          .listen((_) => _notifyUpdate()),
       _matrixRoom.client.onEvent.stream
           .where((event) => event.roomID == _matrixRoom.id)
           .listen(onEvent),

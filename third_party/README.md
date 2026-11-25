@@ -653,12 +653,22 @@ Changes since the copy:
   keeps them (no gap), one that does not drops them as `/v3/sync` does.
   An answer without `count` stops growing the range, and one without
   `pos` still waits for news: no polling. Limits of MSC4186: it has no
-  per-thread unread counts, so a Sliding Sync update leaves
-  `Room.unreadThreadNotifications` as they are (the room's own counts come
-  from the server; the per-thread ones change only from `/v3/sync` or a
-  thread read here), and it has no presence, so other people's presence
-  stops changing while Sliding Sync runs (asking `/presence` for the
-  people on screen is left for another task).
+  per-thread unread counts, so under Sliding Sync the room's own counts
+  from the server are the badge (T6.6):
+  `Client._dropThreadNotificationsForSlidingSync` empties
+  `Room.unreadThreadNotifications` in every room (also the ones its
+  answers do not name yet) and stores them empty in
+  `rooster_unread_thread_notifications`, with the first answer of a
+  Sliding Sync that takes over from `/v3/sync` (a server that announces it
+  and refuses it keeps `/v3/sync` and its counts), and before each request
+  once it is the transport (counts restored at a restart). The transport
+  change is announced after that, so badges are drawn without them.
+  Kept, they added to the badge until each thread was read here, and a
+  read on another device never cleared them. Nothing brings them back while Sliding Sync is the
+  transport, so nothing stores them again; back on `/v3/sync` they come
+  from the server as before. And it has no presence, so other people's
+  presence stops changing while Sliding Sync runs (asking `/presence` for
+  the people on screen is left for another task).
 - Room keys stored before T3.1b (T6.1): such a session kept, with no claimed
   keys of its own, the Ed25519 key of the device its sender named in
   `requesting_device_id` (or any claim the sender wrote) in its content.

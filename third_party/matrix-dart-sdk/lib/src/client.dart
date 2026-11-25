@@ -2798,8 +2798,33 @@ class Client extends MatrixApi {
   Set<String> _quietSlidingSyncRooms = const {};
 
   /// ROOSTER: Set while a Sliding Sync answer is processed: MSC4186 has no
-  /// per-thread unread counts, so the ones held stay as they are.
+  /// per-thread unread counts, so an answer says nothing about them (there
+  /// are none to keep: see [_dropThreadNotificationsForSlidingSync]).
   bool _syncWithoutThreadCounts = false;
+
+  /// ROOSTER: T6.6. Under Sliding Sync the room's own counts from the
+  /// server are the authority. The per-thread counts `/v3/sync` left
+  /// (held, or restored at a restart) would add to the badge until each
+  /// thread is read here, a read on another device never clearing them;
+  /// so they are dropped, and stored dropped, in every room (some are not
+  /// in its answers yet): with its first answer when Sliding Sync takes
+  /// over (a server that announces it and refuses it keeps `/v3/sync` and
+  /// its counts), before each request once it is the transport (counts
+  /// stored before T6.6). Nothing brings them back while it is the
+  /// transport, so nothing stores them again; back on `/v3/sync` they come
+  /// from the server again.
+  Future<void> _dropThreadNotificationsForSlidingSync() async {
+    await roomsLoading;
+    var dropped = false;
+    for (final room in rooms) {
+      if (room.unreadThreadNotifications.isEmpty) continue;
+      room.unreadThreadNotifications = {};
+      dropped = true;
+    }
+    if (dropped || _threadNotificationsDirty) {
+      await storeUnreadThreadNotifications();
+    }
+  }
 
   /// ROOSTER: Whether events of [room] in this sync are news to announce
   /// (notifications, call events).
@@ -2895,13 +2920,17 @@ class Client extends MatrixApi {
     final transport = _slidingSync!;
     final previous = _syncContinuity;
     final continuity = previous ?? SyncTransportContinuity();
-    if (continuity.transport != SyncTransport.slidingSync) {
+    final takingOver = continuity.transport != SyncTransport.slidingSync;
+    if (takingOver) {
       // Taking over: a new connection, and the `/v3/sync` token to go on
       // from if `/v3/sync` comes back.
       continuity.legacySince = _prevBatch;
       transport.resetConnection();
+    } else {
+      // ROOSTER: T6.6, the transport already: announced once they are gone.
+      await _dropThreadNotificationsForSlidingSync();
+      _setSyncTransport(SyncTransport.slidingSync);
     }
-    _setSyncTransport(SyncTransport.slidingSync);
     timeout ??= const Duration(seconds: 30);
     await ensureNotSoftLoggedOut(timeout * 2);
     if (!isLogged() || _disposed || _aborted) return;
@@ -2955,6 +2984,11 @@ class Client extends MatrixApi {
         await _markDeviceListsOutdated(_userDeviceKeys.keys);
       }
       await _keepTimelinesWithoutGap(update);
+      if (takingOver) {
+        // ROOSTER: T6.6, Sliding Sync answered: it is the transport now.
+        await _dropThreadNotificationsForSlidingSync();
+        _setSyncTransport(SyncTransport.slidingSync);
+      }
       _quietSlidingSyncRooms = response.initialRooms;
       _syncWithoutThreadCounts = true;
       try {
