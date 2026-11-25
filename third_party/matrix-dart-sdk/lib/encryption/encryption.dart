@@ -23,6 +23,7 @@ import 'package:matrix/encryption/cross_signing.dart';
 import 'package:matrix/encryption/key_manager.dart';
 import 'package:matrix/encryption/key_verification_manager.dart';
 import 'package:matrix/encryption/olm_manager.dart';
+import 'package:matrix/encryption/room_key_bundle.dart'; // ROOSTER: MSC4268
 import 'package:matrix/encryption/ssss.dart';
 import 'package:matrix/encryption/utils/bootstrap.dart';
 import 'package:matrix/matrix.dart';
@@ -51,6 +52,7 @@ class Encryption {
   late final OlmManager olmManager;
   late final KeyVerificationManager keyVerificationManager;
   late final CrossSigning crossSigning;
+  late final RoomKeyBundleManager roomKeyBundle; // ROOSTER: MSC4268
   late SSSS ssss; // some tests mock this, which is why it isn't final
 
   late String ourDeviceId;
@@ -64,6 +66,7 @@ class Encryption {
     olmManager = OlmManager(this);
     keyVerificationManager = KeyVerificationManager(this);
     crossSigning = CrossSigning(this);
+    roomKeyBundle = RoomKeyBundleManager(this); // ROOSTER: MSC4268
   }
 
   // initial login passes null to init a new olm account
@@ -105,6 +108,10 @@ class Encryption {
   void onSync() {
     // ignore: discarded_futures
     keyVerificationManager.cleanup();
+    // ROOSTER: MSC4268, bundles waiting for the invite or for us to join.
+    runInRoot(() => roomKeyBundle.processPending());
+    // ROOSTER: the device lists are loaded and up to date by now.
+    runInRoot(() => keyManager.migrateClaimedKeysFromOlmSessions());
   }
 
   Future<void> handleToDeviceEvent(ToDeviceEvent event) async {
@@ -118,6 +125,11 @@ class Encryption {
       // "just" room key request things. We don't need these asap, so we handle
       // them in the background
       runInRoot(() => keyManager.handleToDeviceEvent(event));
+    }
+    // ROOSTER: MSC4268, the stable and the unstable type alike.
+    if (event.type == EventTypes.RoomKeyBundle ||
+        event.type == unstableRoomKeyBundleType) {
+      runInRoot(() => roomKeyBundle.handleToDeviceEvent(event));
     }
     if (event.type == EventTypes.Dummy) {
       // the previous device just had to create a new olm session, due to olm session
@@ -144,6 +156,7 @@ class Encryption {
     if (type == EventUpdateType.history) {
       return;
     }
+    roomKeyBundle.handleEventUpdate(event); // ROOSTER: MSC4268
     if (event.type.startsWith('m.key.verification.') ||
         (event.type == EventTypes.Message &&
             event.content
@@ -347,6 +360,34 @@ class Encryption {
     }
   }
 
+  // ROOSTER: whether the Megolm session that decrypted [event] proves which
+  // device sent it, read where a message shows its sender's trust.
+  MegolmSenderTrust megolmSenderTrust(Event event) {
+    final sessionId =
+        event.originalSource?.content.tryGet<String>('session_id');
+    if (event.type == EventTypes.Encrypted || sessionId == null) {
+      return MegolmSenderTrust.unverifiedOrigin;
+    }
+    final session = keyManager.getInboundGroupSession(event.room.id, sessionId);
+    final claimed = session?.senderClaimedKeys['ed25519'];
+    if (session == null ||
+        claimed == null ||
+        session.forwardingCurve25519KeyChain.isNotEmpty) {
+      return MegolmSenderTrust.unverifiedOrigin;
+    }
+    for (final device
+        in client.userDeviceKeys[event.senderId]?.deviceKeys.values ??
+            const <DeviceKeys>[]) {
+      if (device.curve25519Key == session.senderKey &&
+          device.ed25519Key == claimed) {
+        return device.verified
+            ? MegolmSenderTrust.verified
+            : MegolmSenderTrust.unverifiedDevice;
+      }
+    }
+    return MegolmSenderTrust.unverifiedOrigin;
+  }
+
   /// Encrypts the given json payload and creates a send-ready m.room.encrypted
   /// payload. This will create a new outgoingGroupSession if necessary.
   Future<Map<String, dynamic>> encryptGroupMessagePayload(
@@ -392,10 +433,7 @@ class Encryption {
       'algorithm': AlgorithmTypes.megolmV1AesSha2,
       'ciphertext':
           sess!.outboundGroupSession!.encrypt(json.encode(payloadContent)),
-      // device_id + sender_key should be removed at some point in future since
-      // they're deprecated. Just left here for compatibility
-      'device_id': client.deviceID,
-      'sender_key': identityKey,
+      // ROOSTER: Matrix v1.3 (MSC3700) removed deprecated `device_id` and `sender_key` from Megolm payloads.
       'session_id': sess.outboundGroupSession!.sessionId,
       if (mRelatesTo != null) 'm.relates_to': mRelatesTo,
     };
@@ -427,7 +465,26 @@ class Encryption {
     keyManager.dispose();
     await olmManager.dispose();
     keyVerificationManager.dispose();
+    roomKeyBundle.dispose(); // ROOSTER: MSC4268
   }
+}
+
+// ROOSTER: how far a decrypted message is tied to a device of its sender.
+enum MegolmSenderTrust {
+  /// Its session came straight from the sender's device that holds the
+  /// session's Curve25519 key, claims that device's Ed25519 key, and the
+  /// device is verified.
+  verified,
+
+  /// The same, from a device that is not verified.
+  unverifiedDevice,
+
+  /// Nothing ties it to a device of the sender: not decrypted, or a session
+  /// that was forwarded, claims another device's key or claims none (as one
+  /// stored before Rooster took the claim from the Olm session, with no
+  /// single device known for it:
+  /// [KeyManager.migrateClaimedKeysFromOlmSessions]).
+  unverifiedOrigin,
 }
 
 class DecryptException implements Exception {

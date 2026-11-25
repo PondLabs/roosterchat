@@ -311,3 +311,456 @@ Changes since the copy:
   `KeyManager._createOutboundGroupSession`
   (`lib/encryption/key_manager.dart`) logs how many devices of the room's
   members the key leaves out, with no ids.
+- Matrix v1.1–v1.19 compliance quick fixes (T0.1):
+  `Client.supportedVersions` (`lib/src/client.dart`) covers `v1.1` through
+  `v1.19`, and `Client.checkHomeserver` accepts newer `v1.x` versions while
+  throwing `BadServerVersionsException` instead of `assert(false)` when no
+  compatible version is advertised. OIDC `expires_in` in
+  `lib/msc_extensions/msc_2964_oidc_login_flow/msc_2964_oidc_login_flow.dart`
+  and `Client.refreshAccessToken` (`lib/src/client.dart`) uses
+  `Duration(seconds:)` (preserving milliseconds for legacy `/v3/refresh`
+  `expires_in_ms`) and treats missing, zero, or negative lifetimes as null.
+  `Room.sendEvent` (`lib/src/room.dart`) no longer emits `<mx-reply>` HTML or
+  `> <@user>` plaintext reply fallbacks (Matrix v1.13, MSC2781). VoIP events
+  emit stable `sdp_stream_metadata` (`lib/src/voip/models/call_events.dart`,
+  Matrix v1.10, MSC3077) while `VoIP` (`lib/src/voip/voip.dart`) retains
+  fallback reads of `org.matrix.msc3077.sdp_stream_metadata`.
+  `Encryption.encryptGroupMessagePayload` (`lib/encryption/encryption.dart`)
+  omits deprecated `device_id` and `sender_key` from Megolm payloads
+  (Matrix v1.3, MSC3700), and `Event.requestKey` (`lib/src/event.dart`) /
+  `Room.requestSessionKey` (`lib/src/room.dart`) accept a nullable `senderKey`
+  so undecryptable v1.3 events remain key-requestable. `Room.setPower`
+  (`lib/src/room.dart`) throws `RoomCreatorPowerLevelException` for creators
+  in room version 12+ and never writes creators into
+  `m.room.power_levels.users`.
+- Matrix v1.19 SDK core contracts (T1.1a):
+  `AuthenticationTypes.oauth` (`'m.oauth'`, Matrix v1.17 MSC4312) in
+  `lib/matrix_api_lite/model/auth/authentication_types.dart`.
+  `Capabilities` (`lib/matrix_api_lite/generated/model.dart`) adds
+  `mForgetForcedUponLeave` (`m.forget_forced_upon_leave`, v1.18 MSC4267) and
+  `mPreviewUrl` (`m.preview_url`, v1.20 MSC4452) alongside `mProfileFields`,
+  defaulting to `null` when absent. `GetAuthMetadataResponse`
+  (`lib/matrix_api_lite/generated/model.dart`) makes `registrationEndpoint` and
+  `revocationEndpoint` optional (`Uri?`, with explicit null checks in
+  `lib/msc_extensions/msc_2964_oidc_login_flow/msc_2964_oidc_login_flow.dart`
+  and
+  `lib/msc_extensions/msc_2966_oidc_dynamic_client_registration/msc_2966_oidc_dynamic_client_registration.dart`),
+  adds `deviceAuthorizationEndpoint`, `accountManagementUri`,
+  `accountManagementActionsSupported`, `clientIdMetadataDocumentSupported`, and
+  `scopesSupported`, tolerates absent/null optional fields, and ignores unknown
+  extra keys. `MatrixError` (`lib/matrix_api_lite/model/matrix_exception.dart`)
+  adds standardized codes (`M_USER_LOCKED`, `M_USER_SUSPENDED`,
+  `M_USER_LIMIT_EXCEEDED`, `M_CANNOT_OVERWRITE_MEDIA`, `M_NOT_YET_UPLOADED`,
+  `M_MISSING_TOKEN`, `M_WRONG_ROOM_KEYS_VERSION`, `M_DUPLICATE_ANNOTATION`).
+  `MatrixException` and `MatrixApi` (`request` and `unexpectedResponse`) parse
+  the HTTP `Retry-After` header case-insensitively (delta-seconds and RFC 7231
+  HTTP-date in pure web-safe Dart with an injectable clock, Matrix v1.10
+  MSC4041) into `retryAfterMs` whenever the JSON body omits `retry_after_ms`,
+  ignoring negative or malformed header values without throwing.
+- Matrix v1.18–v1.19 event and account data models (T1.1b): `EventTypes`
+  (`lib/matrix_api_lite/model/event_types.dart`) adds `RoomImagePack`
+  (`m.room.image_pack`) and `ImagePackRooms` (`m.image_pack.rooms`, v1.19
+  MSC2545), `RecentEmoji` (`m.recent_emoji`, v1.18 MSC4356), `KeyBackup`
+  (`m.key_backup`, v1.19 MSC4287), `InvitePermissionConfig`
+  (`m.invite_permission_config`, v1.18 MSC4380), `RoomPolicy`
+  (`m.room.policy`, v1.18 MSC4284), `RoomKeyBundle` (`m.room_key_bundle`,
+  v1.19 MSC4268) and `RtcMember` (`m.rtc.member`, MSC4143). Their typed
+  contents live in `lib/matrix_api_lite/model/matrix_v1_19_models.dart`
+  (exported from `lib/matrix_api_lite.dart`): optional fields are read
+  tolerantly, unknown keys round-trip through `additionalProperties`, and only
+  a missing required field throws, as a `FormatException`. `MatrixImageInfo`
+  carries `is_animated` (v1.18 MSC4230), read from events by the
+  `imageInfo`/`isAnimated` extension on `MatrixEvent`, and `MatrixEvent` gains
+  a typed `replacesState` for `unsigned.replaces_state`. The legacy
+  `im.ponies.*` packs (`ImagePackContent`) and `io.element.recent_emoji` are
+  unchanged.
+- QR key verification reciprocate cancel code (T3.3a):
+  `_KeyVerificationMethodQRReciprocate.handlePayload`
+  (`lib/encryption/utils/key_verification.dart`) cancels with `m.key_mismatch`
+  instead of `m.invalid_message` when `validateStart` rejects an incoming
+  `m.reciprocate.v1` start event whose shared secret does not match.
+- Olm `sender_device_keys` (T3.1, Matrix v1.15 MSC4147):
+  `OlmManager.encryptToDeviceMessagePayload`
+  (`lib/encryption/olm_manager.dart`) puts our device keys, as `/keys/query`
+  returns them and without `unsigned`, in every Olm payload. On receipt the
+  keys must be the sender's, carry the Olm session's Curve25519 key and the
+  payload's claimed `keys.ed25519`, and be validly self-signed, or the event
+  is discarded (`DecryptException`). A device not known yet is stored
+  unverified, with its list marked outdated for the next `/keys/query`;
+  divergent keys that collide with a known or previously seen device's
+  Curve25519 or Ed25519 key reject the event (`DecryptException`), and no
+  known device is ever overwritten.
+- Key backup account data (T3.1, Matrix v1.19 MSC4287): `m.key_backup`
+  (`{"enabled": bool}`, `KeyBackupContent`) holds the user's choice to use key
+  backup. `SSSS.store` (`lib/encryption/ssss.dart`) writes it on when a new
+  backup key goes into `m.megolm_backup.v1` (not when the key is copied under
+  another storage key). `KeyManager` (`lib/encryption/key_manager.dart`)
+  reads it (`keyBackupEnabled` falls back to the presence of
+  `m.megolm_backup.v1`), updates `client.accountData` and the local database
+  after `setKeyBackupEnabled` and `deleteKeyBackup`, stops uploading keys
+  while it is off, and adds
+  `getKeyBackupStatus`, `createKeyBackup` (creation and rotation, deleting the
+  replaced version only after the new key is stored), `deleteKeyBackup`
+  (turns it off and empties the stored key) and
+  `restoreKeyBackupWithRecoveryKey` (a backup whose key is not in secret
+  storage).
+- Matrix v1.16 sync (`state_after`, `use_state_after`), v1.4 thread unread
+  counts (`unread_thread_notifications`), and v1.15 Rich Topics (`m.topic`)
+  (T1.2):
+  `JoinedRoomUpdate` and `LeftRoomUpdate`
+  (`lib/matrix_api_lite/model/sync_update.dart`) deserialize and serialize
+  `state_after` (v1.16 MSC4222) and `JoinedRoomUpdate` parses
+  `unread_thread_notifications` (v1.4 MSC3773), skipping malformed entries
+  without crashing sync. `Client._innerSync` (`lib/src/client.dart`) sends
+  `use_state_after=true` only when the server advertises a semantic Matrix
+  version `>= v1.16` (omitting it on `<= v1.15` or unknown versions; the
+  versions come from `getVersions()`, cached in the database), and
+  `_handleRooms` / `_storeArchivedRoom` apply legacy `state` before timeline
+  events and `state_after` after timeline events (respecting `Direction.b`
+  guards). A left room's legacy `state` used to be applied after its timeline;
+  it now comes before it, as for a joined room. When an update carries
+  `state_after`, even an empty one, its timeline does not define room state
+  (a timeline state event may have lost state resolution), in memory or in
+  the database. A database stores a timeline event that has a state key as
+  room state too, and `DatabaseApi.storeEventUpdate` cannot take a parameter
+  that says otherwise: the database the app uses outside the browser
+  (`matrix_dart_sdk_drift_db`) implements `DatabaseApi` in another package and
+  would no longer compile. So `Client._handleRoomEvents` hands such an event
+  to the database as a `_TimelineOnlyEvent` (`lib/src/client.dart`), which has
+  no state key and writes the real one in its JSON: the event is stored in the
+  timeline, whole, and not as room state, in either database.
+  `Room.unreadThreadNotifications` (`lib/src/room.dart`) exposes the per-thread
+  unread counts. An update that brings `unread_notifications` or
+  `unread_thread_notifications` replaces them all, so a thread the server
+  leaves out (it has no notifications) is no longer counted. `Room.topic`,
+  `Room.topicHtml`, and `Room.setDescription(plain, {html})` read and write
+  MSC3765 `m.topic` (`m.text` with `text/plain` and `text/html`) while keeping
+  legacy `topic` compatibility on both read and write. The static
+  `Room.richTopicRepresentation(content, mimetype)` (T4.4b) is the same parser
+  over any `m.room.topic` content, so the app reads each topic change in the
+  timeline as it reads the room's current topic.
+- Claimed Ed25519 key of `m.room_key` (T3.1b): `KeyManager.handleToDeviceEvent`
+  (`lib/encryption/key_manager.dart`) takes the key a received room key
+  claims from the sender's device whose Curve25519 key is the Olm session's
+  (from `/keys/query` or checked `sender_device_keys`), and claims none when
+  there is no such device. Upstream copied the Ed25519 key of the device the
+  sender named in `requesting_device_id`, a field the sender controls, so a
+  room key sent over any Olm session of that user could claim a verified
+  device; `sender_claimed_ed25519_key` and `sender_claimed_keys` written in
+  the content are dropped too, since `SessionKey.fromDb` falls back to them
+  when the session has no claimed keys of its own. `RoomKeyRequest.forwardKey`
+  claims our own key only for sessions we created (upstream claimed it for
+  any session without a claimed key), else the key of the device the
+  session's Curve25519 key belongs to, and forwards nothing when no key is
+  claimed.
+- Matrix v1.18–v1.19 Client-Server endpoints (T1.1c):
+  `MatrixApi` (`lib/matrix_api_lite/matrix_api.dart`) adds
+  `getMutualRooms(userId, {from})` for `GET /_matrix/client/v1/mutual_rooms`
+  (v1.19 MSC2666; `GetMutualRoomsResponse` reads `joined`, `count` and
+  `next_batch`), and `getUserSuspended` / `setUserSuspended` and
+  `getUserLocked` / `setUserLocked` for `GET`/`PUT
+  /_matrix/client/v1/admin/suspend/{userId}` and `.../admin/lock/{userId}`
+  (v1.18 MSC4323, bodies `{suspended}` and `{locked}`). They are written like
+  the generated endpoints, so a `404 M_UNRECOGNIZED` or `403 M_FORBIDDEN`
+  comes out as a `MatrixException`; the generated `Api` and its models are
+  left as generated. `reportEvent` (`lib/matrix_api_lite/generated/api.dart`)
+  keeps `score` optional and deprecated (removed in v1.18 MSC4277), sends it
+  only when passed, and takes any 200 as a success without parsing the body.
+  `Room.redactEvent` (`lib/src/room.dart`) sends the redaction as an
+  `m.room.redaction` event through `PUT /rooms/{roomId}/send` with `redacts`
+  (and `reason` when given) in the content when the server advertises a
+  `v<major>.<minor>` version `>= v1.18` (v1.18 MSC4169), straight through the
+  API so it is never encrypted; with older or unreadable versions, or when
+  `/send` answers `M_UNRECOGNIZED`, it uses `PUT /redact` as before.
+  `Client.redactEventWithMetadata` (MatrixRTC) still uses `/redact`.
+- OAuth 2.0 discovery and sign-in (T2.1a): `Client.getWellknown`
+  (`lib/src/client.dart`) follows 301/302/307/308 on
+  `/.well-known/matrix/client` itself (MSC4402, Matrix v1.20): each
+  `Location` is resolved against the URL it came from, at most
+  `Client.maxWellKnownRedirects` (5) hops, only `http`/`https`, and no URL
+  twice; anything else throws `WellKnownRedirectException`, which
+  `checkHomeserver` passes on instead of treating it as "no well-known file".
+  In a browser `fetch` follows the redirects (asking it not to makes it fail).
+  `checkHomeserver` asks for `auth_metadata` before `/v3/login`, and with
+  metadata in hand a `/v3/login` that answers 404, an error or no flows no
+  longer fails the check (servers whose accounts live in MAS). In
+  `msc_2964_oidc_login_flow/`, `oidc_authorization.dart` negotiates the scopes
+  (`urn:matrix:client:api:*` and `urn:matrix:client:device:<id>` when
+  `scopes_supported` lists them, MSC2967's `urn:matrix:org.matrix.msc2967.client:*`
+  otherwise; `openid` only when the server lists no scopes or lists it),
+  tells whether a server offers Authorization Code with S256 and
+  `prompt=create`, and reads the authorization redirect
+  (`parseOidcAuthorizationCallback`: a missing or different `state`, an OAuth
+  `error` or no `code` throw `OidcCallbackException` before anything is
+  exchanged). `initOidcLoginSession` and `oidcLogin` take the metadata already
+  fetched, and the session keeps its device ID, scopes and response mode. In
+  `msc_2966_oidc_dynamic_client_registration/`, `obtainOidcClient` uses a
+  Client ID Metadata Document URL as `client_id` when the server announces
+  `client_id_metadata_document_supported: true`, and registers the client
+  (RFC 7591) otherwise; `OidcClientRegistrationException` when the server
+  offers neither.
+- Encrypted history shared on invite (T3.2, Matrix v1.19 MSC4268):
+  `lib/encryption/room_key_bundle.dart` (`Encryption.roomKeyBundle`).
+  `Room.invite(userId, shareHistory: true)` invites, then bundles the room's
+  Megolm sessions marked `shared_history: true` (MSC3061). `KeyManager` marks
+  a new outbound session when the room is `shared` or `world_readable`, and
+  `clearOrUseOutboundGroupSession` ends the session before the next message
+  when its mark no longer matches the room (`shared` to `invited` or
+  `joined`, and back), so no marked session encrypts what is said under
+  `invited` or `joined`; sessions from before this change never leave. The
+  history visibility these decisions use is
+  `RoomKeyBundleManager.historyVisibilityOf`: the room's state, or the
+  latest `m.room.history_visibility` this session's syncs brought when the
+  state in memory has none, and `joined` when the two disagree. The state in
+  memory alone misses an event stored while `Room.postLoad` was reading the
+  database (the app loads a room as soon as a sync brings it), and then says
+  nothing or what the room was before. A message sent before our own sync
+  shows the change still goes out on the old session. The invite encrypts
+  the bundle as an attachment
+  (`encryptFile`), uploads it and sends `m.room_key_bundle` over Olm to the
+  invitee's devices whose `encryptToDevice` holds (`Client.shareKeysWith`,
+  never blocked). Nothing is uploaded or sent when the room's
+  `m.room.history_visibility` is `joined` or absent, the invitee is banned,
+  or there is no device or no session to share. The invitee reads the
+  stable and the unstable (`io.element.msc4268.room_key_bundle`) types, only
+  over Olm and from a known, unblocked device of the sender (signed by its
+  master key when the sender has one), keeps it until the sync is through
+  and takes it in once it joins, only if the sender is who invited it (seen
+  while the invite was active, at most a day before); leaving drops it,
+  and at most 20 bundles wait at a time. The download (the
+  authenticated media path when the server has it) stops past 10 MiB before
+  anything is decrypted, the SHA-256 must match, and every session must be a
+  Megolm session of that room whose key gives its `session_id`, or nothing
+  is imported. An import never replaces a session received directly
+  (`m.room_key`, empty forwarding chain) or one known from as early an
+  index, claims the key of the known device the session's Curve25519 key
+  belongs to (as T3.1b does for `m.room_key`), and adds the bundle sender's
+  Curve25519 key to the forwarding chain. `onImported`, `onRejected` and
+  `lastImport` tell the app. Pending bundles and inviters live in memory.
+- Inbound Megolm sessions compared with the database (T3.4b):
+  `KeyManager.setInboundGroupSession` compares the new session with the one
+  in memory or, when none is there (as after a restart), with the one the
+  database keeps, and keeps whichever starts at the earlier index (or, at the
+  same index, has the shorter forwarding chain). Upstream compared only with
+  memory, so after a restart a session from the key backup, a forwarded key,
+  an import or a bundle that starts later replaced a stored one from index 0
+  and earlier messages stopped decrypting. The stored session is read
+  without `loadInboundGroupSession` (which writes it into memory after the
+  read, over what a concurrent call may have just set), and memory is checked
+  again after the read, so of two calls at once the better session still
+  wins. A stored session that wins goes in memory, where callers look next.
+  An unreadable stored session is replaced.
+- Dehydrated devices, opt-in (MSC3814, T3.5): `dehydratedDeviceSetup`
+  asks nothing of a server that does not announce `org.matrix.msc3814` in
+  `unstable_features` of `/versions` (`dehydratedDevicesSupported`; no spec
+  version has the stable endpoints yet) and returns a
+  `DehydratedDeviceResult` instead of nothing. Only a 404 makes a new
+  dehydrated device; upstream also replaced it on any other error answer
+  but a 400 (a 403, a 429...), dropping the events waiting for it. A key that is missing from secret
+  storage (`org.matrix.msc3814`) or does not open the device leaves the
+  device on the server (`keyMismatch`). The device's cross-signing chain
+  may end at a master key whose private key is in the secret storage just
+  unlocked, as after a login the device is read while the session is being
+  verified, before its master key is marked (upstream replaced it then).
+  The room keys go to the session's own key manager (memory and database,
+  through `setInboundGroupSession`), an event that does not decrypt is
+  skipped, and a repeated `next_batch` ends the loop. Nothing of the
+  session's own account or Olm sessions changes on any failure.
+  `deleteDehydratedDevice` and `deleteDehydratedDeviceIfSupported` are
+  MSC3814's DELETE, for turning the opt-in off.
+- Sync filter defined again when it changed (T4.3): `Client._checkSyncFilter`
+  (`lib/src/client.dart`) used to define the sync filter once per login and
+  keep its id for ever, so a session never got a filter the app changed
+  later. Rooster now asks for per-thread unread counts in it (Matrix v1.4,
+  MSC3773, `room.timeline.unread_thread_notifications`). The filter an id
+  was defined from is kept with `cacheCustomObject`
+  (`rooster_defined_sync_filter`), read once per run, and a different one
+  (or none, as in every session from before) defines the filter again and
+  stores the new id. When that definition fails (the server is unreachable
+  or refuses it), the session keeps the id it had and goes on syncing with
+  it, the failure is logged, and the next run tries again; a login with no
+  id yet still fails its sync, as upstream. `DatabaseApi` does not change,
+  so the drift database still compiles. The SDK's `clearCache` empties
+  custom cache objects too, which costs one more definition after it.
+- Per-thread unread counts kept across restarts (T4.3): with
+  `unread_thread_notifications` in the filter the server leaves the threads
+  out of a room's own counts, and neither database's `storeRoomUpdate`
+  stores `Room.unreadThreadNotifications` (`DatabaseApi` cannot take them:
+  the drift database implements it in another package). So a sync that
+  changes them (a new room that has some, a room whose counts change, a
+  room left) writes every room's counts once, at the end of
+  `Client.handleSync`, with `cacheCustomObject`
+  (`rooster_unread_thread_notifications`), and `Client.init` puts them back
+  on the joined rooms it loads. `Client.storeUnreadThreadNotifications()`
+  writes them on demand, for the app clearing a thread it read before the
+  next sync says so. A store that fails is logged and tried again with the
+  next sync; an unreadable cache is skipped. Without this, a room with
+  unread thread replies looked read after a restart until a sync brought
+  its counts again.
+- Simplified Sliding Sync (T5.1, MSC4186, Matrix 2.0): `lib/src/sliding_sync/`
+  holds the request and connection (`sliding_sync_transport.dart`), the
+  answer turned into the `/v3/sync` shape (`sliding_sync_hydration.dart`)
+  and what keeps E2EE whole across a change of transport
+  (`sync_transport_continuity.dart`); `Client._innerSync` picks the
+  transport. The loop uses Sliding Sync only when `/_matrix/client/versions`
+  announces `org.matrix.simplified_msc3575` (the unstable path) or
+  `org.matrix.simplified_msc3575.stable` (`/_matrix/client/v5/sync`, tried
+  first; a refusal there falls to the unstable path) and
+  `Client.forceLegacySync` is off. Everywhere else `/v3/sync` runs as
+  before: no request, no write, and one custom cache read per run. A
+  request sends `conn_id`, one list (`all_rooms`, every state event as
+  `/v3/sync` gives, its range grown 50 rooms a request until it covers
+  every room, without waiting while it grows), the room subscriptions
+  (`Client.slidingSync?.subscribeRoom`) and the `to_device`, `e2ee`,
+  `account_data`, `receipts` and `typing` extensions. The answer becomes
+  a `SyncUpdate` handled by the same `_handleSync` (`required_state` is
+  the state after the timeline, so it goes in as `state_after`), so
+  rooms, account data, to-device messages, one-time key counts and device
+  lists take the path they take from `/v3/sync`. `pos` and the to-device
+  `since` move only after the answer is processed. `M_UNKNOWN_POS` drops
+  `pos` (never the to-device `since`) and asks once more at once; a second
+  refusal is a sync error, waited out like any other, never a logout. A
+  404, 405 or `M_UNRECOGNIZED` sends the loop back to `/v3/sync` for the
+  rest of the run (`Client.slidingSyncFallbackReason`).
+  How the change keeps to-device messages and device lists: the two
+  transports have independent positions. `/v3/sync` keeps its own token
+  while Sliding Sync runs (the one stored stays the `/v3` one; `prevBatch`
+  only holds `pos` in memory, so notifications know the session is past
+  its first sync), saved as `legacy_since` when Sliding Sync takes over,
+  and goes on from it when it comes back. The custom cache object
+  `rooster_sliding_sync`, written in the sync's transaction, holds the
+  transport, `pos`, the to-device `since`, the to-device messages of the
+  last sync (a short hash of sender, type and canonical content) and the
+  users Sliding Sync reported in `device_lists`. The server deletes
+  to-device messages only when the next request of the same transport
+  acknowledges them, so the first sync of the other transport gets the
+  last batch again: it is dropped by its hashes. A `/v3/sync` from the old
+  token reports again every device list change Sliding Sync reported: the
+  repeats are dropped, and a tracked user among them whose keys were
+  downloaded since gets them downloaded once more, since the old token
+  cannot tell a repeat from a newer change. A sync that cannot say what
+  changed (a Sliding Sync connection without `pos`, after `M_UNKNOWN_POS`
+  or taking over from `/v3/sync`, and an initial `/v3/sync` when there was
+  no `/v3` token) marks every tracked device list outdated, so their keys
+  are downloaded again. The state survives a restart, so a change of
+  transport between runs is handled the same way. `clearCache` drops
+  `pos` and `legacy_since` and keeps the to-device position. `DatabaseApi`
+  does not change.
+  A room sent `initial` (the first time on a connection: a new
+  connection, or the range growing over it) brings the room as it is, so
+  its events notify no one and raise no call event, as in an initial
+  `/v3/sync`; a `limited` timeline that overlaps the newest stored events
+  keeps them (no gap), one that does not drops them as `/v3/sync` does.
+  An answer without `count` stops growing the range, and one without
+  `pos` still waits for news: no polling. Limits of MSC4186: it has no
+  per-thread unread counts, so under Sliding Sync the room's own counts
+  from the server are the badge (T6.6):
+  `Client._dropThreadNotificationsForSlidingSync` empties
+  `Room.unreadThreadNotifications` in every room (also the ones its
+  answers do not name yet) and stores them empty in
+  `rooster_unread_thread_notifications`, with the first answer of a
+  Sliding Sync that takes over from `/v3/sync` (a server that announces it
+  and refuses it keeps `/v3/sync` and its counts), and before each request
+  once it is the transport (counts restored at a restart). The transport
+  change is announced after that, so badges are drawn without them.
+  Kept, they added to the badge until each thread was read here, and a
+  read on another device never cleared them. Nothing brings them back while Sliding Sync is the
+  transport, so nothing stores them again; back on `/v3/sync` they come
+  from the server as before. And it has no presence, so other people's
+  presence stops changing while Sliding Sync runs (asking `/presence` for
+  the people on screen is left for another task).
+- Room keys stored before T3.1b (T6.1): such a session kept, with no claimed
+  keys of its own, the Ed25519 key of the device its sender named in
+  `requesting_device_id` (or any claim the sender wrote) in its content.
+  `SessionKey.fromDb` no longer reads a claim from the content of a session
+  that was not forwarded, so it claims nothing from its first load.
+  `KeyManager.migrateClaimedKeysFromOlmSessions`, started by the first
+  `Encryption.onSync` (device lists loaded and updated), then goes once per
+  database over the stored sessions with that shape: one that a single known
+  device has the Olm session's Curve25519 key for claims that device's key;
+  any other claims nothing. The claim leaves the content either way, and the
+  session is stored again with its own pickle and indexes (nothing is
+  deleted, every message still decrypts; it is queued for the key backup
+  again). The mark is the custom cache object
+  `rooster_claimed_keys_from_olm_session` (`DatabaseApi` does not change);
+  `clearCache` drops it, and the next run finds nothing left to change.
+  `Encryption.megolmSenderTrust(event)` says whether a decrypted message's
+  session proves its sender's device: `verified` or `unverifiedDevice` when
+  the session claims the Ed25519 key of the sender's device that holds its
+  Curve25519 key, `unverifiedOrigin` when it claims none, another device's,
+  or was forwarded.
+- MatrixRTC's newer pieces (T5.2: MSC4354, MSC4140, MSC4143):
+  sticky events come in `JoinedRoomUpdate.sticky`, from a room's `sticky`
+  or `msc4354_sticky` section and from timeline events that carry
+  `sticky`/`msc4354_sticky` on top, once per event id; `MatrixEvent` drops
+  that top-level object, so its `duration_ms` is kept in `unsigned`
+  (`JoinedRoomUpdate.stickyDurationKey`). Sliding Sync asks for them with
+  the `org.matrix.msc4354.sticky_events` extension, and the hydration puts
+  its rooms' events in the same section, so both transports take the same
+  path. `Client` keeps them per room (`RoomStickyEvents`, an extension on
+  `Room` backed by an `Expando`, so the app's test doubles that implement
+  `Room` keep working): the latest of each sender, type and sticky key,
+  decrypted when they come encrypted. An incremental sync hands a sticky
+  event out once, so they are written to the custom cache object
+  `rooster_msc4354_sticky_events` at the end of a sync that changed them
+  and come back in `Client.init`. Whether one still counts is the
+  reader's to say, by its own clock (`RoomStickyEvents.stickyExpiresAt`);
+  the SDK asks no clock of its own, since this machine's can be hours off
+  (pruned by it, every sticky event was forgotten as it arrived on a
+  machine three hours ahead). When they are written, a room forgets the
+  ones that ended more than an hour (the longest one stays sticky) before
+  the newest sticky event one of our own homeserver's users sent there: a
+  time that homeserver's clock has reached. Another homeserver's
+  timestamps forget nobody's, and a room with no sticky event from ours
+  keeps the latest of each sender, type and sticky key. `DatabaseApi` does
+  not change.
+  Delayed events: `DelayedEventsSupport.of(versions)` is `stable` from
+  Matrix v1.20 or with `org.matrix.msc4140.stable`
+  (`/_matrix/client/v1/delayed_events`, `?delay=`), else `unstable` with
+  `org.matrix.msc4140`, else `none`. `setRoomStateWithKeyWithDelay`,
+  `manageDelayedEvent` and `getScheduledDelayedEvents` take a `via`
+  (unstable by default, as before), and `DelayedEventCanceller.via`
+  remembers where the call extension scheduled its leave, so the leave is
+  cancelled there even if `/versions` changes mid-call.
+  `getCallMembershipsFromRoom` also lists `m.rtc.member` and
+  `org.matrix.msc4143.rtc.member` memberships (state or sticky,
+  `RtcMemberships`, `RtcCallMembership.fromRtcMember`), skipping a device
+  the legacy memberships already list.
+- Discovery never drops TLS (T6.2): in `lib/src/client.dart` the
+  `/.well-known/matrix/client` redirects and, through the same hand-run
+  follower, `getAuthMetadata`'s (no longer the generated call, which let
+  `dart:io` follow redirects to any scheme) are refused from `https` to
+  `http` before the `http` URL is asked for, and `checkHomeserver` refuses a
+  well-known whose `m.homeserver.base_url` is `http` on another machine
+  unless the server was given as `http://`; `localhost`, `127.x.x.x` and
+  `::1` pass. Both throw `InsecureDiscoveryException`, which
+  `checkHomeserver` passes on, from the `auth_metadata` step too, instead
+  of falling back to `/v3/login`. In a browser `fetch` follows the
+  redirects and the app does not see them; an HTTPS page blocks the
+  mixed content.
+- Room state loaded while a sync is stored (T6.4): `Room.postLoad` reads
+  the room's state from the database inside `DatabaseApi.transaction`, and
+  marks the room loaded before that transaction ends. A sync stores its
+  events in a transaction and, while a room is partial, keeps the state it
+  brings out of memory; a read that overlapped it saw the database without
+  that sync's writes, so a new room read no `m.room.history_visibility`
+  after `postLoad` and one that turned `joined` went on saying `shared` in
+  memory. Now the read waits for the sync to be stored, and a later sync
+  finds the room loaded. From inside a transaction (a page of history
+  checked during the sync) it runs at once, as nested transactions do.
+  For that, `BoxCollection.transaction` of the SDK's own database
+  (`lib/src/database/sqflite_box.dart` and `indexeddb_box.dart`, the app's
+  database in a browser) takes a transaction inside another: it used to
+  start a second batch over the outer one's and end both, so what the outer
+  one wrote afterwards went straight to the database and its batch, stored
+  last, put older values back over it. A nested one now writes to the outer
+  batch, which ends in `try/finally` (one that threw left every later write
+  in a batch nobody stored). `Box.getAllKeys`, the first time it lists a
+  box, adds the keys written and takes out the ones deleted since, in the
+  open transaction too; it used to list the stored ones only and keep that.
+  The race the T3.2 entry above describes is closed there;
+  `RoomKeyBundleManager.historyVisibilityOf` stays as a second word, and
+  its note of the syncs no longer skips an `m.room.history_visibility`
+  dated before the last one seen when it lets out less history (another
+  server's clock may run behind): only one that would let out more is
+  skipped. `DatabaseApi` does not change.

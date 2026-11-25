@@ -13,9 +13,11 @@ import 'package:rooster/client/components/push_notification/notification_manager
 import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/room_component.dart';
 import 'package:rooster/client/components/user_color/user_color_component.dart';
+import 'package:rooster/client/matrix/components/threads/matrix_thread_unread.dart';
 import 'package:rooster/client/matrix/components/calendar_room_component/matrix_calendar_room_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_room_emoticon_component.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
+import 'package:rooster/client/matrix/components/sidebar_entries/matrix_room_marked_unread.dart';
 import 'package:rooster/client/matrix/components/typing_indicators/matrix_typing_indicators_component.dart';
 import 'package:rooster/client/matrix/components/user_presence/matrix_user_presence.dart';
 import 'package:rooster/client/matrix/matrix_attachment.dart';
@@ -36,11 +38,23 @@ import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_edit
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_emote.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_encrypted.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_membership.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_location_uri.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_message.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_pinned_messages.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_power_levels.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_redaction.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_sticker.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_tombstone.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_canonical_alias.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_guest_access.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_history_visibility.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_join_rules.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_room_avatar.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_room_encryption.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_room_name.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_room_topic.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_server_acl.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_third_party_invite.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_unknown.dart';
 import 'package:rooster/client/member.dart';
 import 'package:rooster/client/permissions.dart';
@@ -209,24 +223,47 @@ class MatrixRoom extends Room implements RoomSendPreparation {
   @override
   bool get isE2EE => _matrixRoom.encrypted;
 
+  // With per-thread counts (Matrix v1.4), the server's room counts leave
+  // out the threads; the room's badge still counts them.
   @override
-  int get highlightedNotificationCount => _matrixRoom.highlightCount;
+  int get highlightedNotificationCount =>
+      _matrixRoom.highlightCount +
+      _matrixRoom.unreadThreadNotifications.values
+          .fold(0, (sum, counts) => sum + (counts.highlightCount ?? 0));
 
   @override
-  int get notificationCount => _matrixRoom.notificationCount;
+  int get notificationCount =>
+      _matrixRoom.notificationCount +
+      _matrixRoom.unreadThreadNotifications.values
+          .fold(0, (sum, counts) => sum + (counts.notificationCount ?? 0));
 
   /// Clears this room's unread counts without waiting for the next sync.
   ///
   /// The homeserver owns these counts and only reports them in `/sync`. Until
   /// that response arrives, a room the user has just read keeps its badge on
   /// screen. Mirroring the read locally clears it now; the next sync confirms
-  /// the same value and remains authoritative.
-  void clearUnreadCountsLocally() {
+  /// the same value and remains authoritative. A room marked unread by hand
+  /// loses its mark here too: the spec's "reset when a read receipt is
+  /// sent".
+  ///
+  /// [threads] clears the threads' counts too, for a receipt that reads
+  /// them all (one without `thread_id`).
+  void clearUnreadCountsLocally({bool threads = false}) {
+    MatrixMarkedUnread.clearOnRead(_matrixRoom);
     final changed =
         _matrixRoom.notificationCount > 0 || _matrixRoom.highlightCount > 0;
     _matrixRoom.notificationCount = 0;
     _matrixRoom.highlightCount = 0;
+    if (threads) MatrixThreadUnread.clearAllLocally(_matrixRoom);
 
+    _countsChangedLocally(changed || threads);
+  }
+
+  /// A thread of this room was read here and its counts cleared
+  /// ([MatrixThreadUnread.clearLocally]): the room's badge counts them.
+  void threadCountsClearedLocally() => _countsChangedLocally(true);
+
+  void _countsChangedLocally(bool changed) {
     _onUpdate.add(null);
 
     if (changed) {
@@ -381,6 +418,12 @@ class MatrixRoom extends Room implements RoomSendPreparation {
       _matrixRoom.client.onSync.stream
           .where((i) => i.rooms?.join?.containsKey(_matrixRoom.id) == true)
           .listen(onRoomSyncUpdate),
+      // Before Sliding Sync is used, the SDK drops the per-thread counts
+      // `/v3/sync` left (MSC4186 has none), also in rooms its answers do
+      // not name yet: their badges are drawn again without them.
+      _matrixRoom.client.onSyncTransportChanged.stream
+          .where((transport) => transport == matrix.SyncTransport.slidingSync)
+          .listen((_) => _notifyUpdate()),
       _matrixRoom.client.onEvent.stream
           .where((event) => event.roomID == _matrixRoom.id)
           .listen(onEvent),
@@ -598,60 +641,37 @@ class MatrixRoom extends Room implements RoomSendPreparation {
       Map<String, dynamic>? fileExtraContent,
       List<ProcessedAttachment>? processedAttachments}) async {
     final replyingTo = await _replyTarget(inReplyTo);
+    final files = (processedAttachments ?? const <ProcessedAttachment>[])
+        .whereType<MatrixProcessedAttachment>()
+        .toList();
+
+    // One file with text, neither a reply nor an edit: the text is the
+    // file's caption (v1.10, MSC2530), in its `body` (and formatted body),
+    // while `filename` keeps the file's own name.
+    final caption = message != null &&
+            message.trim().isNotEmpty &&
+            files.length == 1 &&
+            inReplyTo == null &&
+            replaceEvent == null
+        ? _textContent(message, replyingTo: null)
+        : null;
 
     // Each file goes on its own, its failure caught and shown on its
     // pending message (see media/matrix_file_send.dart).
-    for (final file in processedAttachments ?? const <ProcessedAttachment>[]) {
-      if (file is! MatrixProcessedAttachment) continue;
+    for (final file in files) {
       unawaited(sendMatrixAttachment(_matrixRoom, file,
           threadLastEventId: threadLastEventId,
           threadRootEventId: threadRootEventId,
-          extraContent: fileExtraContent));
+          extraContent: caption == null
+              ? fileExtraContent
+              : {...?fileExtraContent, ...caption}));
     }
 
-    if (message != null && message.trim().isNotEmpty) {
+    if (caption == null && message != null && message.trim().isNotEmpty) {
       final event = <String, dynamic>{
         'msgtype': matrix.MessageTypes.Text,
-        'body': message
+        ..._textContent(message, replyingTo: replyingTo),
       };
-
-      var emoticons = getComponent<MatrixRoomEmoticonComponent>();
-      final html = mx_markdown.markdown(message,
-          getEmotePacks: emoticons != null
-              ? () =>
-                  emoticons.getEmotePacksFlat(matrix.ImagePackUsage.emoticon)
-              : null,
-          getMention: _matrixRoom.getMention);
-
-      if (HtmlUnescape().convert(html.replaceAll(RegExp(r'<br />\n?'), '\n')) !=
-          event['body']) {
-        event['format'] = 'org.matrix.custom.html';
-        event['formatted_body'] = html;
-      }
-
-      var document = html_parser.parse(html);
-
-      var mentionsList = _findEventMentions(document);
-
-      var mentions = {};
-
-      if (mentionsList.contains("@room")) {
-        mentions["room"] = true;
-        mentionsList.remove("@room");
-      }
-
-      // A reply calls on whoever it answers, as the Matrix spec has it (and
-      // as Discord does): they are notified and see it highlighted.
-      if (replyingTo != null &&
-          replyingTo.senderId != _matrixRoom.client.userID) {
-        mentionsList.add(replyingTo.senderId);
-      }
-
-      if (mentionsList.isNotEmpty) {
-        mentions["user_ids"] = mentionsList.toList();
-      }
-
-      event["m.mentions"] = mentions;
 
       // The SDK makes the same transaction id when given none; ours lets the
       // speed log see the local echo (docs/speed-log.md).
@@ -682,6 +702,76 @@ class MatrixRoom extends Room implements RoomSendPreparation {
     }
 
     return null;
+  }
+
+  /// [message]'s `body`, its formatted body when the markdown made one,
+  /// and its `m.mentions`: a text message's content, or a file's caption.
+  Map<String, dynamic> _textContent(String message,
+      {required matrix.Event? replyingTo}) {
+    final content = <String, dynamic>{'body': message};
+
+    var emoticons = getComponent<MatrixRoomEmoticonComponent>();
+    final html = mx_markdown.markdown(message,
+        getEmotePacks: emoticons != null
+            ? () => emoticons.getEmotePacksFlat(matrix.ImagePackUsage.emoticon)
+            : null,
+        getMention: _matrixRoom.getMention);
+
+    if (HtmlUnescape().convert(html.replaceAll(RegExp(r'<br />\n?'), '\n')) !=
+        message) {
+      content['format'] = 'org.matrix.custom.html';
+      content['formatted_body'] = html;
+    }
+
+    var document = html_parser.parse(html);
+
+    var mentionsList = _findEventMentions(document);
+
+    var mentions = {};
+
+    if (mentionsList.contains("@room")) {
+      mentions["room"] = true;
+      mentionsList.remove("@room");
+    }
+
+    // A reply calls on whoever it answers, as the Matrix spec has it (and
+    // as Discord does): they are notified and see it highlighted.
+    if (replyingTo != null &&
+        replyingTo.senderId != _matrixRoom.client.userID) {
+      mentionsList.add(replyingTo.senderId);
+    }
+
+    if (mentionsList.isNotEmpty) {
+      mentions["user_ids"] = mentionsList.toList();
+    }
+
+    content["m.mentions"] = mentions;
+    return content;
+  }
+
+  /// Sends [location] as an `m.location` message, with the
+  /// extensible-events fields (MSC3488) other clients read: a pin the
+  /// person placed, not where their device is. Returns the event's id.
+  Future<String?> sendLocation(MatrixLocationUri location,
+      {String? description, String? threadRootEventId}) {
+    final text = description?.trim();
+    final hasText = text != null && text.isNotEmpty;
+    final geoUri = location.geoUri;
+    // Not translated: what other clients show without m.location; the URI
+    // reads the same in every language.
+    final body = hasText ? text : geoUri;
+    return _matrixRoom.sendEvent({
+      'msgtype': matrix.MessageTypes.Location,
+      'body': body,
+      'geo_uri': geoUri,
+      'org.matrix.msc3488.location': {
+        'uri': geoUri,
+        if (hasText) 'description': text,
+      },
+      'org.matrix.msc3488.asset': {'type': 'm.pin'},
+      'org.matrix.msc1767.text': body,
+      'org.matrix.msc3488.ts': DateTime.now().millisecondsSinceEpoch,
+    }, threadRootEventId: threadRootEventId);
   }
 
   /// The event a reply goes to: the one already held, not looked up again
@@ -778,6 +868,28 @@ class MatrixRoom extends Room implements RoomSendPreparation {
           MatrixTimelineEventCall(event, client: c),
         matrix.EventTypes.RoomPinnedEvents =>
           MatrixTimelineEventPinnedMessages(event, client: c),
+        matrix.EventTypes.RoomTombstone =>
+          MatrixTimelineEventTombstone(event, client: c),
+        matrix.EventTypes.RoomName =>
+          MatrixTimelineEventRoomName(event, client: c),
+        matrix.EventTypes.RoomTopic =>
+          MatrixTimelineEventRoomTopic(event, client: c),
+        matrix.EventTypes.RoomAvatar =>
+          MatrixTimelineEventRoomAvatar(event, client: c),
+        matrix.EventTypes.Encryption =>
+          MatrixTimelineEventRoomEncryption(event, client: c),
+        matrix.EventTypes.RoomJoinRules =>
+          MatrixTimelineEventJoinRules(event, client: c),
+        matrix.EventTypes.HistoryVisibility =>
+          MatrixTimelineEventHistoryVisibility(event, client: c),
+        matrix.EventTypes.GuestAccess =>
+          MatrixTimelineEventGuestAccess(event, client: c),
+        matrix.EventTypes.RoomCanonicalAlias =>
+          MatrixTimelineEventCanonicalAlias(event, client: c),
+        // The SDK has no constants for these two.
+        "m.room.server_acl" => MatrixTimelineEventServerAcl(event, client: c),
+        "m.room.third_party_invite" =>
+          MatrixTimelineEventThirdPartyInvite(event, client: c),
         "chat.commet.calendar_events" =>
           MatrixTimelineEventEditCalendar(event, client: c),
         _ => null
@@ -1217,9 +1329,11 @@ class MatrixRoom extends Room implements RoomSendPreparation {
     // someone typing in any room.
     if (update.timeline == null &&
         update.state == null &&
+        update.stateAfter == null &&
         update.accountData == null &&
         update.summary == null &&
-        update.unreadNotifications == null) {
+        update.unreadNotifications == null &&
+        update.unreadThreadNotifications == null) {
       return;
     }
 
@@ -1338,7 +1452,8 @@ class MatrixRoom extends Room implements RoomSendPreparation {
               .firstWhereOrNull((e) => e.status == matrix.EventStatus.synced)
               ?.eventId ==
           markerEventId) {
-        clearUnreadCountsLocally();
+        // This receipt has no thread, so it reads the threads too.
+        clearUnreadCountsLocally(threads: true);
       }
     } catch (e, s) {
       // The server still has the messages unread, so the badge must stay.

@@ -1226,6 +1226,66 @@
       "widgetName": {}
     }
   },
+  "errorLoginDeviceExpired": "The code expired before it was approved. Start again to get a new one.",
+  "@errorLoginDeviceExpired": {
+    "description": "In the 'Login failed' dialog when the sign-in code shown for signing in from another device ran out of time before the person approved it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorLoginDeviceDenied": "The sign-in was refused on the other device, so you are not signed in.",
+  "@errorLoginDeviceDenied": {
+    "description": "In the 'Login failed' dialog when the person, or the server, refused the sign-in on the device where the code was entered",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorLoginDeviceFailed": "Your server could not sign you in with a code. Try again.",
+  "@errorLoginDeviceFailed": {
+    "description": "In the 'Login failed' dialog when signing in from another device failed for a reason the server did not explain",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorLoginOauthStateMismatch": "The sign-in page sent back an answer Rooster did not ask for, so it was ignored. Try signing in again.",
+  "@errorLoginOauthStateMismatch": {
+    "description": "In the 'Login failed' dialog when the browser came back from the server's sign-in page with a reply that does not belong to this sign-in (a stale tab or a forged link); nothing was signed in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorLoginOauthAccessDenied": "Access was not allowed on the sign-in page, so you are not signed in.",
+  "@errorLoginOauthAccessDenied": {
+    "description": "In the 'Login failed' dialog when the person, or the server, refused to let Rooster in on the server's sign-in page",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorLoginOauthFailed": "Your server's sign-in page did not finish signing you in. Try again.",
+  "@errorLoginOauthFailed": {
+    "description": "In the 'Login failed' dialog when the server's sign-in page came back with an error or without a login, or the login could not be completed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorLoginOauthNoClientRegistration": "Your server does not let new apps sign in, so Rooster cannot sign in there.",
+  "@errorLoginOauthNoClientRegistration": {
+    "description": "In the 'Login failed' dialog when the server neither accepts Rooster's app description nor lets apps register themselves",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelLoginOauthReturnTitle": "Back to Rooster",
+  "@labelLoginOauthReturnTitle": {
+    "description": "Title of the page the system browser shows when it comes back from the server's sign-in page, on desktop",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelLoginOauthReturn": "You can close this page and go back to Rooster.",
+  "@labelLoginOauthReturn": {
+    "description": "The page the system browser shows when it comes back from the server's sign-in page, on desktop; Rooster finishes the sign-in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelLoginOauthReturnFailed": "Signing in did not finish. You can close this page and go back to Rooster.",
+  "@labelLoginOauthReturnFailed": {
+    "description": "The page the system browser shows when it comes back from the server's sign-in page without a login (refused or failed), on desktop",
+    "type": "text",
+    "placeholders": {}
+  },
   "errorLoginWrongClientType": "Attempted to login with the wrong type of client",
   "@errorLoginWrongClientType": {
     "description": "In the 'Login failed' dialog if single sign-on was started for an account of another kind than Matrix; should never happen",
@@ -1265,6 +1325,78 @@
   "errorLoginUnknown": "An unknown error occurred",
   "@errorLoginUnknown": {
     "description": "In the 'Login failed' dialog when signing in failed for no reason the app could tell",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginExpired": "The QR code expired or was closed. Start again to get a new one.",
+  "@errorQrLoginExpired": {
+    "description": "When signing in with a QR code stops because the short-lived connection between the two devices on the server expired or was closed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginTimedOut": "The other device did not answer in time. Start again.",
+  "@errorQrLoginTimedOut": {
+    "description": "When signing in with a QR code stops because the other device sent nothing for several minutes",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginInsecure": "The connection to the other device could not be trusted, so nothing was shared. Start again.",
+  "@errorQrLoginInsecure": {
+    "description": "When signing in with a QR code stops because a message between the two devices did not decrypt (changed, replayed or out of order): no keys were sent or used",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginCheckCodeMismatch": "The numbers did not match, so the sign-in was stopped and nothing was shared.",
+  "@errorQrLoginCheckCodeMismatch": {
+    "description": "When signing in with a QR code, after the person typed a 2-digit number different from the one the other device shows",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginCancelled": "The sign-in was cancelled on the other device.",
+  "@errorQrLoginCancelled": {
+    "description": "When signing in with a QR code stops because the other device cancelled or refused it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginUnsupported": "The other device cannot sign in this way.",
+  "@errorQrLoginUnsupported": {
+    "description": "When signing in with a QR code stops because the other device offers no sign-in method Rooster knows",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginHomeserverMismatch": "The other device uses a different server. Enter that server and try again.",
+  "@errorQrLoginHomeserverMismatch": {
+    "description": "On the login screen, when the signed-in device that read the QR code is on another homeserver than the one typed in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginDeviceExists": "Your account already has a device with that ID. Start again.",
+  "@errorQrLoginDeviceExists": {
+    "description": "When signing in with a QR code stops because the new device asked for a device ID that the account already uses",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginDeviceNotFound": "The new device did not show up on your account, so no keys were shared.",
+  "@errorQrLoginDeviceNotFound": {
+    "description": "On the signed-in device, when the new device said it signed in but the server does not list it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginNotApproved": "The sign-in was not approved in time. Start again.",
+  "@errorQrLoginNotApproved": {
+    "description": "When signing in with a QR code stops because the sign-in page of the server was not approved before it expired",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginNotALoginCode": "That is not a sign-in code from Rooster or another Matrix app.",
+  "@errorQrLoginNotALoginCode": {
+    "description": "When the text pasted to link a new device is not the code shown under a sign-in QR code",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginFailed": "Signing in with a QR code did not work. Try again.",
+  "@errorQrLoginFailed": {
+    "description": "When signing in with a QR code fails for another reason",
     "type": "text",
     "placeholders": {}
   },
@@ -1589,6 +1721,34 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelAccountLocked": "Your account is locked",
+  "@labelAccountLocked": {
+    "description": "Title of the banner shown when the homeserver locked the user's account (Matrix error M_USER_LOCKED)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageAccountLocked": "The administrators of your server locked {account}. Rooster stopped syncing it and checks again from time to time. You are still signed in and nothing was deleted.",
+  "@messageAccountLocked": {
+    "description": "Banner shown when the homeserver locked the user's account; account is the Matrix ID",
+    "type": "text",
+    "placeholders": {
+      "account": {}
+    }
+  },
+  "labelAccountSuspended": "Your account is suspended",
+  "@labelAccountSuspended": {
+    "description": "Title of the banner shown when the homeserver suspended the user's account (Matrix error M_USER_SUSPENDED)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageAccountSuspended": "The administrators of your server suspended {account}. You can still read, but you can't send messages, join rooms or change your profile. Rooster checks again from time to time.",
+  "@messageAccountSuspended": {
+    "description": "Banner shown when the homeserver suspended the user's account; account is the Matrix ID",
+    "type": "text",
+    "placeholders": {
+      "account": {}
+    }
+  },
   "errorSoundboardMissingPermission": "Missing permission to manage soundboard",
   "@errorSoundboardMissingPermission": {
     "description": "Why a soundboard sound could not be added, changed or removed: you may not manage the space's soundboard",
@@ -1893,6 +2053,30 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelWidgetPermissionNavigate": "Open Rooms and Stay on Screen",
+  "@labelWidgetPermissionNavigate": {
+    "description": "A group of permissions a room widget asks for: opening rooms and profiles from matrix.to links, and staying visible",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelWidgetPermissionNavigateDescription": "Open rooms and profiles for you, and stay visible while you use the app",
+  "@labelWidgetPermissionNavigateDescription": {
+    "description": "What the 'Open Rooms and Stay on Screen' permissions let a room widget do, in the dialog where it asks for them",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelWidgetPermissionUserDirectory": "Search Users",
+  "@labelWidgetPermissionUserDirectory": {
+    "description": "A group of permissions a room widget asks for: searching the homeserver's list of users",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelWidgetPermissionUserDirectoryDescription": "Search your homeserver's user directory",
+  "@labelWidgetPermissionUserDirectoryDescription": {
+    "description": "What the 'Search Users' permission lets a room widget do, in the dialog where it asks for it",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelWidgetPermissionRequest": "'{widgetName}' would like permission to do the following actions on your behalf:",
   "@labelWidgetPermissionRequest": {
     "description": "At the top of the dialog where a room widget (a small web app added to a room) asks for permissions, with the widget's name; the permissions are listed under it",
@@ -1954,6 +2138,12 @@
   "labelLoginSsoHomeserver": "homeserver",
   "@labelLoginSsoHomeserver": {
     "description": "Stands for the server's own single sign-on when it names no provider. It goes into the login button 'Login with …' in place of a provider's name, so translate it to read well there (with an article if your language needs one)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorLoginHomeserverInsecure": "This server tries to move the connection from HTTPS to unencrypted HTTP, so it was refused.",
+  "@errorLoginHomeserverInsecure": {
+    "description": "Under the homeserver field on the login screen when the server's discovery redirects from a secure (HTTPS) address to an insecure (HTTP) one, or names an HTTP server, and the app refused to connect",
     "type": "text",
     "placeholders": {}
   },
@@ -2142,6 +2332,31 @@
       "user": {}
     }
   },
+  "messageCanonicalAliasSet": "{user} set the main address of the room to {address}",
+  "@messageCanonicalAliasSet": {
+    "description": "Timeline line for when someone sets the room's main address (Matrix calls it the canonical alias, like #room:example.org), with the address",
+    "type": "text",
+    "placeholders": {
+      "user": {},
+      "address": {}
+    }
+  },
+  "messageCanonicalAliasRemoved": "{user} removed the main address of the room",
+  "@messageCanonicalAliasRemoved": {
+    "description": "Timeline line for when someone clears the room's main address (canonical alias)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageAltAliasesChanged": "{user} changed the other addresses of the room",
+  "@messageAltAliasesChanged": {
+    "description": "Timeline line for when someone changes the room's alternative addresses (alt_aliases) and not its main one",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
   "messagePlaceholderUserCreatedRoom": "{user} created the room!",
   "@messagePlaceholderUserCreatedRoom": {
     "description": "Message body for when a user creates the room",
@@ -2165,6 +2380,118 @@
     "placeholders": {
       "user": {},
       "emote": {}
+    }
+  },
+  "messageGuestAccessAllowed": "{user} let guests join the room",
+  "@messageGuestAccessAllowed": {
+    "description": "Timeline line for when someone allows guest accounts (temporary accounts without a password) to join the room",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageGuestAccessForbidden": "{user} stopped guests from joining the room",
+  "@messageGuestAccessForbidden": {
+    "description": "Timeline line for when someone stops guest accounts from joining the room",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageGuestAccessChanged": "{user} changed guest access to the room",
+  "@messageGuestAccessChanged": {
+    "description": "Timeline line for a change to the room's guest access that the app cannot describe (unknown or missing)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageHistoryVisibilityShared": "{user} made new messages readable by every member, including those who join later",
+  "@messageHistoryVisibilityShared": {
+    "description": "Timeline line for the 'shared' history visibility: members can read the room's history from this point on, even messages sent before they joined",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageHistoryVisibilityInvited": "{user} made new messages readable by members from the time they were invited",
+  "@messageHistoryVisibilityInvited": {
+    "description": "Timeline line for the 'invited' history visibility",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageHistoryVisibilityJoined": "{user} made new messages readable by members from the time they joined",
+  "@messageHistoryVisibilityJoined": {
+    "description": "Timeline line for the 'joined' history visibility",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageHistoryVisibilityWorldReadable": "{user} made new messages readable by anyone",
+  "@messageHistoryVisibilityWorldReadable": {
+    "description": "Timeline line for the 'world_readable' history visibility: anyone, even people who are not in the room, can read it",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageHistoryVisibilityChanged": "{user} changed who can read the room history",
+  "@messageHistoryVisibilityChanged": {
+    "description": "Timeline line for a change to the room's history visibility that the app cannot describe (unknown or missing)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageJoinRulePublic": "{user} made the room public: anyone can join",
+  "@messageJoinRulePublic": {
+    "description": "Timeline line for when someone sets the room's join rule to public",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageJoinRuleInvite": "{user} made the room invite only",
+  "@messageJoinRuleInvite": {
+    "description": "Timeline line for when someone sets the room so that only people invited can join",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageJoinRuleKnock": "{user} let people ask to join the room",
+  "@messageJoinRuleKnock": {
+    "description": "Timeline line for when someone sets the room so that anyone can ask to join (Matrix calls it knocking) and must be let in",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageJoinRuleRestricted": "{user} let members of certain spaces join the room",
+  "@messageJoinRuleRestricted": {
+    "description": "Timeline line for when someone sets the room so that members of the spaces or rooms it lists can join (the restricted join rule)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageJoinRuleKnockRestricted": "{user} let members of certain spaces join the room, and others ask to join",
+  "@messageJoinRuleKnockRestricted": {
+    "description": "Timeline line for the knock_restricted join rule: members of the spaces or rooms it lists can join, anyone else can ask to join",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageJoinRuleChanged": "{user} changed who can join the room",
+  "@messageJoinRuleChanged": {
+    "description": "Timeline line for a change to the room's join rule that the app cannot describe (unknown or missing)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
     }
   },
   "messagePlaceholderUserJoinedRoom": "{user} joined the room!",
@@ -2293,6 +2620,122 @@
       "user": {}
     }
   },
+  "messageRoomAvatarChanged": "{user} changed the room picture",
+  "@messageRoomAvatarChanged": {
+    "description": "Timeline line for when someone sets a new picture (avatar) for the room",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageRoomAvatarRemoved": "{user} removed the room picture",
+  "@messageRoomAvatarRemoved": {
+    "description": "Timeline line for when someone removes the room's picture (avatar)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageRoomEncryptionEnabled": "{user} turned on end-to-end encryption",
+  "@messageRoomEncryptionEnabled": {
+    "description": "Timeline line for when someone turns on end-to-end encryption in the room",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageRoomEncryptionChanged": "{user} changed the encryption settings",
+  "@messageRoomEncryptionChanged": {
+    "description": "Timeline line for a change to the room's encryption settings that the app cannot describe (an unknown or missing algorithm)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageRoomNameChanged": "{user} changed the room name to {name}",
+  "@messageRoomNameChanged": {
+    "description": "Timeline line for when someone renames the room, with their name and the room's new name",
+    "type": "text",
+    "placeholders": {
+      "user": {},
+      "name": {}
+    }
+  },
+  "messageRoomNameRemoved": "{user} removed the room name",
+  "@messageRoomNameRemoved": {
+    "description": "Timeline line for when someone clears the room's name",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageRoomTopicChanged": "{user} changed the topic to: {topic}",
+  "@messageRoomTopicChanged": {
+    "description": "Timeline line for when someone changes the room's topic (its description), with their name and the new topic",
+    "type": "text",
+    "placeholders": {
+      "user": {},
+      "topic": {}
+    }
+  },
+  "messageRoomTopicChangedFormatted": "{user} changed the topic to:",
+  "@messageRoomTopicChangedFormatted": {
+    "description": "Timeline line for when someone changes the room's topic to a formatted one, which is shown right under this line",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageRoomTopicRemoved": "{user} removed the topic",
+  "@messageRoomTopicRemoved": {
+    "description": "Timeline line for when someone clears the room's topic (its description)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageServerAclChanged": "{user} changed which servers can take part in the room",
+  "@messageServerAclChanged": {
+    "description": "Timeline line for when someone changes the room's server access rules (Matrix calls them server ACLs)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageThirdPartyInvite": "{user} invited {invitee} to the room",
+  "@messageThirdPartyInvite": {
+    "description": "Timeline line for when someone invites a person by email or phone number, with the invitee's display name (often a shortened address)",
+    "type": "text",
+    "placeholders": {
+      "user": {},
+      "invitee": {}
+    }
+  },
+  "messageThirdPartyInviteRevoked": "{user} revoked the invitation for {invitee}",
+  "@messageThirdPartyInviteRevoked": {
+    "description": "Timeline line for when someone withdraws an invitation sent by email or phone number, with the invitee's display name",
+    "type": "text",
+    "placeholders": {
+      "user": {},
+      "invitee": {}
+    }
+  },
+  "messageThirdPartyInviteRevokedUnnamed": "{user} revoked an invitation",
+  "@messageThirdPartyInviteRevokedUnnamed": {
+    "description": "Timeline line for when someone withdraws an invitation sent by email or phone number, when the app does not know whose it was",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageUserReplacedRoom": "{user} upgraded this room. The conversation continues in the new room.",
+  "@messageUserReplacedRoom": {
+    "description": "Timeline line for when someone upgrades a room: it is closed and a new room (Matrix calls it the replacement room) takes its place",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
   "labelNotificationUnknownEventType": "Unknown event type",
   "@labelNotificationUnknownEventType": {
     "description": "Text of a notification on Android for something in a room that is neither a message nor encrypted, which the app cannot describe",
@@ -2400,6 +2843,42 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelE2eeTrustVerified": "Verified",
+  "@labelE2eeTrustVerified": {
+    "description": "Next to a shield icon: this user's (or every member's) encryption identity and devices are verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelE2eeTrustUnverified": "Not verified",
+  "@labelE2eeTrustUnverified": {
+    "description": "Next to a shield icon: this user's (or a member's) encryption identity or one of their devices is not verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelE2eeTrustIdentityChanged": "Identity changed",
+  "@labelE2eeTrustIdentityChanged": {
+    "description": "Next to a red shield icon: the encryption identity of a user the user had verified was replaced by a new one",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipE2eeTrustVerified": "Encrypted, and verified: you know these keys are theirs",
+  "@tooltipE2eeTrustVerified": {
+    "description": "Tooltip of the green shield of a verified user or room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipE2eeTrustUnverified": "Encrypted, but not verified: verify to make sure no one else reads along",
+  "@tooltipE2eeTrustUnverified": {
+    "description": "Tooltip of the grey shield of a user or room not verified yet",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipE2eeTrustIdentityChanged": "Their identity changed since you verified them. Verify them again before you trust their messages",
+  "@tooltipE2eeTrustIdentityChanged": {
+    "description": "Tooltip of the red shield shown when a verified user's encryption identity was replaced",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelLightboxPosition": "{position} / {total}",
   "@labelLightboxPosition": {
     "description": "Counter at the top of the image viewer while it pages through several photos: which one is shown, of how many",
@@ -2466,6 +2945,20 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelSpoilerReason": "Spoiler: {reason}",
+  "@labelSpoilerReason": {
+    "description": "Shown before a hidden spoiler in a message, with the reason its sender gave for hiding it",
+    "type": "text",
+    "placeholders": {
+      "reason": {}
+    }
+  },
+  "labelSpoilerHidden": "Hidden spoiler, tap to reveal",
+  "@labelSpoilerHidden": {
+    "description": "Read by screen readers in place of the hidden text of a spoiler in a message",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelRoomCreatedWelcome": "Welcome to {roomName}!",
   "@labelRoomCreatedWelcome": {
     "description": "Big title at the very beginning of a room's history, with the room's name",
@@ -2483,6 +2976,62 @@
   "labelRoomRecentEventYou": "You",
   "@labelRoomRecentEventYou": {
     "description": "Who sent a room's last message, when it was us, shown before the message in the room's panel on a space's page",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomMarkAsUnread": "Mark as Unread",
+  "@promptRoomMarkAsUnread": {
+    "description": "Entry in a room's menu (right-click or long press in the room list) that marks it unread, so its dot shows until it is read again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomSetLowPriority": "Set as Low Priority",
+  "@promptRoomSetLowPriority": {
+    "description": "Entry in a room's menu that gives the room the low priority tag",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomUnsetLowPriority": "Remove Low Priority",
+  "@promptRoomUnsetLowPriority": {
+    "description": "Entry in a room's menu that takes the low priority tag off the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomEditTags": "Tags",
+  "@promptRoomEditTags": {
+    "description": "Entry in a room's menu, and the title of the dialog it opens, where the user adds and removes their own tags on the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRoomTagsEmpty": "This room has no tags of yours yet.",
+  "@labelRoomTagsEmpty": {
+    "description": "In the room tags dialog, when the user has not tagged the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintRoomTagName": "New tag",
+  "@hintRoomTagName": {
+    "description": "Placeholder of the field where the user types a new room tag",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomAddTag": "Add",
+  "@promptRoomAddTag": {
+    "description": "Button in the room tags dialog that adds the typed tag",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomRemoveTag": "Remove tag {tag}",
+  "@promptRoomRemoveTag": {
+    "description": "Tooltip of the button next to a tag in the room tags dialog that removes it",
+    "type": "text",
+    "placeholders": {
+      "tag": {}
+    }
+  },
+  "errorRoomTagInvalid": "Type a name for the tag that is not too long.",
+  "@errorRoomTagInvalid": {
+    "description": "Under the tag field when the typed tag is empty or too long to be saved",
     "type": "text",
     "placeholders": {}
   },
@@ -3532,6 +4081,24 @@
       }
     }
   },
+  "labelVoiceMessage": "Voice message",
+  "@labelVoiceMessage": {
+    "description": "Title of the player of a voice message recorded in the chat",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageAudioCouldNotPlay": "This audio could not be played",
+  "@messageAudioCouldNotPlay": {
+    "description": "Shown in the player of an audio message in the chat when its file could not be downloaded or played",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelAudioPlaybackPosition": "Playback position",
+  "@labelAudioPlaybackPosition": {
+    "description": "Read by screen readers for the bar that moves through an audio message in the chat",
+    "type": "text",
+    "placeholders": {}
+  },
   "messagePlaceholderSticker": "{user} sent a sticker",
   "@messagePlaceholderSticker": {
     "description": "Message body for when a user sends a sticker",
@@ -3560,9 +4127,64 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelLocation": "Location",
+  "@labelLocation": {
+    "description": "Title of a place shared in the chat, when the sender gave it no description",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptOpenLocationInMap": "Open in map",
+  "@promptOpenLocationInMap": {
+    "description": "Button on a place shared in the chat that opens it on OpenStreetMap in the web browser",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageLocationInvalid": "This location cannot be shown: its coordinates are not valid",
+  "@messageLocationInvalid": {
+    "description": "Shown in the chat for a shared place whose coordinates could not be read",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelLocationCoordinates": "{latitude}, {longitude}",
+  "@labelLocationCoordinates": {
+    "description": "The latitude and the longitude of a place shared in the chat, in decimal degrees, already formatted as numbers in the app's language",
+    "type": "text",
+    "placeholders": {
+      "latitude": {},
+      "longitude": {}
+    }
+  },
+  "labelLocationAccuracy": "Within {meters} m",
+  "@labelLocationAccuracy": {
+    "description": "Under a place shared in the chat: how far off it may be, in metres, already formatted as a number",
+    "type": "text",
+    "placeholders": {
+      "meters": {}
+    }
+  },
+  "labelLocationAltitude": "Altitude {meters} m",
+  "@labelLocationAltitude": {
+    "description": "Under a place shared in the chat: its height above sea level, in metres, already formatted as a number",
+    "type": "text",
+    "placeholders": {
+      "meters": {}
+    }
+  },
   "messageFailedToDecrypt": "Failed to decrypt event",
   "@messageFailedToDecrypt": {
     "description": "Placeholde text for when a message fails to decrypt",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotice": "Automated notice",
+  "@labelNotice": {
+    "description": "Marks a message in the chat that a bot or a service sent (a Matrix notice), not a person",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipNotice": "Sent by a bot or a service, not typed by a person",
+  "@tooltipNotice": {
+    "description": "Tooltip of the mark on a message that a bot or a service sent (a Matrix notice)",
     "type": "text",
     "placeholders": {}
   },
@@ -3633,6 +4255,14 @@
     "description": "In the chat, in place of a message that could not be decrypted, when this device has not been verified; tapping it opens the prompt to verify this device",
     "type": "text",
     "placeholders": {}
+  },
+  "tooltipThreadUnread": "{count,plural, =1{1 unread notification in this thread}other{{count} unread notifications in this thread}}",
+  "@tooltipThreadUnread": {
+    "description": "Tooltip of the count of unread notifications on a thread, under its first message and in the room's list of threads",
+    "type": "text",
+    "placeholders": {
+      "count": {}
+    }
   },
   "promptPinMessage": "Pin Message",
   "@promptPinMessage": {
@@ -4574,6 +5204,120 @@
     "type": "text",
     "placeholders": {}
   },
+  "promptJumpToDate": "Jump to date",
+  "@promptJumpToDate": {
+    "description": "Room menu entry, and tooltip of a day separator in the chat, that asks for a day and shows the room's messages from it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageJumpToDateNotFound": "There are no messages around that date",
+  "@messageJumpToDateNotFound": {
+    "description": "Shown after jumping to a date when the room has no message on or around it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageJumpToDateUnsupported": "Your server can't look up messages by date",
+  "@messageJumpToDateUnsupported": {
+    "description": "Shown after jumping to a date when the homeserver is too old for it (before Matrix v1.6)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorJumpToDateFailed": "Couldn't jump to that date",
+  "@errorJumpToDateFailed": {
+    "description": "Shown after jumping to a date when the homeserver did not answer",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomTakesKnocks": "You are not in this room. You can ask its moderators to let you in.",
+  "@messageRoomTakesKnocks": {
+    "description": "Banner in a room you are not in that takes requests to join",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRequestToJoin": "Request to join",
+  "@promptRequestToJoin": {
+    "description": "Button that asks a room's moderators to let you in (Matrix calls it knocking)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKnockReasonTitle": "Request to join",
+  "@labelKnockReasonTitle": {
+    "description": "Title of the dialog that sends a request to join a room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKnockReasonDescription": "Add a note for the moderators, if you like.",
+  "@labelKnockReasonDescription": {
+    "description": "Text above the optional note sent with a request to join a room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKnockReasonHint": "Note (optional)",
+  "@labelKnockReasonHint": {
+    "description": "Placeholder of the optional note sent with a request to join",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptSendKnock": "Send request",
+  "@promptSendKnock": {
+    "description": "Button that sends a request to join a room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKnockPending": "Your request to join is waiting for a moderator.",
+  "@messageKnockPending": {
+    "description": "Banner in a room you asked to join, until a moderator answers",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomReplaced": "This room has been replaced and is no longer active.",
+  "@messageRoomReplaced": {
+    "description": "Banner in a room that was upgraded: a new room (Matrix calls it the replacement room) took its place",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptGoToReplacementRoom": "Go to new room",
+  "@promptGoToReplacementRoom": {
+    "description": "Button on the banner of an upgraded room that joins and opens the room that replaced it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSendLocation": "Send a location",
+  "@labelSendLocation": {
+    "description": "Title of the dialog, and tooltip of the composer's button, that sends a place to the chat",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSendLocationCoordinates": "Coordinates",
+  "@labelSendLocationCoordinates": {
+    "description": "Label of the field where the coordinates of a place to send are typed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintSendLocationCoordinates": "Latitude, longitude (e.g. -23.5505, -46.6333)",
+  "@hintSendLocationCoordinates": {
+    "description": "Hint in the field where the coordinates of a place to send are typed. Keep the example numbers as they are: they are typed with a dot",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSendLocationDescription": "Description (optional)",
+  "@labelSendLocationDescription": {
+    "description": "Label of the field where the person may say what the place they send is",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorSendLocationCoordinates": "Type a latitude from -90 to 90 and a longitude from -180 to 180, separated by a comma, or a geo: link",
+  "@errorSendLocationCoordinates": {
+    "description": "Shown under the coordinates of a place to send when they cannot be read. Keep \"geo:\" as it is",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptSendLocation": "Send",
+  "@promptSendLocation": {
+    "description": "Button that sends the place typed in the dialog to the chat",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelDjBoothTitle": "DJ Booth",
   "@labelDjBoothTitle": {
     "description": "Title of the DJ booth panel in a call: music everyone in the call hears, played by one of them, the DJ",
@@ -5447,6 +6191,396 @@
   "labelInvitations": "Invitations",
   "@labelInvitations": {
     "description": "Label for the list of incoming invitations",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelBannedMembers": "Banned Members",
+  "@labelBannedMembers": {
+    "description": "Title of the list of people banned from a room, in its settings",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNoBannedMembers": "No one is banned from this room.",
+  "@labelNoBannedMembers": {
+    "description": "Shown instead of the banned list when it is empty",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptUnban": "Unban",
+  "@promptUnban": {
+    "description": "Button next to a banned member: lifts the ban so they can join again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUnbanConfirmation": "Lift the ban on {user}? They will be able to join again.",
+  "@messageUnbanConfirmation": {
+    "description": "Asked before unbanning someone, with their name",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "labelBanReason": "Reason: {reason}",
+  "@labelBanReason": {
+    "description": "Under a banned member, the reason the moderator gave for the ban",
+    "type": "text",
+    "placeholders": {
+      "reason": {}
+    }
+  },
+  "promptIgnoreUser": "Ignore",
+  "@promptIgnoreUser": {
+    "description": "Entry in a user's profile menu, and button in Settings, that ignores the user: their messages and invites are hidden",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptUnignoreUser": "Stop Ignoring",
+  "@promptUnignoreUser": {
+    "description": "Entry in a user's profile menu, and button next to each ignored user in Settings, that shows their messages and invites again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelIgnoreUserConfirmation": "Ignore {name}? You will no longer see their messages or invites. You can stop ignoring them in Settings.",
+  "@labelIgnoreUserConfirmation": {
+    "description": "Asked before ignoring a user, with their name",
+    "type": "text",
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "errorIgnoreSelf": "You cannot ignore yourself.",
+  "@errorIgnoreSelf": {
+    "description": "Shown when the user tries to put their own Matrix ID on their ignore list",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorIgnoreInvalidId": "That is not a Matrix ID. It looks like @name:example.org.",
+  "@errorIgnoreInvalidId": {
+    "description": "Under the field in Settings where a user to ignore is typed, when what was typed is not a Matrix ID; the example stays as it is",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorIgnoreFailed": "The ignore list could not be saved. Check your connection and try again.",
+  "@errorIgnoreFailed": {
+    "description": "Shown when saving the ignore list to the homeserver failed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintModerationReason": "Reason (optional)",
+  "@hintModerationReason": {
+    "description": "Placeholder of the field where a moderator says why they kick, ban, unban or invite someone or delete a message; it can be left empty, and the room's members can read it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorModerationForbidden": "You do not have permission to do this in this room.",
+  "@errorModerationForbidden": {
+    "description": "Shown when the homeserver refused a moderation action (M_FORBIDDEN)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorModerationNotFound": "The server could not find this member or message. It may already be gone.",
+  "@errorModerationNotFound": {
+    "description": "Shown when the homeserver answered M_NOT_FOUND to a moderation action",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorModerationRateLimited": "Too many actions at once. Wait a moment and try again.",
+  "@errorModerationRateLimited": {
+    "description": "Shown when the homeserver answered M_LIMIT_EXCEEDED to a moderation action",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorModerationFailed": "This did not go through. Check your connection and try again.",
+  "@errorModerationFailed": {
+    "description": "Shown when a moderation action failed for any other reason",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageModerationDeleteConfirmation": "Delete this message for everyone?",
+  "@messageModerationDeleteConfirmation": {
+    "description": "Asked before a moderator deletes someone else's message, above a field for an optional reason",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyServer": "Policy Server",
+  "@labelPolicyServer": {
+    "description": "Title of the room setting for the server that checks new messages against the room's rules before they are shared (Matrix policy server)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyServerDescription": "A policy server checks new events against this room's rules before other servers accept them. Leave the server empty to turn it off.",
+  "@labelPolicyServerDescription": {
+    "description": "Explanation at the top of the policy server setting",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyServerVia": "Server name",
+  "@labelPolicyServerVia": {
+    "description": "Field for the policy server's name, like policy.example.org",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyServerKey": "Public key (ed25519)",
+  "@labelPolicyServerKey": {
+    "description": "Field for the policy server's signing key, which its operator publishes",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorPolicyServerName": "Enter a server name such as policy.example.org, without https://.",
+  "@errorPolicyServerName": {
+    "description": "Why the policy server setting will not save a malformed name",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorPolicyServerKey": "Enter the policy server's public key. Without it, servers ignore the policy server.",
+  "@errorPolicyServerKey": {
+    "description": "Why the policy server setting will not save without a key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePolicyServerSaved": "Policy server saved.",
+  "@messagePolicyServerSaved": {
+    "description": "Shown after the room's policy server was saved",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyRules": "Policy Rules",
+  "@labelPolicyRules": {
+    "description": "Heading of the moderation rules (bans of users, rooms or servers) published in this room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNoPolicyRules": "This room publishes no policy rules.",
+  "@labelNoPolicyRules": {
+    "description": "Shown instead of the policy rules when there are none",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyRuleUser": "User",
+  "@labelPolicyRuleUser": {
+    "description": "Kind of a policy rule that applies to users",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyRuleRoom": "Room",
+  "@labelPolicyRuleRoom": {
+    "description": "Kind of a policy rule that applies to rooms",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyRuleServer": "Server",
+  "@labelPolicyRuleServer": {
+    "description": "Kind of a policy rule that applies to servers",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPolicyRuleBan": "Ban",
+  "@labelPolicyRuleBan": {
+    "description": "What a policy rule recommends: banning the users, rooms or servers it names",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReportMessage": "Report Message",
+  "@promptReportMessage": {
+    "description": "Entry in a message's menu, and the title of the dialog it opens, that reports the message to the homeserver's administrators",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReportRoom": "Report Room",
+  "@promptReportRoom": {
+    "description": "Entry in a room's menu, and the title of the dialog it opens, that reports the room to the homeserver's administrators",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReportUser": "Report User",
+  "@promptReportUser": {
+    "description": "Entry in a user's profile menu, and the title of the dialog it opens, that reports the user to the homeserver's administrators",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelReportMessageDescription": "Your homeserver's administrators will see this message and your reason.",
+  "@labelReportMessageDescription": {
+    "description": "Top of the dialog that reports a message",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelReportRoomDescription": "Your homeserver's administrators will see this room and your reason.",
+  "@labelReportRoomDescription": {
+    "description": "Top of the dialog that reports a room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelReportUserDescription": "Your homeserver's administrators will see this user and your reason.",
+  "@labelReportUserDescription": {
+    "description": "Top of the dialog that reports a user",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintReportReason": "Reason (optional)",
+  "@hintReportReason": {
+    "description": "Placeholder of the field in the report dialog where the user says why they report something; it can be left empty",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReportSend": "Send Report",
+  "@promptReportSend": {
+    "description": "Button in the report dialog that sends the report",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageReportSent": "Report sent. Thank you for helping keep this place safe.",
+  "@messageReportSent": {
+    "description": "Shown in the report dialog after the homeserver took the report",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorReportForbidden": "The server did not let you report this. You may no longer be in the room.",
+  "@errorReportForbidden": {
+    "description": "In the report dialog when the homeserver answered M_FORBIDDEN",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorReportNotFound": "The server could not find what you are reporting. It may have been deleted.",
+  "@errorReportNotFound": {
+    "description": "In the report dialog when the homeserver answered M_NOT_FOUND",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorReportUnsupported": "Your homeserver does not take reports of this kind.",
+  "@errorReportUnsupported": {
+    "description": "In the report dialog when the homeserver is too old for room or user reports (M_UNRECOGNIZED)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorReportRateLimited": "Too many reports at once. Wait a moment and try again.",
+  "@errorReportRateLimited": {
+    "description": "In the report dialog when the homeserver answered M_LIMIT_EXCEEDED",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorReportFailed": "The report could not be sent. Check your connection and try again.",
+  "@errorReportFailed": {
+    "description": "In the report dialog when sending failed for any other reason",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAcl": "Server Access",
+  "@labelServerAcl": {
+    "description": "Title of the room setting that says which Matrix servers may take part in the room (the server ACL)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAclDescription": "Choose which servers may take part in this room. One server per line; * matches any characters and ? one character.",
+  "@labelServerAclDescription": {
+    "description": "Explanation at the top of the server access editor",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAclAllow": "Allowed servers",
+  "@labelServerAclAllow": {
+    "description": "Label of the list of servers that may take part in the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAclDeny": "Blocked servers",
+  "@labelServerAclDeny": {
+    "description": "Label of the list of servers that may not take part in the room, even when allowed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAclIpLiterals": "Allow servers named by an IP address",
+  "@labelServerAclIpLiterals": {
+    "description": "Switch in the server access editor for servers whose name is an IP address instead of a domain",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorServerAclAllowEmpty": "Allow at least one server. With no allowed servers, no one could ever use this room again.",
+  "@errorServerAclAllowEmpty": {
+    "description": "Why the server access editor will not save an empty list of allowed servers",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorServerAclOwnServerNotAllowed": "Your server, {server}, is not on the allowed list. Saving this would lock you out of the room for good.",
+  "@errorServerAclOwnServerNotAllowed": {
+    "description": "Why the server access editor will not save, with the user's own server name",
+    "type": "text",
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "errorServerAclOwnServerDenied": "Your server, {server}, is on the blocked list. Saving this would lock you out of the room for good.",
+  "@errorServerAclOwnServerDenied": {
+    "description": "Why the server access editor will not save, with the user's own server name",
+    "type": "text",
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "errorServerAclIpLiteral": "Your server, {server}, is named by an IP address. Blocking those would lock you out of the room for good.",
+  "@errorServerAclIpLiteral": {
+    "description": "Why the server access editor will not save, with the user's own server name",
+    "type": "text",
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "messageServerAclSaved": "Server access saved.",
+  "@messageServerAclSaved": {
+    "description": "Shown after the room's server access was saved",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotificationHistoryAll": "All",
+  "@labelNotificationHistoryAll": {
+    "description": "Settings > Notifications > Notification history: the filter that shows every notification",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotificationHistoryMentions": "Mentions",
+  "@labelNotificationHistoryMentions": {
+    "description": "Settings > Notifications > Notification history: the filter that shows only the notifications that mention you or match one of your keywords",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotificationHistoryEmpty": "No notifications yet",
+  "@labelNotificationHistoryEmpty": {
+    "description": "Settings > Notifications > Notification history: shown when the server has no notifications for the account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotificationHistoryNoMentions": "No mentions yet",
+  "@labelNotificationHistoryNoMentions": {
+    "description": "Settings > Notifications > Notification history, with the Mentions filter: shown when nothing mentioned you",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageNotificationHistoryFailed": "Couldn't load your notifications.",
+  "@messageNotificationHistoryFailed": {
+    "description": "Settings > Notifications > Notification history: the server could not be reached or refused, next to a button to try again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptNotificationHistoryLoadMore": "Load more",
+  "@promptNotificationHistoryLoadMore": {
+    "description": "Settings > Notifications > Notification history: button under the list that loads older notifications",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotificationHistoryEncrypted": "Encrypted message",
+  "@labelNotificationHistoryEncrypted": {
+    "description": "Settings > Notifications > Notification history: in place of the text of an end-to-end encrypted message",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotificationHistoryInvite": "Invited you to join",
+  "@labelNotificationHistoryInvite": {
+    "description": "Settings > Notifications > Notification history: an invitation to a room, under the room's name and who sent it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotificationHistoryOther": "New activity",
+  "@labelNotificationHistoryOther": {
+    "description": "Settings > Notifications > Notification history: a notification for something other than a message or invitation (a call, say)",
     "type": "text",
     "placeholders": {}
   },
@@ -6812,6 +7946,65 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelThreads": "Threads",
+  "@labelThreads": {
+    "description": "Title of the panel that lists a room's threads, and the room menu entry that opens it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelThreadsFilterAll": "All threads",
+  "@labelThreadsFilterAll": {
+    "description": "Filter of the threads panel that shows every thread of the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelThreadsFilterParticipated": "My threads",
+  "@labelThreadsFilterParticipated": {
+    "description": "Filter of the threads panel that shows only the threads the user started or replied in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageNoThreads": "No threads here yet",
+  "@messageNoThreads": {
+    "description": "Shown in the threads panel when the room has no thread",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageNoParticipatedThreads": "You haven't started or replied in a thread here yet",
+  "@messageNoParticipatedThreads": {
+    "description": "Shown in the threads panel, filtered to the user's threads, when the user has none in the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorThreadsLoadFailed": "Couldn't load the threads",
+  "@errorThreadsLoadFailed": {
+    "description": "Shown in the threads panel when the server did not answer with the room's threads",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelThreadReplyCount": "{count,plural, =0{No replies}=1{1 reply}other{{count} replies}}",
+  "@labelThreadReplyCount": {
+    "description": "How many replies a thread has, in the threads panel",
+    "type": "text",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "labelThreadUnknownSender": "Unknown sender",
+  "@labelThreadUnknownSender": {
+    "description": "Stands in for the name of who started a thread, in the threads panel, while it is not known",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelThreadLatestReply": "{sender}: {body}",
+  "@labelThreadLatestReply": {
+    "description": "Under a thread in the threads panel: who sent its latest reply and what it says",
+    "type": "text",
+    "placeholders": {
+      "sender": {},
+      "body": {}
+    }
+  },
   "labelUpdateVersion": "Version",
   "@labelUpdateVersion": {
     "description": "Heading of the update control in Settings, above the running version or what the update is doing",
@@ -6909,6 +8102,86 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelProfileMutualRooms": "Rooms in common",
+  "@labelProfileMutualRooms": {
+    "description": "Heading of the list of rooms the user and the person whose profile card is open have both joined",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageProfileMutualRoomsNone": "You have no rooms in common.",
+  "@messageProfileMutualRoomsNone": {
+    "description": "Shown on a profile card when the user and that person share no room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageProfileMutualRoomsLocal": "Your server can't list them, so these are the ones this device knows about. Some may be missing.",
+  "@messageProfileMutualRoomsLocal": {
+    "description": "Under the rooms in common on a profile card when the homeserver is too old to list them and the app worked them out itself",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageProfileMutualRoomsFailed": "Couldn't load the rooms in common.",
+  "@messageProfileMutualRoomsFailed": {
+    "description": "Shown on a profile card when the list of rooms in common could not be loaded",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptProfileMutualRoomsMore": "Show more",
+  "@promptProfileMutualRoomsMore": {
+    "description": "Button under the rooms in common on a profile card: loads the next ones",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSessions": "{howMany,plural, =1{1 session}other{{howMany} sessions}}",
+  "@labelProfileSessions": {
+    "description": "Heading of the list of another user's sessions (devices) on their profile, with how many there are",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "labelProfileSessionsDescription": "A blocked session gets no keys to the messages you send from now on.",
+  "@labelProfileSessionsDescription": {
+    "description": "Under the heading of another user's sessions on their profile: what blocking one of them does",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSessionVerified": "Verified",
+  "@labelProfileSessionVerified": {
+    "description": "State of one of another user's sessions (devices) on their profile: it is verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSessionUnverified": "Not verified",
+  "@labelProfileSessionUnverified": {
+    "description": "State of one of another user's sessions (devices) on their profile: it is not verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSessionBlocked": "Blocked",
+  "@labelProfileSessionBlocked": {
+    "description": "State of one of another user's sessions on their profile: the user blocked it, it gets no keys to their messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptProfileBlockSession": "Block",
+  "@promptProfileBlockSession": {
+    "description": "Button next to one of another user's sessions on their profile: stops sending it the keys to the user's messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptProfileUnblockSession": "Unblock",
+  "@promptProfileUnblockSession": {
+    "description": "Button next to a blocked session of another user on their profile: sends it the keys to the user's messages again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageProfileDeviceChangeFailed": "This session could not be changed. Close the profile and try again.",
+  "@messageProfileDeviceChangeFailed": {
+    "description": "Error shown when blocking or unblocking one of a user's sessions (devices) on their profile did not work",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelProfileSourceTitle": "Source",
   "@labelProfileSourceTitle": {
     "description": "Title of the dialog that shows the raw JSON of a user's profile (developer mode)",
@@ -6918,6 +8191,26 @@
   "promptOpenDirectMessage": "Message",
   "@promptOpenDirectMessage": {
     "description": "Prompt on the button to open a direct message with another user",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptProfileVerifyUser": "Verify user",
+  "@promptProfileVerifyUser": {
+    "description": "Button on another user's profile card to start end-to-end encryption verification with them",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageProfileIdentityChanged": "{user}'s identity changed since you verified them. Until you verify them again, their messages may come from someone else.",
+  "@messageProfileIdentityChanged": {
+    "description": "Alert on the profile of a user the user had verified, whose encryption identity was replaced since, with their name",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "promptProfileWithdrawVerification": "Withdraw verification",
+  "@promptProfileWithdrawVerification": {
+    "description": "Button on the alert of a user whose encryption identity changed: accepts the new identity as not verified, and stops the alert",
     "type": "text",
     "placeholders": {}
   },
@@ -7177,6 +8470,14 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelCallRinging": "{name} is calling",
+  "@labelCallRinging": {
+    "description": "Shown on a voice channel's page while someone rings us to its call, beside the Join and Decline buttons. The name is the person ringing",
+    "type": "text",
+    "placeholders": {
+      "name": {}
+    }
+  },
   "tooltipCallRoomEncrypted": "This room is encrypted, your call is secure and private",
   "@tooltipCallRoomEncrypted": {
     "description": "Tooltip of the closed lock at the bottom of a voice channel's page, before joining its call",
@@ -7216,6 +8517,128 @@
   "messageVoiceE2eeUnsupported": "Sorry, End-to-end encrypted voice rooms are not yet supported.",
   "@messageVoiceE2eeUnsupported": {
     "description": "Shown on the page of a voice channel that is end-to-end encrypted, where calls cannot be joined yet",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelExplorePublicRooms": "Explore public rooms",
+  "@labelExplorePublicRooms": {
+    "description": "Title of the page that lists a server's public rooms, and the tooltip of the sidebar button that opens it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintExploreSearch": "Search rooms",
+  "@hintExploreSearch": {
+    "description": "Placeholder of the search field on the public rooms page",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintExploreServer": "Server (empty for your own)",
+  "@hintExploreServer": {
+    "description": "Placeholder of the field on the public rooms page that picks another server's directory, like example.org",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptExploreSearch": "Search",
+  "@promptExploreSearch": {
+    "description": "Button on the public rooms page that runs the search",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageExploreEmpty": "No public rooms found.",
+  "@messageExploreEmpty": {
+    "description": "The public rooms page when the server lists no room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageExploreUnavailable": "This server's room directory could not be loaded.",
+  "@messageExploreUnavailable": {
+    "description": "The public rooms page when the server did not answer or refused to list its rooms",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageExploreLoadMoreFailed": "More rooms could not be loaded.",
+  "@messageExploreLoadMoreFailed": {
+    "description": "Under the public rooms list when the next page failed to load",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptExploreRetry": "Try again",
+  "@promptExploreRetry": {
+    "description": "Button on the public rooms page that repeats a failed request",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptExploreLoadMore": "Load more",
+  "@promptExploreLoadMore": {
+    "description": "Button under the public rooms list that loads the next page",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptExploreJoin": "Join",
+  "@promptExploreJoin": {
+    "description": "Button next to a public room that joins it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptExploreOpen": "Open",
+  "@promptExploreOpen": {
+    "description": "Button next to a public room we are already in that opens it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptExplorePreview": "Preview",
+  "@promptExplorePreview": {
+    "description": "Button next to a public room anyone can read that shows its messages without joining",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelExploreMembers": "{count,plural, =1{{count} member}other{{count} members}}",
+  "@labelExploreMembers": {
+    "description": "How many people are in a public room, in its row",
+    "type": "text",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "labelRoomPeekReadOnly": "You are previewing this room. Join it to send messages.",
+  "@labelRoomPeekReadOnly": {
+    "description": "Banner above the messages of a room shown without joining it (read only)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomPeekForbidden": "This room can only be read by its members. Join it to see its messages.",
+  "@messageRoomPeekForbidden": {
+    "description": "Shown instead of the messages when a room cannot be previewed without joining",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomPeekFailed": "This room's messages could not be loaded.",
+  "@messageRoomPeekFailed": {
+    "description": "Shown when previewing a room failed for another reason",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomPeekEmpty": "No messages to show yet.",
+  "@messageRoomPeekEmpty": {
+    "description": "Shown when a previewed room has no messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRoomPeekEncrypted": "Encrypted message",
+  "@labelRoomPeekEncrypted": {
+    "description": "Stands for a message of a previewed room that cannot be read without joining (end-to-end encrypted)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomPeekJoin": "Join room",
+  "@promptRoomPeekJoin": {
+    "description": "Button on a room's preview that joins it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomPeekRefresh": "Refresh",
+  "@promptRoomPeekRefresh": {
+    "description": "Button on a room's preview that loads newer messages",
     "type": "text",
     "placeholders": {}
   },
@@ -7655,6 +9078,48 @@
       "tag": {}
     }
   },
+  "promptLoginDeviceAuth": "Sign in from another device",
+  "@promptLoginDeviceAuth": {
+    "description": "Button on the login screen that shows a code to approve on a phone or computer already able to sign in to the server",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeviceAuthWaitingForCode": "Getting a code from your server…",
+  "@labelDeviceAuthWaitingForCode": {
+    "description": "On the login screen, while the server is asked for a code to sign in from another device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeviceAuthInstructions": "On a phone or computer, scan the QR code or open the link, then check that it shows this code:",
+  "@labelDeviceAuthInstructions": {
+    "description": "On the login screen, above the sign-in code, explaining how to approve the sign-in on another device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeviceAuthWaitingForApproval": "Waiting for you to approve on the other device…",
+  "@labelDeviceAuthWaitingForApproval": {
+    "description": "On the login screen, under the sign-in code, while Rooster waits for the sign-in to be approved on another device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptDeviceAuthCopyCode": "Copy code",
+  "@promptDeviceAuthCopyCode": {
+    "description": "Button that copies the sign-in code to the clipboard",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptDeviceAuthCopyLink": "Copy link",
+  "@promptDeviceAuthCopyLink": {
+    "description": "Button that copies the link of the page where the sign-in is approved to the clipboard",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptDeviceAuthOpenLink": "Open link",
+  "@promptDeviceAuthOpenLink": {
+    "description": "Button that opens the page where the sign-in is approved in the browser of this device",
+    "type": "text",
+    "placeholders": {}
+  },
   "messageLoginFailed": "Login Failed...",
   "@messageLoginFailed": {
     "description": "Generic text to show that an attempted login has failed",
@@ -7741,6 +9206,280 @@
     "type": "text",
     "placeholders": {
       "provider": {}
+    }
+  },
+  "promptLoginOauth": "Sign in with {server}",
+  "@promptLoginOauth": {
+    "description": "Button on the login screen that opens the homeserver's own sign-in page in the browser; the server is its address, such as matrix.org",
+    "type": "text",
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "promptLoginOauthCreateAccount": "Create account",
+  "@promptLoginOauthCreateAccount": {
+    "description": "Button on the login screen that opens the homeserver's page for making a new account, in the browser",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptLoginForgotPassword": "Forgot password?",
+  "@promptLoginForgotPassword": {
+    "description": "Link on the login screen to reset the password by email",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPasswordReset": "Reset password",
+  "@labelPasswordReset": {
+    "description": "Title of the dialog that resets a forgotten password by email",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePasswordResetEmail": "Enter the email address on your account. The server will send you a link.",
+  "@messagePasswordResetEmail": {
+    "description": "First step of resetting a forgotten password",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptPasswordResetSend": "Send link",
+  "@promptPasswordResetSend": {
+    "description": "Button that asks the server to email a password reset link",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePasswordResetSent": "We sent a link to {email}. Open it, then choose a new password here.",
+  "@messagePasswordResetSent": {
+    "description": "Second step of resetting a forgotten password, with the email address the link went to",
+    "type": "text",
+    "placeholders": {
+      "email": {}
+    }
+  },
+  "labelNewPassword": "New password",
+  "@labelNewPassword": {
+    "description": "Field for the new password when resetting or changing it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSignOutOtherSessions": "Sign out of my other sessions",
+  "@labelSignOutOtherSessions": {
+    "description": "Checkbox when setting a new password: also sign out every other device signed in to the account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorPasswordResetNotConfirmed": "The link was not opened yet, or it expired. Open the latest email, or send a new link.",
+  "@errorPasswordResetNotConfirmed": {
+    "description": "Setting the new password failed because the server has not seen the emailed link opened, or the link expired",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptPasswordResetSendAgain": "Send a new link",
+  "@promptPasswordResetSendAgain": {
+    "description": "Button to email the password reset link again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorPasswordResetNoAccount": "No account on this server uses that email address.",
+  "@errorPasswordResetNoAccount": {
+    "description": "Sending the password reset link failed: the address is on no account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePasswordResetDone": "Your password was changed. You can log in with it now.",
+  "@messagePasswordResetDone": {
+    "description": "Last step of resetting a forgotten password",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptLoginWithQrCode": "Sign in with QR code",
+  "@promptLoginWithQrCode": {
+    "description": "Button on the login screen that shows a QR code to scan with a device where the person is already signed in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLoginWaitingForScan": "On a device where you are signed in, open Settings, Account, Security, Link a new device, and scan this QR code or paste the code under it.",
+  "@labelQrLoginWaitingForScan": {
+    "description": "On the login screen, above the QR code that a signed-in device scans to sign this device in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLoginEnterCheckCode": "Type the 2-digit number your other device shows.",
+  "@labelQrLoginEnterCheckCode": {
+    "description": "On the login screen, after the other device read the QR code: the person types the number it shows, which proves no one is in between",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLoginCheckCodeField": "Number",
+  "@labelQrLoginCheckCodeField": {
+    "description": "Label of the field for the 2-digit number shown on the other device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLoginWaitingForApproval": "Approve the sign-in on your other device.",
+  "@labelQrLoginWaitingForApproval": {
+    "description": "On the login screen, while the signed-in device opens the server's page to approve this device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLoginSigningIn": "Signing in…",
+  "@labelQrLoginSigningIn": {
+    "description": "On the login screen, once the other device approved and this device gets its session",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLoginSharingKeys": "Getting your keys from your other device…",
+  "@labelQrLoginSharingKeys": {
+    "description": "On the login screen, while the signed-in device sends the keys that let this device read encrypted messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorQrLoginServerUnsupported": "Your server does not support signing in with a QR code.",
+  "@errorQrLoginServerUnsupported": {
+    "description": "On the login screen, after the QR code button, when the server has no rendezvous for QR code login",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptQrLoginTryAgain": "Try again",
+  "@promptQrLoginTryAgain": {
+    "description": "Button that starts signing in with a QR code again after it failed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelReauthenticateTitle": "Sign in again",
+  "@labelReauthenticateTitle": {
+    "description": "Title of the dialog, and of the alert on the Home screen, when the server no longer accepts this device's session and the person has to sign in again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageReauthenticateAlert": "Your session on this device has ended. Your messages and encryption keys are still here: sign in again to keep using them.",
+  "@messageReauthenticateAlert": {
+    "description": "Alert on the Home screen when the server no longer accepts this device's session; tapping it opens the dialog to sign in again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageReauthenticate": "The session of {user} on this device has ended. Sign in again to go on where you left off: this device keeps its messages and encryption keys.",
+  "@messageReauthenticate": {
+    "description": "In the dialog to sign in again, when the server no longer accepts this device's session; user is the account's Matrix ID",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageReauthenticateNoMethod": "Rooster cannot sign this device in again from here yet. You can try again later; nothing was deleted from this device.",
+  "@messageReauthenticateNoMethod": {
+    "description": "In the dialog to sign in again, when the server offers no way to sign this same device in again (a server that signs in through its own page)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelReauthenticatePassword": "Password",
+  "@labelReauthenticatePassword": {
+    "description": "Label of the password field in the dialog to sign in again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReauthenticate": "Sign in",
+  "@promptReauthenticate": {
+    "description": "Button in the dialog to sign in again, under the password",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReauthenticateSso": "Continue with {provider}",
+  "@promptReauthenticateSso": {
+    "description": "Button in the dialog to sign in again through single sign-on; provider is the sign-in provider's name, or the word for the server's own sign-in",
+    "type": "text",
+    "placeholders": {
+      "provider": {}
+    }
+  },
+  "promptReauthenticateRetry": "Try again",
+  "@promptReauthenticateRetry": {
+    "description": "Button in the dialog to sign in again that asks the server to renew the session once more, without a password",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReauthenticateLater": "Not now",
+  "@promptReauthenticateLater": {
+    "description": "Button that closes the dialog to sign in again; the alert on the Home screen opens it again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorReauthenticateOtherDevice": "The server signed in another account or device, so nothing changed here. Sign in with this account.",
+  "@errorReauthenticateOtherDevice": {
+    "description": "In the dialog to sign in again, when the server answered for another account or another device than this one",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorReauthenticateNewDevice": "Your server signed you in on a new device instead of this one, so Rooster did not use it and nothing changed here. Your messages and encryption keys are still on this device. You can remove the new device from your account's sessions.",
+  "@errorReauthenticateNewDevice": {
+    "description": "In the dialog to sign in again, after the server's sign-in page: the server signed the account in on another device than the one it was asked for, so the new session was not used",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptLoginCreateAccount": "Create account",
+  "@promptLoginCreateAccount": {
+    "description": "Link on the login screen, title and button of the form that creates a new account on the server typed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRegisterUsername": "Username",
+  "@labelRegisterUsername": {
+    "description": "Field of the form that creates an account: the name it will have on the server",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRegisterPassword": "Password",
+  "@labelRegisterPassword": {
+    "description": "Field of the form that creates an account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRegisterConfirmPassword": "Confirm password",
+  "@labelRegisterConfirmPassword": {
+    "description": "Field where a new password is typed a second time",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorPasswordsDiffer": "The passwords do not match.",
+  "@errorPasswordsDiffer": {
+    "description": "Under a form where a new password is typed twice, when the two differ",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorRegisterUserInUse": "That username is taken. Pick another.",
+  "@errorRegisterUserInUse": {
+    "description": "Creating an account failed: the server has an account with that name",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorRegisterInvalidUsername": "That username cannot be used. Use lowercase letters, numbers, and . _ = - / only.",
+  "@errorRegisterInvalidUsername": {
+    "description": "Creating an account failed: the name has characters Matrix does not allow; keep the list of characters as it is",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorRegisterExclusive": "That username is reserved on this server. Pick another.",
+  "@errorRegisterExclusive": {
+    "description": "Creating an account failed: the name belongs to a bridge or service of the server",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorRegisterWeakPassword": "That password is too weak. Pick a longer one.",
+  "@errorRegisterWeakPassword": {
+    "description": "Creating an account or changing the password failed: the server finds the password too weak",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorRegisterDisabled": "This server does not let new accounts sign up here.",
+  "@errorRegisterDisabled": {
+    "description": "Creating an account failed: the server has registration turned off",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorRegisterFailed": "Could not create the account: {reason}",
+  "@errorRegisterFailed": {
+    "description": "Creating an account failed for another reason, with the server's message",
+    "type": "text",
+    "placeholders": {
+      "reason": {}
     }
   },
   "updateInstalledTitle": "Update Installed",
@@ -7846,6 +9585,102 @@
   "messageRoomUiaLoginFailed": "Login failed...",
   "@messageRoomUiaLoginFailed": {
     "description": "Shown when signing in again for a sensitive action failed, in the dialog where the server asked for it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelUiaPassword": "Enter your password",
+  "@labelUiaPassword": {
+    "description": "Title of the dialog where the server asks for the account's password before an account change (a new password, an email address, deactivating the account)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUiaWrongPassword": "That password was not accepted. Try again.",
+  "@messageUiaWrongPassword": {
+    "description": "In the password dialog of an account change, after the server refused the password typed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelUiaRegistrationToken": "Registration token",
+  "@labelUiaRegistrationToken": {
+    "description": "Title of the dialog asking for the token some servers require to create an account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUiaRegistrationToken": "This server needs a registration token to create an account. Ask its admin for one.",
+  "@messageUiaRegistrationToken": {
+    "description": "Explanation in the registration token dialog",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUiaRegistrationTokenRefused": "That token was not accepted. Check it and try again.",
+  "@messageUiaRegistrationTokenRefused": {
+    "description": "In the registration token dialog, after the server refused the token typed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelUiaTerms": "The server's terms",
+  "@labelUiaTerms": {
+    "description": "Title of the dialog listing the policies (terms of service, privacy policy) the server asks people to accept to sign up",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUiaTerms": "Read each of these and accept them to continue.",
+  "@messageUiaTerms": {
+    "description": "Explanation above the list of policies in the terms dialog",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptUiaAcceptPolicy": "I have read and accept: {policy}",
+  "@promptUiaAcceptPolicy": {
+    "description": "Checkbox next to one policy in the terms dialog, with the policy's name as the server gives it (Privacy Policy)",
+    "type": "text",
+    "placeholders": {
+      "policy": {}
+    }
+  },
+  "labelUiaEmail": "Email address",
+  "@labelUiaEmail": {
+    "description": "Title of the dialog asking for an email address the server will confirm with a link, and the placeholder of its field",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUiaEmailSent": "We sent a link to {address}. Open it, then come back and continue.",
+  "@messageUiaEmailSent": {
+    "description": "After the server sent a confirmation link to the email address typed, with that address",
+    "type": "text",
+    "placeholders": {
+      "address": {}
+    }
+  },
+  "labelUiaPhoneCountry": "Country, as a two-letter code (BR, US, PT)",
+  "@labelUiaPhoneCountry": {
+    "description": "Title of the dialog asking which country a phone number is from, as its ISO code, before the number itself",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelUiaPhoneNumber": "Phone number, with the area code",
+  "@labelUiaPhoneNumber": {
+    "description": "Title of the dialog asking for a phone number the server will send a code to",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUiaSmsCode": "Enter the code sent to {phone}",
+  "@messageUiaSmsCode": {
+    "description": "Title of the dialog asking for the code a text message brought to the phone number shown",
+    "type": "text",
+    "placeholders": {
+      "phone": {}
+    }
+  },
+  "messageUiaFinishOnWebsite": "Finish this step on your server's website: open it, follow the steps there, then come back and continue.",
+  "@messageUiaFinishOnWebsite": {
+    "description": "When the server asks for a step only its website can do (a captcha, single sign-on, an approval), with buttons to open the website and to continue after",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorUiaUnsupported": "The server asks for a step this app cannot do, so this could not be finished.",
+  "@errorUiaUnsupported": {
+    "description": "When the server asks for a kind of confirmation the app does not know",
     "type": "text",
     "placeholders": {}
   },
@@ -7955,9 +9790,77 @@
       "address": {}
     }
   },
+  "errorVerificationQrEmpty": "Enter or load a QR verification payload first.",
+  "@errorVerificationQrEmpty": {
+    "description": "Shown in the no-camera QR verification fallback when the user submits an empty payload field",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationQrInvalidEncoding": "This QR payload could not be decoded. Paste the complete verification code and try again.",
+  "@errorVerificationQrInvalidEncoding": {
+    "description": "Shown when the pasted QR verification payload is not valid Base64, hexadecimal, or Matrix QR text",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationQrInvalidHeader": "This is not a valid Matrix verification QR code.",
+  "@errorVerificationQrInvalidHeader": {
+    "description": "Shown when a pasted or loaded QR payload does not start with the Matrix QR verification header",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationQrUnsupportedVersion": "This Matrix QR code version is not supported.",
+  "@errorVerificationQrUnsupportedVersion": {
+    "description": "Shown when a Matrix QR verification payload uses an unsupported protocol version",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationQrInvalidMode": "This QR code uses an unsupported verification mode.",
+  "@errorVerificationQrInvalidMode": {
+    "description": "Shown when a Matrix QR verification payload declares an unknown mode byte",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationQrInvalidSession": "This QR code does not contain a valid verification session ID.",
+  "@errorVerificationQrInvalidSession": {
+    "description": "Shown when a Matrix QR verification payload has a corrupted or missing transaction ID",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationQrTruncated": "This QR code payload is incomplete or corrupted.",
+  "@errorVerificationQrTruncated": {
+    "description": "Shown when a Matrix QR verification payload is shorter than the required keys and shared secret",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationQrWrongSession": "This QR code belongs to a different verification request.",
+  "@errorVerificationQrWrongSession": {
+    "description": "Shown when the pasted QR payload's transaction ID does not match the active verification request",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationSsssUnlockFailed": "Could not unlock secret storage. Check your recovery key or security phrase and try again.",
+  "@errorVerificationSsssUnlockFailed": {
+    "description": "Shown during verification when unlocking cross-signing keys from secret storage fails",
+    "type": "text",
+    "placeholders": {}
+  },
   "messageWaitingOtherDeviceToAccept": "Waiting for the other device to accept the request",
   "@messageWaitingOtherDeviceToAccept": {
     "description": "Message to show while waiting for another device to accept a matrix session verification request",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageWaitingOtherUserToAccept": "Waiting for {username} to accept the verification request",
+  "@messageWaitingOtherUserToAccept": {
+    "description": "Shown while waiting for another Matrix user to accept an in-room key verification request",
+    "type": "text",
+    "placeholders": {
+      "username": {}
+    }
+  },
+  "messageWaitingOtherPartyToConfirm": "Waiting for the other party to confirm…",
+  "@messageWaitingOtherPartyToConfirm": {
+    "description": "Shown after confirming SAS emoji or numbers while waiting for the other side's MAC confirmation",
     "type": "text",
     "placeholders": {}
   },
@@ -7969,9 +9872,23 @@
       "username": {}
     }
   },
+  "messageMatrixUserVerificationRequest": "**{username}** wants to verify your identity",
+  "@messageMatrixUserVerificationRequest": {
+    "description": "Shown when another Matrix user sends an in-room request to verify identities. Supports markdown to emphasise the user ID",
+    "type": "text",
+    "placeholders": {
+      "username": {}
+    }
+  },
   "messageSasEmojiVerificationPrompt": "Check that the emoji are the same, and in the same order as on the other device",
   "@messageSasEmojiVerificationPrompt": {
     "description": "Explains what to look for when verifying using emoji. Needs to portray that the emoji MUST be the same AND in the same order",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageSasDecimalVerificationPrompt": "Check that these numbers match the ones shown on the other device",
+  "@messageSasDecimalVerificationPrompt": {
+    "description": "Shown when verifying a session or user by comparing three decimal numbers",
     "type": "text",
     "placeholders": {}
   },
@@ -7990,6 +9907,158 @@
   "messageVerificationComplete": "Verification Complete!",
   "@messageVerificationComplete": {
     "description": "Message to show when verification was completed successfully, and the session has been verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelVerificationQrTitle": "Verify with QR code",
+  "@labelVerificationQrTitle": {
+    "description": "Heading shown on the QR verification step when a QR code can be displayed or entered",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationQrScanPrompt": "Scan this QR code with the other device, or copy the code below if it has no camera.",
+  "@messageVerificationQrScanPrompt": {
+    "description": "Instructions above the QR code during E2EE verification, including the no-camera copy option",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptCopyQrPayload": "Copy QR payload",
+  "@promptCopyQrPayload": {
+    "description": "Button below a verification QR code to copy its encoded payload for devices without a camera",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelVerificationQrNoCameraTitle": "No camera? Enter or load a QR payload",
+  "@labelVerificationQrNoCameraTitle": {
+    "description": "Heading for the desktop and web fallback input where the user pastes or loads a QR verification payload",
+    "type": "text",
+    "placeholders": {}
+  },
+  "placeholderVerificationQrPayload": "Paste QR verification payload",
+  "@placeholderVerificationQrPayload": {
+    "description": "Placeholder inside the text field for pasting a Matrix QR verification payload without a camera",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptVerifyQrPayload": "Verify QR payload",
+  "@promptVerifyQrPayload": {
+    "description": "Button that submits a pasted QR verification payload to complete reciprocation",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptLoadQrPayloadFile": "Load from file",
+  "@promptLoadQrPayloadFile": {
+    "description": "Button in the no-camera QR verification fallback to load a QR payload from a local file",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptVerifyWithEmoji": "Compare emoji instead",
+  "@promptVerifyWithEmoji": {
+    "description": "Button on the QR verification choice screen to switch to SAS emoji comparison",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationQrScannedWaiting": "QR code verified! Confirm on the other device to finish.",
+  "@messageVerificationQrScannedWaiting": {
+    "description": "Shown to the scanning device after submitting a valid QR payload while waiting for the other side to confirm",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationConfirmQrScan": "The other device scanned your QR code. Did it show a verified confirmation?",
+  "@messageVerificationConfirmQrScan": {
+    "description": "Shown to the device displaying the QR code after receiving a valid reciprocate start event",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationConfirmQrScanUser": "{username} scanned your QR code. Did their device show a verified confirmation?",
+  "@messageVerificationConfirmQrScanUser": {
+    "description": "Shown when another user scanned your QR code and you must confirm they saw the verified screen",
+    "type": "text",
+    "placeholders": {
+      "username": {}
+    }
+  },
+  "promptConfirmQrScanMatches": "Yes, it matches",
+  "@promptConfirmQrScanMatches": {
+    "description": "Button to confirm the other side showed a verified screen after scanning your QR code",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRejectQrScan": "No, cancel verification",
+  "@promptRejectQrScan": {
+    "description": "Button to reject QR scan confirmation and cancel the verification",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelVerificationUnlockSsss": "Unlock your cross-signing keys",
+  "@labelVerificationUnlockSsss": {
+    "description": "Heading shown during verification when secret storage must be unlocked to sign the verified user or device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationUnlockSsss": "Enter your recovery key or security phrase to sign this verification across your devices.",
+  "@messageVerificationUnlockSsss": {
+    "description": "Explains why a recovery key or security phrase is requested during verification",
+    "type": "text",
+    "placeholders": {}
+  },
+  "placeholderVerificationSsssInput": "Recovery key or security phrase",
+  "@placeholderVerificationSsssInput": {
+    "description": "Placeholder in the input field used to unlock secret storage during key verification",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptSkipVerificationSigning": "Skip signing",
+  "@promptSkipVerificationSigning": {
+    "description": "Button to continue verification without unlocking cross-signing secret storage",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationCancelled": "Verification was cancelled.",
+  "@messageVerificationCancelled": {
+    "description": "Shown when either party cancels a key verification session",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationTimedOut": "Verification timed out. Start a new request to try again.",
+  "@messageVerificationTimedOut": {
+    "description": "Shown when a key verification request expires before completion",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationKeyMismatch": "Verification failed because the security keys did not match.",
+  "@messageVerificationKeyMismatch": {
+    "description": "Shown when a key verification is cancelled due to mismatched keys or QR secret",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationSasMismatch": "Verification failed because the emoji or numbers did not match.",
+  "@messageVerificationSasMismatch": {
+    "description": "Shown when a SAS verification is cancelled because the emoji or numbers did not match",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationAcceptedElsewhere": "This verification request was accepted on another device.",
+  "@messageVerificationAcceptedElsewhere": {
+    "description": "Shown when another device of the same account accepted the verification request first",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationUnsupportedMethod": "No compatible verification method was found.",
+  "@messageVerificationUnsupportedMethod": {
+    "description": "Shown when two clients do not share any supported E2EE verification method",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationInvalidSecret": "Verification failed because the QR secret or message was invalid.",
+  "@messageVerificationInvalidSecret": {
+    "description": "Shown when verification is cancelled due to an invalid message or mismatched QR reciprocate secret",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationFailed": "Verification failed. Please try again.",
+  "@messageVerificationFailed": {
+    "description": "Fallback error message when a key verification fails for an unspecified reason",
     "type": "text",
     "placeholders": {}
   },
@@ -8123,6 +10192,316 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelAccountSettings": "Account settings",
+  "@labelAccountSettings": {
+    "description": "Settings > Manage Accounts: button on an account, and the title of what it opens (password, email addresses, deactivation)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageAccountOnWebsite": "Your server manages this account on its own website.",
+  "@messageAccountOnWebsite": {
+    "description": "Account settings of an account on a server with an account website: the buttons below open that website",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptAccountManage": "Manage account",
+  "@promptAccountManage": {
+    "description": "Opens the server's account website on its main page",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptAccountProfile": "Profile",
+  "@promptAccountProfile": {
+    "description": "Opens the server's account website on the account's profile",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptAccountSessions": "Sessions",
+  "@promptAccountSessions": {
+    "description": "Opens the server's account website on the list of signed-in devices",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptAccountResetIdentity": "Reset encryption identity",
+  "@promptAccountResetIdentity": {
+    "description": "Opens the server's account website where the keys that verify the account's sessions (cross-signing) can be reset",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptChangePassword": "Change password",
+  "@promptChangePassword": {
+    "description": "Account settings: button, and title of the dialog it opens",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelCurrentPassword": "Current password",
+  "@labelCurrentPassword": {
+    "description": "Field in the Change password dialog",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePasswordChanged": "Your password was changed.",
+  "@messagePasswordChanged": {
+    "description": "Account settings, after changing the password",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelAccountThreepids": "Email addresses and phone numbers",
+  "@labelAccountThreepids": {
+    "description": "Account settings: header of the account's email addresses and phone numbers",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptAddEmail": "Add email address",
+  "@promptAddEmail": {
+    "description": "Account settings: button",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptAddPhone": "Add phone number",
+  "@promptAddPhone": {
+    "description": "Account settings: button",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipThreepidUnbind": "Stop people finding you by this address",
+  "@tooltipThreepidUnbind": {
+    "description": "Account settings: button on an email address or phone number that unlinks it from the identity server, where people look accounts up, and keeps it on the account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorThreepidNotConfirmed": "The address was not confirmed yet. Open the link, then try again.",
+  "@errorThreepidNotConfirmed": {
+    "description": "Adding an email address failed because its confirmation link was not opened",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorThreepidInUse": "That address is already on an account.",
+  "@errorThreepidInUse": {
+    "description": "Adding an email address or phone number failed: another account on the server has it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptLoginToken": "Sign in another device",
+  "@promptLoginToken": {
+    "description": "Account settings: button that makes a one-time sign-in code",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageLoginToken": "{minutes,plural, =1{This code signs in one device, once, within 1 minute.}other{This code signs in one device, once, within {minutes} minutes.}}",
+  "@messageLoginToken": {
+    "description": "Under a one-time sign-in code made in Account settings, how long it lasts",
+    "type": "text",
+    "placeholders": {
+      "minutes": {}
+    }
+  },
+  "labelDeactivateAccount": "Deactivate account",
+  "@labelDeactivateAccount": {
+    "description": "Account settings: button, title of the dialog it opens and its final button",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDeactivateWarning": "Deactivating is permanent: you cannot sign in again, and nobody can take this username.",
+  "@messageDeactivateWarning": {
+    "description": "Warning in the Deactivate account dialog",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeactivateErase": "Also erase my messages for people who join rooms later",
+  "@labelDeactivateErase": {
+    "description": "Checkbox in the Deactivate account dialog (Matrix's erase)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeactivateConfirm": "I understand that this cannot be undone",
+  "@labelDeactivateConfirm": {
+    "description": "Checkbox in the Deactivate account dialog that must be ticked before the account can be deactivated",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptAccountRestrictionCheckAgain": "Check again",
+  "@promptAccountRestrictionCheckAgain": {
+    "description": "Button on the banner of a locked or suspended account: asks the server again now whether the account works",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelArchivedRoomsHeader": "Rooms you left",
+  "@labelArchivedRoomsHeader": {
+    "description": "Header of the list of rooms the account left or was removed from",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptLoadArchivedRooms": "Show rooms you left",
+  "@promptLoadArchivedRooms": {
+    "description": "Button that loads the list of rooms the account left",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageNoArchivedRooms": "You have not left any rooms.",
+  "@messageNoArchivedRooms": {
+    "description": "Shown when the list of rooms the account left is empty",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptForgetRoom": "Forget",
+  "@promptForgetRoom": {
+    "description": "Button that forgets a room the account left: it leaves the room list for good and its history is no longer kept for you",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelForgetRoomPrompt": "Forget {room}? It will no longer show up anywhere, and you will need an invite or the address to come back.",
+  "@labelForgetRoomPrompt": {
+    "description": "Confirmation before forgetting a room the account left",
+    "type": "text",
+    "placeholders": {
+      "room": {}
+    }
+  },
+  "messageForgetForcedUponLeave": "Your homeserver forgets rooms as soon as you leave them, so there is nothing to forget here.",
+  "@messageForgetForcedUponLeave": {
+    "description": "Shown above the rooms the account left when the homeserver already forgets every room on leave (Matrix capability m.forget_forced_upon_leave)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomForgotten": "Room forgotten",
+  "@messageRoomForgotten": {
+    "description": "Brief notice after forgetting a room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminHeader": "Server administration",
+  "@labelServerAdminHeader": {
+    "description": "Header of the server tools in account settings, for administrators of the homeserver",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminDescription": "For administrators of your server: see an account's sessions, and lock or suspend it.",
+  "@labelServerAdminDescription": {
+    "description": "Under the header of the server administration tools",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminUser": "User ID",
+  "@labelServerAdminUser": {
+    "description": "Label of the field where a server administrator types the Matrix ID of the account to look up",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptServerAdminLookUp": "Look up",
+  "@promptServerAdminLookUp": {
+    "description": "Button that loads what the server says about the account typed in the server administration tools",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminLocked": "Locked",
+  "@labelServerAdminLocked": {
+    "description": "Switch in the server administration tools: the account is locked and none of its sessions work until it is unlocked",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminSuspended": "Suspended",
+  "@labelServerAdminSuspended": {
+    "description": "Switch in the server administration tools: the account is suspended, it can read but not send, join or change its profile",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminConfirmLockTitle": "Lock account",
+  "@labelServerAdminConfirmLockTitle": {
+    "description": "Title of the confirmation dialog before a server administrator locks an account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminConfirmLock": "Lock {user}? All of their sessions will stop working until an administrator unlocks the account.",
+  "@messageServerAdminConfirmLock": {
+    "description": "Question in the confirmation dialog before locking a user's account; user is the Matrix ID",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "promptServerAdminLock": "Lock",
+  "@promptServerAdminLock": {
+    "description": "Button that confirms locking an account in the server administration tools",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminConfirmSuspendTitle": "Suspend account",
+  "@labelServerAdminConfirmSuspendTitle": {
+    "description": "Title of the confirmation dialog before a server administrator suspends an account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminConfirmSuspend": "Suspend {user}? They will still be able to read, but won't be able to send messages, join rooms or change their profile.",
+  "@messageServerAdminConfirmSuspend": {
+    "description": "Question in the confirmation dialog before suspending a user's account; user is the Matrix ID",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "promptServerAdminSuspend": "Suspend",
+  "@promptServerAdminSuspend": {
+    "description": "Button that confirms suspending an account in the server administration tools",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminForbidden": "Only administrators of your server can do this.",
+  "@messageServerAdminForbidden": {
+    "description": "Shown in the server administration tools when the server refuses because the user is not one of its administrators",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminUnsupported": "Your server doesn't offer these tools.",
+  "@messageServerAdminUnsupported": {
+    "description": "Shown in the server administration tools when the homeserver does not know the lock and suspend requests",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminNotFound": "There is no such account on your server.",
+  "@messageServerAdminNotFound": {
+    "description": "Shown in the server administration tools when the account looked up does not exist on the homeserver",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminFailed": "The server didn't answer. Try again.",
+  "@messageServerAdminFailed": {
+    "description": "Shown in the server administration tools when a request failed for another reason",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminInvalidUser": "Type a full Matrix ID, with the @ and the server.",
+  "@messageServerAdminInvalidUser": {
+    "description": "Shown in the server administration tools when what was typed is not a Matrix ID",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerSupportHeader": "Server support",
+  "@labelServerSupportHeader": {
+    "description": "Header of the section of account settings with the contacts and help page the user's homeserver publishes",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerSupportAdmin": "Administrator",
+  "@labelServerSupportAdmin": {
+    "description": "Role of a contact of the homeserver: the people who run it (Matrix role m.role.admin)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerSupportSecurity": "Security contact",
+  "@labelServerSupportSecurity": {
+    "description": "Role of a contact of the homeserver: for security reports (Matrix role m.role.security)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptServerSupportPage": "Open the help page on {host}",
+  "@promptServerSupportPage": {
+    "description": "Button that opens the homeserver's own help page in the browser; host is the web address it is on",
+    "type": "text",
+    "placeholders": {
+      "host": {}
+    }
+  },
   "labelChatPrivacyTitle": "Chat Privacy",
   "@labelChatPrivacyTitle": {
     "description": "Header for the chat privacy section in settings",
@@ -8162,6 +10541,30 @@
   "labelAllowInvitationsDescription": "Allow other users to invite you to rooms",
   "@labelAllowInvitationsDescription": {
     "description": "description for the toggle for enabling and disabling the automatic blocking of invitations",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelIgnoredUsersTitle": "Ignored Users",
+  "@labelIgnoredUsersTitle": {
+    "description": "Header of the settings section listing the users the user ignores",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelIgnoredUsersDescription": "You do not see messages or invites from the people you ignore.",
+  "@labelIgnoredUsersDescription": {
+    "description": "Under the header of the ignored users section in settings",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelIgnoredUsersEmpty": "You are not ignoring anyone.",
+  "@labelIgnoredUsersEmpty": {
+    "description": "In the ignored users section of settings when the list is empty",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintIgnoreUserId": "Matrix ID of someone to ignore",
+  "@hintIgnoreUserId": {
+    "description": "Placeholder of the field in settings where the user types the Matrix ID of someone to ignore",
     "type": "text",
     "placeholders": {}
   },
@@ -8619,6 +11022,312 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelDehydratedDeviceTitle": "Messages while you are signed out",
+  "@labelDehydratedDeviceTitle": {
+    "description": "Settings > Security: title of the option that keeps a stand-in session (an MSC3814 dehydrated device) on the server to receive message keys while no session is signed in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDehydratedDeviceExplanation": "Your server keeps an encrypted stand-in session, locked with your recovery key. When you sign in again and verify with your recovery key, the messages sent while all your sessions were signed out can be read.",
+  "@labelDehydratedDeviceExplanation": {
+    "description": "Settings > Security: explains the stand-in session (dehydrated device) option",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDehydratedDeviceOn": "On for this account.",
+  "@labelDehydratedDeviceOn": {
+    "description": "Settings > Security: the stand-in session option is turned on, for every session of the account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDehydratedDeviceOff": "Off for this account.",
+  "@labelDehydratedDeviceOff": {
+    "description": "Settings > Security: the stand-in session option is turned off",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDehydratedDeviceUnsupported": "Your server does not support this, so it cannot be turned on.",
+  "@messageDehydratedDeviceUnsupported": {
+    "description": "Settings > Security: the server does not offer stand-in sessions (it does not announce MSC3814), so the option is off",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptDehydratedDeviceEnable": "Turn on",
+  "@promptDehydratedDeviceEnable": {
+    "description": "Settings > Security: button that turns the stand-in session option on",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptDehydratedDeviceDisable": "Turn off",
+  "@promptDehydratedDeviceDisable": {
+    "description": "Settings > Security: button that turns the stand-in session option off",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDehydratedDeviceConfirmDisable": "The stand-in session is deleted from your server. Messages sent while all your sessions are signed out can no longer be read when you sign in again.",
+  "@messageDehydratedDeviceConfirmDisable": {
+    "description": "Settings > Security: asks before turning the stand-in session option off",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDehydratedDeviceUnlockTitle": "Unlock your secret storage",
+  "@labelDehydratedDeviceUnlockTitle": {
+    "description": "Settings > Security: title of the dialog asking for the recovery key, which keeps the stand-in session's key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDehydratedDeviceUnlockHint": "Recovery key or security phrase",
+  "@labelDehydratedDeviceUnlockHint": {
+    "description": "Settings > Security: placeholder of the field for the recovery key or the security phrase, to turn the stand-in session option on",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDehydratedDeviceEnableFailed": "It was not turned on. Check your recovery key and try again.",
+  "@messageDehydratedDeviceEnableFailed": {
+    "description": "Settings > Security: turning the stand-in session option on failed, for example because of a wrong recovery key or a server error",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDehydratedDeviceKeyMismatch": "The stand-in session on your server does not open with the key in your secret storage, so it was left as it is.",
+  "@messageDehydratedDeviceKeyMismatch": {
+    "description": "Settings > Security: the stand-in session already on the server could not be opened with the key kept in secret storage",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDehydratedDeviceDisableFailed": "It was not turned off. Try again.",
+  "@messageDehydratedDeviceDisableFailed": {
+    "description": "Settings > Security: turning the stand-in session option off failed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyBackupVersion": "Version: {version}",
+  "@labelKeyBackupVersion": {
+    "description": "Settings > Security > Message backup: the version of the backup on the server, a number the server gives it",
+    "type": "text",
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "labelKeyBackupKeyCount": "{howMany,plural, =0{No keys stored}=1{1 key stored}other{{howMany} keys stored}}",
+  "@labelKeyBackupKeyCount": {
+    "description": "Settings > Security > Message backup: how many message keys the backup on the server holds",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "labelKeyBackupEtag": "Change tag (etag): {etag}",
+  "@labelKeyBackupEtag": {
+    "description": "Settings > Security > Message backup: the server's tag for the backup's current contents, which changes whenever keys are added. 'etag' is the protocol's name for it",
+    "type": "text",
+    "placeholders": {
+      "etag": {}
+    }
+  },
+  "labelKeyBackupAlgorithm": "Algorithm: {algorithm}",
+  "@labelKeyBackupAlgorithm": {
+    "description": "Settings > Security > Message backup: the encryption scheme of the backup, a protocol name such as m.megolm_backup.v1.curve25519-aes-sha2",
+    "type": "text",
+    "placeholders": {
+      "algorithm": {}
+    }
+  },
+  "labelKeyBackupNone": "There is no backup on your server.",
+  "@labelKeyBackupNone": {
+    "description": "Settings > Security > Message backup: the server holds no backup of your message keys",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupLoadFailed": "Could not load the details of your backup.",
+  "@messageKeyBackupLoadFailed": {
+    "description": "Settings > Security > Message backup: asking the server about the backup failed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptKeyBackupRotate": "Rotate key",
+  "@promptKeyBackupRotate": {
+    "description": "Settings > Security > Message backup: button that replaces the backup with a new one under a new key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptKeyBackupDelete": "Delete backup",
+  "@promptKeyBackupDelete": {
+    "description": "Settings > Security > Message backup: button that deletes the backup from the server",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupConfirmRotate": "A new backup with a new key replaces this one, and every key on this device is saved in it again. The current backup is deleted from your server.",
+  "@messageKeyBackupConfirmRotate": {
+    "description": "Settings > Security > Message backup: asks before rotating the backup's key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupConfirmDelete": "Your backup is deleted from your server and backup is turned off on all your sessions. Messages that no session of yours can decrypt will be lost.",
+  "@messageKeyBackupConfirmDelete": {
+    "description": "Settings > Security > Message backup: asks before deleting the backup",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyBackupUnlockTitle": "Unlock your secret storage",
+  "@labelKeyBackupUnlockTitle": {
+    "description": "Settings > Security > Message backup: title of the dialog asking for the recovery key, which keeps the new backup key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyBackupUnlockHint": "Recovery key or security phrase",
+  "@labelKeyBackupUnlockHint": {
+    "description": "Settings > Security > Message backup: placeholder of the field for the recovery key or the security phrase",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupRotateFailed": "The key was not rotated. Check your recovery key and try again.",
+  "@messageKeyBackupRotateFailed": {
+    "description": "Settings > Security > Message backup: rotating the backup's key failed, for example because of a wrong recovery key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupDeleteFailed": "The backup was not deleted. Try again.",
+  "@messageKeyBackupDeleteFailed": {
+    "description": "Settings > Security > Message backup: deleting the backup failed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyExportTitle": "Export room keys",
+  "@labelKeyExportTitle": {
+    "description": "Settings > Security: title of the row that saves the keys of your encrypted messages to a file, and reads such a file",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyExportExplanation": "Save the keys of your encrypted messages in a file protected by a passphrase, to read those messages in another app or on a new session.",
+  "@labelKeyExportExplanation": {
+    "description": "Settings > Security: explains the room key export and import",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptKeyExport": "Export",
+  "@promptKeyExport": {
+    "description": "Settings > Security: button that saves the room keys to a file",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptKeyImport": "Import",
+  "@promptKeyImport": {
+    "description": "Settings > Security: button that reads room keys from a file saved by Rooster or another Matrix app",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyImportTitle": "Import room keys",
+  "@labelKeyImportTitle": {
+    "description": "Settings > Security: title of the dialog asking for the passphrase of the key file being imported",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyExportPassphrase": "Choose a passphrase for the file. You will need it to import the keys.",
+  "@messageKeyExportPassphrase": {
+    "description": "Settings > Security > Export room keys: above the passphrase fields of the export",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyExportPassphrase": "Passphrase",
+  "@labelKeyExportPassphrase": {
+    "description": "Settings > Security > Export room keys: label of the field for the passphrase that encrypts the file",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyExportConfirmPassphrase": "Repeat the passphrase",
+  "@labelKeyExportConfirmPassphrase": {
+    "description": "Settings > Security > Export room keys: label of the second passphrase field, which must match the first",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorKeyExportPassphraseTooShort": "{howMany,plural, =1{Use at least 1 character.}other{Use at least {howMany} characters.}}",
+  "@errorKeyExportPassphraseTooShort": {
+    "description": "Settings > Security > Export room keys: the passphrase is shorter than the shortest one allowed",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "errorKeyExportPassphraseMismatch": "The passphrases are not the same.",
+  "@errorKeyExportPassphraseMismatch": {
+    "description": "Settings > Security > Export room keys: the two passphrase fields differ",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyExportDone": "{howMany,plural, =0{The file was saved, with no keys: this session has none yet.}=1{The file was saved, with 1 key.}other{The file was saved, with {howMany} keys.}}",
+  "@messageKeyExportDone": {
+    "description": "Settings > Security: after the room keys were saved to a file, how many it holds",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "messageKeyExportFailed": "The keys were not exported. Try again.",
+  "@messageKeyExportFailed": {
+    "description": "Settings > Security: exporting the room keys failed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyImportPassphrase": "Enter the passphrase the file was saved with.",
+  "@messageKeyImportPassphrase": {
+    "description": "Settings > Security > Import room keys: above the passphrase field",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyImportDone": "{howMany,plural, =0{No keys were imported.}=1{1 key was imported.}other{{howMany} keys were imported.}}",
+  "@messageKeyImportDone": {
+    "description": "Settings > Security: after a key file was imported, how many keys it gave that this session did not have yet",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "messageKeyImportAlreadyHeld": "{howMany,plural, =1{This session already had 1 key from the file.}other{This session already had {howMany} keys from the file.}}",
+  "@messageKeyImportAlreadyHeld": {
+    "description": "Settings > Security: after a key file was imported, how many of its keys were left out because this session already holds them, as good or better",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "messageKeyImportSkipped": "{howMany,plural, =1{1 key in the file could not be used.}other{{howMany} keys in the file could not be used.}}",
+  "@messageKeyImportSkipped": {
+    "description": "Settings > Security: after a key file was imported, how many of its entries were not keys this app can read",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "errorKeyImportWrongPassphrase": "The passphrase is wrong, or the file was changed.",
+  "@errorKeyImportWrongPassphrase": {
+    "description": "Settings > Security > Import room keys: the file does not open with this passphrase. Nothing was imported",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorKeyImportDamaged": "The file is damaged or incomplete. Nothing was imported.",
+  "@errorKeyImportDamaged": {
+    "description": "Settings > Security > Import room keys: the file is a key export cut short or broken",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorKeyImportNotAKeyFile": "This is not a room key file. Nothing was imported.",
+  "@errorKeyImportNotAKeyFile": {
+    "description": "Settings > Security > Import room keys: the picked file is not a Matrix key export",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorKeyImportInvalidContent": "The file opened, but holds no keys this app can read. Nothing was imported.",
+  "@errorKeyImportInvalidContent": {
+    "description": "Settings > Security > Import room keys: the passphrase was right but the content is not a list of room keys",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyImportFailed": "The keys were not imported. Try again.",
+  "@messageKeyImportFailed": {
+    "description": "Settings > Security: importing the room keys failed for another reason",
+    "type": "text",
+    "placeholders": {}
+  },
   "messageSettingsSessionsOnAccountPage": "Your server signs sessions out on its own website, which opens in your browser.",
   "@messageSettingsSessionsOnAccountPage": {
     "description": "Settings > Security > Sessions: on a server that only lets its own account website sign sessions (devices) out, says that removing one opens that website",
@@ -8739,9 +11448,111 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelQrLinkDevice": "Link a new device",
+  "@labelQrLinkDevice": {
+    "description": "Settings > Security: title of the row that signs a new device in from this one with the QR code the new device shows",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLinkDeviceExplanation": "Sign in on a new device without your password: choose \"Sign in with QR code\" there, then paste the code it shows here.",
+  "@labelQrLinkDeviceExplanation": {
+    "description": "Settings > Security: under \"Link a new device\"; \"Sign in with QR code\" is the login screen button of the same name",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptQrLinkDevice": "Link",
+  "@promptQrLinkDevice": {
+    "description": "Settings > Security: button that starts signing a new device in from this one",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLinkPasteCode": "Code from the new device",
+  "@labelQrLinkPasteCode": {
+    "description": "Label of the field where the code shown under the new device's QR code is pasted",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptQrLinkPaste": "Paste",
+  "@promptQrLinkPaste": {
+    "description": "Tooltip of the button that pastes the new device's code from the clipboard",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptQrLinkConnect": "Connect",
+  "@promptQrLinkConnect": {
+    "description": "Button that connects to the new device with the pasted code",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLinkCheckCode": "Type this number on the new device:",
+  "@labelQrLinkCheckCode": {
+    "description": "Above the 2-digit number the person types on the new device to prove no one is in between",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLinkApprove": "Approve the new device on your server's page, then come back here.",
+  "@labelQrLinkApprove": {
+    "description": "While the server's page that approves the new device is open in the browser",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptQrLinkOpenPage": "Open the page",
+  "@promptQrLinkOpenPage": {
+    "description": "Button that opens the server's page that approves the new device, in case it did not open by itself",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLinkSharingKeys": "Sending your keys to the new device…",
+  "@labelQrLinkSharingKeys": {
+    "description": "While this device sends the new one the keys to read encrypted messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLinkDone": "The new device is signed in and has your keys.",
+  "@labelQrLinkDone": {
+    "description": "After a new device was signed in from this one, with the cross-signing and backup keys",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelQrLinkDoneWithoutKeys": "The new device is signed in. This device had no keys to send, so verify the new one to read encrypted messages there.",
+  "@labelQrLinkDoneWithoutKeys": {
+    "description": "After a new device was signed in from this one, when this device did not have the cross-signing keys unlocked",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelSettingsVerificationRequest": "Verification Request",
   "@labelSettingsVerificationRequest": {
     "description": "Settings > Security > Sessions: title of the dialog that verifies one of your other sessions (devices)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSessionRenameTitle": "Rename session",
+  "@labelSessionRenameTitle": {
+    "description": "Settings > Security > Sessions: title of the dialog that changes the name of one of your sessions (signed-in devices)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSessionName": "Session name",
+  "@labelSessionName": {
+    "description": "Settings > Security > Sessions: label of the field with the session's new name",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageSessionNameVisible": "People you talk with can see the names of your sessions.",
+  "@messageSessionNameVisible": {
+    "description": "Settings > Security > Sessions: in the rename dialog, warns that session names are public to other users",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptSessionNameRemove": "Remove name",
+  "@promptSessionNameRemove": {
+    "description": "Settings > Security > Sessions: button that clears the session's name, so it has none",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageSessionRenameFailed": "The session's name was not changed. Try again.",
+  "@messageSessionRenameFailed": {
+    "description": "Settings > Security > Sessions: renaming a session, or removing its name, failed; the name stays as it was",
     "type": "text",
     "placeholders": {}
   },
@@ -9622,6 +12433,116 @@
   "labelDeveloperPushersOtherDevices": "Other Devices",
   "@labelDeveloperPushersOtherDevices": {
     "description": "Settings > Notifications, in developer mode: header of the push services registered for your other devices",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSettingsNotificationRules": "Notification rules",
+  "@labelSettingsNotificationRules": {
+    "description": "Settings > Notifications: header of the panel with what the account gets notified about, kept on the server for every device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSettingsNotificationHistory": "Notification history",
+  "@labelSettingsNotificationHistory": {
+    "description": "Settings > Notifications: header of the list of the notifications the account got",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleAccount": "Notifications for this account",
+  "@labelPushRuleAccount": {
+    "description": "Settings > Notifications > Notification rules: the switch that mutes every notification of the account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleAccountDescription": "Turn off to mute every notification, on all of your devices",
+  "@labelPushRuleAccountDescription": {
+    "description": "Under the 'Notifications for this account' switch",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleDirectMessages": "Direct messages",
+  "@labelPushRuleDirectMessages": {
+    "description": "Settings > Notifications > Notification rules: switch for messages in one-to-one chats",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleEncryptedDirectMessages": "Encrypted direct messages",
+  "@labelPushRuleEncryptedDirectMessages": {
+    "description": "Settings > Notifications > Notification rules: switch for end-to-end encrypted messages in one-to-one chats",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleRoomMessages": "Messages in rooms",
+  "@labelPushRuleRoomMessages": {
+    "description": "Settings > Notifications > Notification rules: switch for messages in rooms with more than two people",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleEncryptedRoomMessages": "Encrypted messages in rooms",
+  "@labelPushRuleEncryptedRoomMessages": {
+    "description": "Settings > Notifications > Notification rules: switch for end-to-end encrypted messages in rooms with more than two people",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleInvites": "Invitations",
+  "@labelPushRuleInvites": {
+    "description": "Settings > Notifications > Notification rules: switch for being invited to a room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleCalls": "Calls",
+  "@labelPushRuleCalls": {
+    "description": "Settings > Notifications > Notification rules: switch for incoming calls",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleKeywords": "Keywords",
+  "@labelPushRuleKeywords": {
+    "description": "Settings > Notifications > Notification rules: header of the words that notify you when a message has them",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleKeywordsDescription": "Get a notification when a message has one of these words",
+  "@labelPushRuleKeywordsDescription": {
+    "description": "Under the 'Keywords' header in Settings > Notifications",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptPushRuleKeywordAdd": "Add a keyword",
+  "@promptPushRuleKeywordAdd": {
+    "description": "Settings > Notifications > Keywords: placeholder of the box you type a new keyword in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePushRuleKeywordEmpty": "Type a keyword first.",
+  "@messagePushRuleKeywordEmpty": {
+    "description": "Settings > Notifications > Keywords: Add was pressed with the box empty",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePushRuleKeywordDuplicate": "You already have that keyword.",
+  "@messagePushRuleKeywordDuplicate": {
+    "description": "Settings > Notifications > Keywords: the keyword typed is already in the list",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePushRuleFailed": "Couldn't save the change. Try again.",
+  "@messagePushRuleFailed": {
+    "description": "Settings > Notifications > Notification rules: the server refused a change, which was undone",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePushRuleRateLimited": "{seconds,plural, =1{Too many changes at once. Try again in 1 second.}other{Too many changes at once. Try again in {seconds} seconds.}}",
+  "@messagePushRuleRateLimited": {
+    "description": "Settings > Notifications > Notification rules: the server refused a change for coming too fast, and said how long to wait",
+    "type": "text",
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "messagePushRulesLoadFailed": "Couldn't load your notification rules.",
+  "@messagePushRulesLoadFailed": {
+    "description": "Settings > Notifications > Notification rules: the server could not be reached or refused, next to a button to try again",
     "type": "text",
     "placeholders": {}
   },
@@ -10620,6 +13541,50 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelDeveloperSync": "Sync",
+  "@labelDeveloperSync": {
+    "description": "Title of the Developer settings section that shows how each account gets new messages from its server (the Matrix sync)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeveloperSyncSlidingSync": "Simplified Sliding Sync",
+  "@labelDeveloperSyncSlidingSync": {
+    "description": "In Developer settings > Sync: the account syncs with Simplified Sliding Sync (MSC4186, Matrix 2.0), the newer and faster way to get new messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeveloperSyncClassic": "Classic sync (/v3/sync)",
+  "@labelDeveloperSyncClassic": {
+    "description": "In Developer settings > Sync: the account syncs the older way, with the /v3/sync endpoint (keep '/v3/sync' as it is)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeveloperSyncFellBack": "Classic sync (/v3/sync): the server refused Sliding Sync ({reason})",
+  "@labelDeveloperSyncFellBack": {
+    "description": "In Developer settings > Sync: the account tried Simplified Sliding Sync, the server refused it, and it went back to the older /v3/sync. The reason is the server's error code or HTTP status, like M_UNRECOGNIZED or HTTP 404 (keep '/v3/sync' as it is)",
+    "type": "text",
+    "placeholders": {
+      "reason": {}
+    }
+  },
+  "labelDeveloperSyncNoAccounts": "No account is signed in",
+  "@labelDeveloperSyncNoAccounts": {
+    "description": "In Developer settings > Sync, when there is no account to show the sync of",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeveloperForceClassicSync": "Force classic sync",
+  "@labelDeveloperForceClassicSync": {
+    "description": "Title of a developer setting that keeps every account on the older /v3/sync, even where the server offers Simplified Sliding Sync",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeveloperForceClassicSyncDescription": "Uses /v3/sync even where the server offers Simplified Sliding Sync. Applies from the next sync, without losing encryption keys or messages",
+  "@labelDeveloperForceClassicSyncDescription": {
+    "description": "Description under the developer setting 'Force classic sync' (keep '/v3/sync' as it is)",
+    "type": "text",
+    "placeholders": {}
+  },
   "promptRoomSetTopicPlaceholder": "Set a topic",
   "@promptRoomSetTopicPlaceholder": {
     "description": "In a room's (or space's) appearance settings, shown in place of the topic while there is none; tapping it opens the topic editor",
@@ -10890,6 +13855,126 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelRoomDirectoryHeader": "Room directory",
+  "@labelRoomDirectoryHeader": {
+    "description": "Header of the room settings section about the homeserver's public room directory",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRoomPublishToDirectory": "List this room in the public room directory",
+  "@labelRoomPublishToDirectory": {
+    "description": "Switch that lists the room in the homeserver's public room directory, where anyone can find it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomDirectoryForbidden": "Your homeserver did not let you change whether this room is listed.",
+  "@messageRoomDirectoryForbidden": {
+    "description": "Shown under the room directory switch when the homeserver refused the change (the switch goes back)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomDirectoryFailed": "The change could not be saved. Try again later.",
+  "@messageRoomDirectoryFailed": {
+    "description": "Shown under the room directory switch when changing it failed for another reason (the switch goes back)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRoomTopicHeader": "Topic",
+  "@labelRoomTopicHeader": {
+    "description": "Header of the room settings section that shows the room's topic (its description), formatted as members see it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRoomTopicEmpty": "This room has no topic.",
+  "@labelRoomTopicEmpty": {
+    "description": "Shown in the room settings' topic section when the room has no topic (description)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRoomVersionHeader": "Room version",
+  "@labelRoomVersionHeader": {
+    "description": "Header of the room settings section that shows the room's version and upgrades it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelCurrentRoomVersion": "This room uses version {version}",
+  "@labelCurrentRoomVersion": {
+    "description": "The room's version (Matrix room versions are numbers like 11 or 12)",
+    "type": "text",
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "promptUpgradeRoom": "Upgrade room",
+  "@promptUpgradeRoom": {
+    "description": "Button that upgrades a room to a newer version",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUpgradeRoomNoPermission": "Only people allowed to change this room's settings can upgrade it.",
+  "@messageUpgradeRoomNoPermission": {
+    "description": "Shown instead of the upgrade button to someone without the power to upgrade the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUpgradeRoomExplanation": "Upgrading makes a new room on the chosen version and closes this one. Members are asked to move to the new room.",
+  "@messageUpgradeRoomExplanation": {
+    "description": "What upgrading a room does, above the version picker",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageNoRoomVersions": "Your homeserver did not say which room versions it supports.",
+  "@messageNoRoomVersions": {
+    "description": "Shown when the homeserver reports no room versions to upgrade to",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelStableRoomVersions": "Stable",
+  "@labelStableRoomVersions": {
+    "description": "Heading of the room versions the homeserver calls stable",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelUnstableRoomVersions": "Experimental",
+  "@labelUnstableRoomVersions": {
+    "description": "Heading of the room versions the homeserver calls unstable (still being tried out)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRoomVersionOption": "Version {version}",
+  "@labelRoomVersionOption": {
+    "description": "One room version in the upgrade picker",
+    "type": "text",
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "labelDefaultRoomVersionOption": "Version {version} (default)",
+  "@labelDefaultRoomVersionOption": {
+    "description": "The homeserver's default room version in the upgrade picker",
+    "type": "text",
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "labelAdditionalCreators": "Other creators (optional)",
+  "@labelAdditionalCreators": {
+    "description": "Field naming more people to make creators of the upgraded room (room version 12 and later)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintAdditionalCreators": "@someone:example.org, one per line",
+  "@hintAdditionalCreators": {
+    "description": "Placeholder of the field naming more creators of the upgraded room; the example is a Matrix user ID",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageAdditionalCreatorsExplanation": "Creators have full power over the new room and cannot be removed.",
+  "@messageAdditionalCreatorsExplanation": {
+    "description": "Below the field naming more creators of the upgraded room",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelDefaultReadReceiptsOption": "Use global preference ({pref})",
   "@labelDefaultReadReceiptsOption": {
     "description": "Label to use the global preference, showing the current global preference value",
@@ -10945,6 +14030,18 @@
   "labelMatrixPermissionsRoleOwner": "Owner",
   "@labelMatrixPermissionsRoleOwner": {
     "description": "Label for the room owner role",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelMatrixPermissionsOwnersImmutable": "Immutable creator privileges",
+  "@labelMatrixPermissionsOwnersImmutable": {
+    "description": "Badge next to the Owner heading in room version 12+ permission settings explaining that room creators cannot be changed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelMatrixPermissionsOwnersImmutableDescription": "Room creators always have full permissions in room version 12 and cannot be edited or demoted.",
+  "@labelMatrixPermissionsOwnersImmutableDescription": {
+    "description": "Explanation shown in room version 12+ permission settings under the list of room creators",
     "type": "text",
     "placeholders": {}
   },
@@ -11140,6 +14237,156 @@
     "type": "text",
     "placeholders": {
       "eventType": {}
+    }
+  },
+  "labelRoomModeration": "Moderation",
+  "@labelRoomModeration": {
+    "description": "Heading of the moderation tools in a room's permission settings",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomSettingNoPermission": "You need permission to change this setting.",
+  "@messageRoomSettingNoPermission": {
+    "description": "Below a room setting someone without the power to change it can only look at",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistoryVisibilityHeader": "Who can read history",
+  "@labelHistoryVisibilityHeader": {
+    "description": "Header of the room setting for who can read past messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistoryWorldReadable": "Anyone",
+  "@labelHistoryWorldReadable": {
+    "description": "Room history option: anyone, even people not in the room, can read past messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistoryShared": "Members, including messages from before they joined",
+  "@labelHistoryShared": {
+    "description": "Room history option: members can read all past messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistoryInvited": "Members, from when they were invited",
+  "@labelHistoryInvited": {
+    "description": "Room history option: members read messages sent after they were invited",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistoryJoined": "Members, from when they joined",
+  "@labelHistoryJoined": {
+    "description": "Room history option: members read messages sent after they joined",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGuestAccessHeader": "Guest access",
+  "@labelGuestAccessHeader": {
+    "description": "Header of the room setting for whether guest accounts (Matrix accounts without a full registration) can join",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGuestsCanJoin": "Guests can join",
+  "@labelGuestsCanJoin": {
+    "description": "Guest access option: guest accounts may join the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGuestsForbidden": "No guests",
+  "@labelGuestsForbidden": {
+    "description": "Guest access option: guest accounts may not join the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistorySharingHeader": "Earlier messages for people you invite",
+  "@labelHistorySharingHeader": {
+    "description": "Header of the room setting for whether inviting someone gives them the keys to read encrypted messages sent before they joined",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistorySharingToggle": "Share earlier messages when I invite someone",
+  "@labelHistorySharingToggle": {
+    "description": "Switch in a room's security settings: when on, the people you invite get the keys to the room's earlier encrypted messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageHistorySharingOn": "People you invite get the keys to the earlier encrypted messages this room lets them read.",
+  "@messageHistorySharingOn": {
+    "description": "Below the history sharing switch, when it is on",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageHistorySharingOff": "People you invite will not be able to read encrypted messages sent before they joined.",
+  "@messageHistorySharingOff": {
+    "description": "Below the history sharing switch, when it is off",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageHistorySharingKeptToMembers": "This room's history setting keeps earlier messages from new members, so none are shared when you invite someone.",
+  "@messageHistorySharingKeptToMembers": {
+    "description": "Below the history sharing switch, greyed out because the room only lets members read messages from when they joined",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageHistorySharingImported": "{sender} shared the keys to this room's earlier messages with you when they invited you.",
+  "@messageHistorySharingImported": {
+    "description": "Quiet note in a room's security settings: the person who invited you gave you the keys to read the room's earlier encrypted messages. The placeholder is their name",
+    "type": "text",
+    "placeholders": {
+      "sender": {}
+    }
+  },
+  "labelKnockRequestsHeader": "Requests to join",
+  "@labelKnockRequestsHeader": {
+    "description": "Header of the list of people asking to join the room (Matrix calls these knocks), in its security settings",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageNoKnockRequests": "Nobody is waiting to join.",
+  "@messageNoKnockRequests": {
+    "description": "Shown in the list of requests to join a room when it is empty",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptApproveKnock": "Let in",
+  "@promptApproveKnock": {
+    "description": "Button that accepts someone's request to join the room (it invites them)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptDeclineKnock": "Decline",
+  "@promptDeclineKnock": {
+    "description": "Button that turns down someone's request to join the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeclineKnockTitle": "Decline request",
+  "@labelDeclineKnockTitle": {
+    "description": "Title of the dialog that turns down a request to join the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeclineKnockReasonDescription": "Decline the request from {user}? They will see the reason, if you give one.",
+  "@labelDeclineKnockReasonDescription": {
+    "description": "Above the optional reason for turning down a request to join, with the name of who asked",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "labelDeclineKnockReasonHint": "Reason (optional)",
+  "@labelDeclineKnockReasonHint": {
+    "description": "Placeholder of the optional reason for turning down a request to join",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKnockReason": "Note: {reason}",
+  "@labelKnockReason": {
+    "description": "The note someone sent with their request to join the room",
+    "type": "text",
+    "placeholders": {
+      "reason": {}
     }
   },
   "promptEnableEncryptionRoomSettings": "Enable Encryption",

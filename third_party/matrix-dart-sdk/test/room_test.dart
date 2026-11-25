@@ -1168,15 +1168,13 @@ void main() {
       var entry = FakeMatrixApi.calledEndpoints.entries
           .firstWhere((p) => p.key.contains('/send/m.room.message/'));
       var content = json.decode(entry.value.first);
+      // ROOSTER: Matrix v1.13 (MSC2781) omits reply fallbacks (<mx-reply> and "> <@user>").
       expect(content, {
-        'body': '> <@alice:example.org> Blah\n\nHello world',
+        'body': 'Hello world',
         'msgtype': 'm.text',
         'm.mentions': {
           'user_ids': ['@alice:example.org'],
         },
-        'format': 'org.matrix.custom.html',
-        'formatted_body':
-            '<mx-reply><blockquote><a href="https://matrix.to/#/!localpart:server.abc/\$replyEvent">In reply to</a> <a href="https://matrix.to/#/@alice:example.org">@alice:example.org</a><br>Blah</blockquote></mx-reply>Hello world',
         'm.relates_to': {
           'm.in_reply_to': {
             'event_id': '\$replyEvent',
@@ -1207,15 +1205,13 @@ void main() {
           .firstWhere((p) => p.key.contains('/send/m.room.message/'));
       content = json.decode(entry.value.first);
       expect(content, {
-        'body':
-            '> <@alice:example.org> <b>Blah</b>\n> beep\n\nHello world\nfox',
+        'body': 'Hello world\nfox',
         'msgtype': 'm.text',
         'm.mentions': {
           'user_ids': ['@alice:example.org'],
         },
         'format': 'org.matrix.custom.html',
-        'formatted_body':
-            '<mx-reply><blockquote><a href="https://matrix.to/#/!localpart:server.abc/\$replyEvent">In reply to</a> <a href="https://matrix.to/#/@alice:example.org">@alice:example.org</a><br>&lt;b&gt;Blah&lt;&#47;b&gt;<br>beep</blockquote></mx-reply>Hello world<br/>fox',
+        'formatted_body': 'Hello world<br/>fox',
         'm.relates_to': {
           'm.in_reply_to': {
             'event_id': '\$replyEvent',
@@ -1248,14 +1244,11 @@ void main() {
           .firstWhere((p) => p.key.contains('/send/m.room.message/'));
       content = json.decode(entry.value.first);
       expect(content, {
-        'body': '> <@alice:example.org> plaintext meow\n\nHello world',
+        'body': 'Hello world',
         'msgtype': 'm.text',
         'm.mentions': {
           'user_ids': ['@alice:example.org'],
         },
-        'format': 'org.matrix.custom.html',
-        'formatted_body':
-            '<mx-reply><blockquote><a href="https://matrix.to/#/!localpart:server.abc/\$replyEvent">In reply to</a> <a href="https://matrix.to/#/@alice:example.org">@alice:example.org</a><br>meow</blockquote></mx-reply>Hello world',
         'm.relates_to': {
           'm.in_reply_to': {
             'event_id': '\$replyEvent',
@@ -1286,14 +1279,11 @@ void main() {
           .firstWhere((p) => p.key.contains('/send/m.room.message/'));
       content = json.decode(entry.value.first);
       expect(content, {
-        'body': '> <@alice:example.org> Hey @\u{200b}room\n\nHello world',
+        'body': 'Hello world',
         'msgtype': 'm.text',
         'm.mentions': {
           'user_ids': ['@alice:example.org'],
         },
-        'format': 'org.matrix.custom.html',
-        'formatted_body':
-            '<mx-reply><blockquote><a href="https://matrix.to/#/!localpart:server.abc/\$replyEvent">In reply to</a> <a href="https://matrix.to/#/@alice:example.org">@alice:example.org</a><br>Hey @room</blockquote></mx-reply>Hello world',
         'm.relates_to': {
           'm.in_reply_to': {
             'event_id': '\$replyEvent',
@@ -1333,14 +1323,11 @@ void main() {
           .firstWhere((p) => p.key.contains('/send/m.room.message/'));
       content = json.decode(entry.value.first);
       expect(content, {
-        'body': '> <@alice:example.org> Hello world\n\nFox',
+        'body': 'Fox',
         'msgtype': 'm.text',
         'm.mentions': {
           'user_ids': ['@alice:example.org'],
         },
-        'format': 'org.matrix.custom.html',
-        'formatted_body':
-            '<mx-reply><blockquote><a href="https://matrix.to/#/!localpart:server.abc/\$replyEvent">In reply to</a> <a href="https://matrix.to/#/@alice:example.org">@alice:example.org</a><br>Hello world</blockquote></mx-reply>Fox',
         'm.relates_to': {
           'm.in_reply_to': {
             'event_id': '\$replyEvent',

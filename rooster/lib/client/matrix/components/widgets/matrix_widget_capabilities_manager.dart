@@ -1,8 +1,10 @@
 import 'package:rooster/client/components/widgets/widget_component.dart';
 import 'package:rooster/client/matrix/components/widgets/capabilities/matrix_widget_capability.dart';
+import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_always_on_screen.dart';
 import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_delayed_events.dart';
 import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_download_file.dart';
 import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_get_media_config.dart';
+import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_navigate.dart';
 import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_oidc.dart';
 import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_read_relations.dart';
 import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_receive_event.dart';
@@ -11,11 +13,14 @@ import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capabil
 import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_send_event.dart';
 import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_send_state.dart';
 import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_send_to_device.dart';
+import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_sticky_events.dart';
 import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_theme.dart';
 import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_timeline.dart';
 import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_turn_servers.dart';
 import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_upload_file.dart';
+import 'package:rooster/client/matrix/components/widgets/capabilities/mx_capability_user_directory.dart';
 import 'package:rooster/client/matrix/components/widgets/matrix_widget_component.dart';
+import 'package:rooster/client/matrix/components/widgets/matrix_widget_host_actions.dart';
 import 'package:rooster/client/matrix/components/widgets/matrix_widget_message_handler.dart';
 import 'package:rooster/client/matrix/components/widgets/matrix_widget_permission_groups.dart';
 import 'package:rooster/client/matrix/components/widgets/matrix_widget_permissions_view.dart';
@@ -34,6 +39,11 @@ typedef MatrixWidgetCapability MatrixCapabilityConstructor(
 typedef MatrixWidgetCapabilityConstructorEntry
     = MapEntry<String, MatrixCapabilityConstructor>;
 
+/// Asks the user which of [needsPermission] the widget may have. Null when
+/// the user dismissed the question, which grants none of them.
+typedef MatrixWidgetPermissionPrompt = Future<DialogResult<List<String>>?>
+    Function(List<String> needsPermission);
+
 class MatrixWidgetCapabilitiesManager
     implements WidgetCapabilityManager<MatrixWidgetMessage> {
   Map<String, MatrixWidgetCapability> grantedCapabilities = {};
@@ -46,8 +56,20 @@ class MatrixWidgetCapabilitiesManager
   MatrixWidgetRunner runner;
   final BuildContext context;
 
+  /// What the granted capabilities do to the client.
+  final MatrixWidgetHostActions hostActions;
+
+  final MatrixWidgetPermissionPrompt? _prompt;
+
+  /// Whether the widget asked to stay on screen (`m.always_on_screen`).
+  final ValueNotifier<bool> alwaysOnScreen = ValueNotifier(false);
+
   MatrixWidgetCapabilitiesManager(
-      {required this.runner, required this.context}) {
+      {required this.runner,
+      required this.context,
+      this.hostActions = const MatrixWidgetHostActions(),
+      MatrixWidgetPermissionPrompt? prompt})
+      : _prompt = prompt {
     runner.onClosed.listen((_) {
       dispose();
     });
@@ -115,17 +137,7 @@ class MatrixWidgetCapabilitiesManager
     }
 
     if (needsPermission.isNotEmpty) {
-      var groups =
-          MatrixWidgetPermissionGroup.groupPermissions(needsPermission);
-
-      var picked = await AdaptiveDialog.show<DialogResult<List<String>>>(
-        navigator.currentContext!,
-        title: labelWidgetPermissionsTitle,
-        builder: (context) => MatrixWidgetPermissionsView(
-            runner: runner,
-            groupedPermissions: groups.$1,
-            ungrouped: groups.$2),
-      );
+      var picked = await (_prompt ?? _showPermissionDialog)(needsPermission);
 
       if (picked != null) {
         Log.i("User allowed permissions: ${picked}");
@@ -156,6 +168,18 @@ class MatrixWidgetCapabilitiesManager
     notifyCapabilities(capabilities);
 
     return granted;
+  }
+
+  Future<DialogResult<List<String>>?> _showPermissionDialog(
+      List<String> needsPermission) {
+    var groups = MatrixWidgetPermissionGroup.groupPermissions(needsPermission);
+
+    return AdaptiveDialog.show<DialogResult<List<String>>>(
+      navigator.currentContext!,
+      title: labelWidgetPermissionsTitle,
+      builder: (context) => MatrixWidgetPermissionsView(
+          runner: runner, groupedPermissions: groups.$1, ungrouped: groups.$2),
+    );
   }
 
   void notifyCapabilities(List<String> requested) {
@@ -190,9 +214,11 @@ class MatrixWidgetCapabilitiesManager
     MatrixCapabilityTheme.entry,
     MatrixCapabilityUpdateDelayedEvent.entry,
     MatrixCapabilitySendDelayedEvent.entry,
-    // MatrixCapabilityAlwaysOnScreen.entry,
-    // MatrixCapabilitySendStickyEvent.entry,
-    // MatrixCapabilityReceiveStickyEvent.entry,
+    MatrixCapabilityNavigate.entry,
+    MatrixCapabilityUserDirectorySearch.entry,
+    MatrixCapabilityAlwaysOnScreen.entry,
+    MatrixCapabilitySendStickyEvent.entry,
+    MatrixCapabilityReceiveStickyEvent.entry,
   ]);
 
   static bool canCreateCapability(String capability) {
@@ -252,6 +278,36 @@ class MatrixWidgetCapabilitiesManager
     return granted;
   }
 
+  /// The capability a widget request needs, for the requests this answers
+  /// "permission denied" to when it is missing. Null for the others.
+  static String? requiredCapabilityFor(MatrixWidgetMessage event) {
+    switch (event.action) {
+      case MatrixCapabilityNavigate.name:
+      case MatrixCapabilityUserDirectorySearch.name:
+        return event.action;
+      case MatrixCapabilityAlwaysOnScreen.action:
+        return MatrixCapabilityAlwaysOnScreen.name;
+      case "send_event":
+        if (MatrixCapabilitySendStickyEvent.isStickyRequest(event)) {
+          return MatrixCapabilitySendStickyEvent.name;
+        }
+        var type = event.data.tryGet<String>("type");
+        if (type == null || event.data.containsKey("state_key")) return null;
+        var msgtype =
+            event.data.tryGetMap<String, dynamic>("content")?["msgtype"];
+        return MatrixCapabilitySendEvent.getNameForType(
+            type, msgtype is String ? msgtype : null);
+      case "org.matrix.msc2876.read_events":
+        var type = event.data.tryGet<String>("type");
+        if (type == null || event.data.containsKey("state_key")) return null;
+        var msgtype = event.data.tryGet<String>("msgtype");
+        return msgtype == null
+            ? "${MatrixCapabilityReceiveEvent.name}:$type"
+            : "${MatrixCapabilityReceiveEvent.name}:$type#$msgtype";
+    }
+    return null;
+  }
+
   String eventToCapabilityName(MatrixWidgetMessage event) {
     var key = event.action;
 
@@ -300,9 +356,11 @@ class MatrixWidgetCapabilitiesManager
   Future<MatrixWidgetMessage> handleEvent(MatrixWidgetMessage event) async {
     var key = eventToCapabilityName(event);
 
-    if (rejectedCapabilities.contains(key)) {
-      // Not translated: a reply to the widget, which the app does not show.
-      return event.createResponseError(message: "Rejected");
+    var required = requiredCapabilityFor(event);
+
+    if (rejectedCapabilities.contains(key) ||
+        (required != null && rejectedCapabilities.contains(required))) {
+      return _permissionDenied(event, required ?? key);
     }
 
     for (var capability in grantedCapabilities.values) {
@@ -318,9 +376,20 @@ class MatrixWidgetCapabilitiesManager
       }
     }
 
+    // A guarded request no granted capability answers is one the user has
+    // not allowed: refuse it rather than call it unknown.
+    if (required != null) return _permissionDenied(event, required);
+
     return event.createResponseError(
         // Not translated: a reply to the widget, which the app does not show.
         message: "Unhandled widget request ${event.action}\n${event.data}");
+  }
+
+  MatrixWidgetMessage _permissionDenied(
+      MatrixWidgetMessage event, String capability) {
+    return event.createResponseError(
+        // Not translated: a reply to the widget, which the app does not show.
+        message: "Permission denied: missing capability $capability");
   }
 
   @override

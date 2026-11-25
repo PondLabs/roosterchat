@@ -7,6 +7,7 @@ import 'package:rooster/client/components/space_component.dart';
 import 'package:rooster/client/matrix/components/account_switch_prefix/matrix_account_switch_prefix.dart';
 import 'package:rooster/client/matrix/components/calendar_room_component/matrix_calendar_room_component.dart';
 import 'package:rooster/client/matrix/components/command_component/matrix_command_component.dart';
+import 'package:rooster/client/matrix/components/dehydrated_devices/matrix_dehydrated_devices_component.dart';
 import 'package:rooster/client/matrix/components/direct_messages/matrix_direct_messages_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon_state_manager.dart';
@@ -25,6 +26,7 @@ import 'package:rooster/client/matrix/components/profile/matrix_profile_componen
 import 'package:rooster/client/matrix/components/push_notifications/matrix_push_notification_component.dart';
 import 'package:rooster/client/matrix/components/room_activities/matrix_activities_component.dart';
 import 'package:rooster/client/matrix/components/sidebar_entries/matrix_sidebar_entries_component.dart';
+import 'package:rooster/client/matrix/components/social_admin/matrix_account_restriction.dart';
 import 'package:rooster/client/matrix/components/soundboard/matrix_space_soundboard_component.dart';
 import 'package:rooster/client/matrix/components/space_banner/matrix_space_banner_component.dart';
 import 'package:rooster/client/matrix/components/space_categories/matrix_space_categories_component.dart';
@@ -76,10 +78,14 @@ class ComponentRegistry {
       MatrixUserColorComponent(client),
       MatrixPetNameComponent(client),
       MatrixKeyVerificationComponent(client),
+      // MSC3814, opt-in: without it a login is as before.
+      MatrixDehydratedDevicesComponent(client),
       MatrixPollComponent(client),
       MatrixWidgetComponent(client),
       MatrixGifComponent(client),
       MatrixSidebarEntriesComponent(client),
+      // A locked or suspended account: a banner, and no sync every 3 s.
+      MatrixAccountRestrictionComponent(client),
     ];
   }
 

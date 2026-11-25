@@ -55,7 +55,9 @@ class MatrixPasswordLoginFlow implements PasswordLoginFlow {
       var response = await mx.login(matrix.LoginType.mLoginPassword,
           initialDeviceDisplayName: BuildConfig.appName,
           password: password,
-          identifier: matrix.AuthenticationUserIdentifier(user: username!));
+          identifier: matrix.AuthenticationUserIdentifier(user: username!),
+          // Renewed on its own later (MatrixTokenRefresher).
+          refreshToken: true);
 
       if (response.accessToken.isNotEmpty) {
         result = LoginResultSuccess();

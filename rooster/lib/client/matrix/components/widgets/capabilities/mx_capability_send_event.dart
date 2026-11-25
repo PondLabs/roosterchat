@@ -48,6 +48,10 @@ class MatrixCapabilitySendEvent implements MatrixWidgetCapability {
 
     if (message.data.containsKey("delay")) return false;
 
+    // A sticky event needs its own capability (MSC4407). Sending it here
+    // would drop the stickiness without the user having allowed either.
+    if (message.data.containsKey("sticky_duration_ms")) return false;
+
     return true;
   }
 

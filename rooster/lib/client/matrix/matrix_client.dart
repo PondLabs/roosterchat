@@ -6,7 +6,9 @@ import 'package:rooster/client/client_manager.dart';
 import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/component_registry.dart';
 import 'package:rooster/client/error_profile.dart';
+import 'package:rooster/client/matrix/auth/matrix_oidc_login_flow.dart';
 import 'package:rooster/client/matrix/auth/matrix_sso_login_flow.dart';
+import 'package:rooster/client/matrix/auth/matrix_token_refresher.dart';
 import 'package:rooster/client/matrix/auth/matrix_username_password_login_flow.dart';
 import 'package:rooster/client/matrix/components/matrix_sync_listener.dart';
 import 'package:rooster/client/matrix/components/profile/matrix_profile_component.dart';
@@ -14,6 +16,7 @@ import 'package:rooster/client/matrix/components/user_presence/matrix_user_prese
 import 'package:rooster/client/components/space_categories/channel_categories.dart';
 import 'package:rooster/client/matrix/components/call_activity/matrix_call_activity_component.dart';
 import 'package:rooster/client/matrix/components/voice_channel_status/matrix_voice_channel_status_component.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_ring.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/database/matrix_database.dart';
@@ -21,6 +24,7 @@ import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/matrix_native_implementations.dart';
 import 'package:rooster/client/matrix/matrix_room_preview.dart';
 import 'package:rooster/client/room_preview.dart';
+import 'package:rooster/config/preferences/bool_preference.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/global_config.dart';
 import 'package:rooster/debug/log.dart';
@@ -48,6 +52,7 @@ import 'package:matrix/encryption.dart';
 import 'package:flutter_vodozemac/flutter_vodozemac.dart' as vodozemac;
 
 import '../../ui/atoms/code_block.dart';
+import '../../ui/pages/login/reauthenticate_dialog.dart';
 import 'components/key_verification_component/matrix_key_verification_component.dart';
 import 'matrix_room.dart';
 import 'matrix_space.dart';
@@ -127,6 +132,13 @@ class MatrixClient extends Client {
   /// What the own media listens to on the SDK client, cancelled in close().
   final List<StreamSubscription<Object?>> _ownMediaListeners = [];
 
+  /// Renews the access token after a soft logout, one request at a time,
+  /// and says when the person has to sign this device in again.
+  late final MatrixTokenRefresher tokenRefresher;
+
+  /// On the Home screen while [tokenRefresher] needs the person.
+  Alert? _reauthenticationAlert;
+
   MatrixClient({
     required String identifier,
     required matrix.DatabaseApi database,
@@ -148,6 +160,7 @@ class MatrixClient extends Client {
         .where((state) => state == matrix.LoginState.loggedOut)
         .listen((_) => _clearOwnMedia()));
     _syncSpeedTrace = SyncSpeedTrace(_matrixClient.onSyncStatus.stream);
+    tokenRefresher.state.addListener(_onTokenRefreshState);
 
     self = ErrorProfile();
 
@@ -166,6 +179,11 @@ class MatrixClient extends Client {
     );
 
     _matrixClient.onSync.stream.listen(onMatrixClientSync);
+    // Rings and declines (MSC4075, MSC4310), decrypted: the room's call
+    // rings, or stops ringing.
+    _matrixClient.onTimelineEvent.stream
+        .where((event) => CallRings.types.contains(event.type))
+        .listen(_onCallRingEvent);
     componentsInternal = ComponentRegistry.getMatrixComponents(this);
   }
 
@@ -274,6 +292,15 @@ class MatrixClient extends Client {
             "of a provider's name, so translate it to read well there (with "
             "an article if your language needs one)",
       );
+
+  static String get errorLoginHomeserverInsecure => Intl.message(
+      "This server tries to move the connection from HTTPS to unencrypted "
+      "HTTP, so it was refused.",
+      name: "errorLoginHomeserverInsecure",
+      desc: "Under the homeserver field on the login screen when the "
+          "server's discovery redirects from a secure (HTTPS) address to an "
+          "insecure (HTTP) one, or names an HTTP server, and the app "
+          "refused to connect");
 
   static Future<void> loadFromDB(
     ClientManager manager, {
@@ -442,6 +469,11 @@ class MatrixClient extends Client {
     }
   }
 
+  void _onCallRingEvent(matrix.Event event) {
+    final room = getRoom(event.room.id);
+    room?.getComponent<MatrixVoipRoomComponent>()?.rings.receive(event);
+  }
+
   void _handleComponentSync(matrix.SyncUpdate update) {
     var roomUpdates = update.rooms?.join;
     if (roomUpdates != null) {
@@ -465,25 +497,38 @@ class MatrixClient extends Client {
   matrix.Client _createMatrixClient(
       String name, matrix.DatabaseApi database, http.Client? transport) {
     late final matrix.Client client;
+    tokenRefresher = MatrixTokenRefresher(() => client);
     client = matrix.Client(
       name,
       // Every request of the account goes through our client, which records
       // its timings in the speed log without content (lib/diagnostic/speed_log).
-      httpClient: SpeedHttpClient(
-        inner: transport,
-        hosts: HostClassifier(homeserver: () => client.homeserver),
+      // A soft logout renews the token and sends the request again.
+      httpClient: TokenRefreshingHttpClient(
+        inner: SpeedHttpClient(
+          inner: transport,
+          hosts: HostClassifier(homeserver: () => client.homeserver),
+        ),
+        refresher: tokenRefresher,
+        homeserver: () => client.homeserver,
       ),
+      // Also asks login and registration for a refresh token.
+      onSoftLogout: tokenRefresher.onSoftLogout,
       verificationMethods: {
         KeyVerificationMethod.emoji,
         KeyVerificationMethod.numbers,
       },
       importantStateEvents: {
         "im.ponies.room_emotes",
+        // The stable type of image packs (Matrix v1.19), read before the
+        // legacy one above.
+        matrix.EventTypes.RoomImagePack,
         "m.room.power_levels",
         "m.room.join_rules",
         "page.codeberg.everypizza.room.banner",
         "chat.commet.calendar_event",
         MatrixVoipRoomComponent.callMemberStateEvent,
+        // Memberships of newer MatrixRTC clients kept as state (MSC4143).
+        ...matrix.RtcMemberships.types,
         // The sidebar lists channels under these from the first frame.
         ChannelCategories.stateEventType,
         MatrixVoiceChannelStatusComponent.stateEventType,
@@ -494,15 +539,34 @@ class MatrixClient extends Client {
       },
       nativeImplementations: nativeImplementations,
       database: database,
+      syncFilter: syncFilter,
       // No logLevel: the SDK constructor would override the level set at
       // startup (warning, verbose only in developer mode), and every
       // SDK message went through print on every sync.
     );
 
+    // Simplified Sliding Sync (MSC4186) where the homeserver offers it,
+    // unless Settings > Developer > Sync keeps the account on /v3/sync.
+    client.forceLegacySync = forceV3Sync.value;
     client.onSyncStatus.stream.listen(onSyncStatusChanged);
 
     return client;
   }
+
+  /// Keeps every account on `/v3/sync` even where the homeserver offers
+  /// Simplified Sliding Sync (Settings > Developer > Sync).
+  static final BoolPreference forceV3Sync =
+      BoolPreference("force_v3_sync", defaultValue: false);
+
+  /// The SDK's own sync filter, plus the per-thread unread counts (Matrix
+  /// v1.4, MSC3773) the threads' badges show. The server then leaves the
+  /// threads out of the room's counts; [MatrixRoom] adds them back.
+  static matrix.Filter get syncFilter => matrix.Filter(
+        room: matrix.RoomFilter(
+          state: matrix.StateFilter(lazyLoadMembers: true),
+          timeline: matrix.StateFilter(unreadThreadNotifications: true),
+        ),
+      );
 
   matrix.Client getMatrixClient() {
     return _matrixClient;
@@ -514,6 +578,7 @@ class MatrixClient extends Client {
     try {
       await _matrixClient.logout();
     } finally {
+      _clearReauthenticationAlert();
       await _clearOwnMedia();
     }
   }
@@ -636,6 +701,8 @@ class MatrixClient extends Client {
         "events": {
           "org.matrix.msc3401.call": 0,
           "org.matrix.msc3401.call.member": 0,
+          // Newer MatrixRTC clients' memberships, kept as state (MSC4143).
+          for (final type in matrix.RtcMemberships.types) type: 0,
           // Anyone may say what the channel is up to, as on Discord.
           MatrixVoiceChannelStatusComponent.stateEventType: 0,
           // So may anyone start a call activity: the session's state is how
@@ -805,8 +872,58 @@ class MatrixClient extends Client {
     return room;
   }
 
+  /// Shows the dialog to sign in again, and an alert on the Home screen
+  /// that opens it, while the refresh token is refused.
+  void _onTokenRefreshState() {
+    if (tokenRefresher.state.value == TokenRefreshState.active) {
+      _clearReauthenticationAlert();
+      return;
+    }
+    if (_reauthenticationAlert != null) return;
+    final alert = _reauthenticationAlert = Alert(
+      AlertType.warning,
+      titleGetter: () => ReauthenticateDialog.labelReauthenticateTitle,
+      messageGetter: () => ReauthenticateDialog.messageReauthenticateAlert,
+      action: (context) => ReauthenticateDialog.show(context, this),
+    );
+    clientManager?.alertManager.addAlert(alert);
+    final binding = WidgetsBinding.instance;
+    binding.addPostFrameCallback((_) {
+      final context = navigator.currentContext;
+      if (context != null && context.mounted) {
+        ReauthenticateDialog.show(context, this);
+      }
+    });
+    binding.scheduleFrame();
+  }
+
+  void _clearReauthenticationAlert() {
+    final alert = _reauthenticationAlert;
+    _reauthenticationAlert = null;
+    if (alert != null) clientManager?.alertManager.clearAlert(alert);
+  }
+
+  /// The ways to sign this device in again: none for a session signed in
+  /// through OAuth 2.0, else the server's password and single sign-on.
+  Future<List<LoginFlow>> reauthenticationFlows() async {
+    final stored = await _matrixClient.database.getClient(identifier);
+    if (stored?['oidc_client_id'] != null) return [];
+    // Without the account's token, which the server no longer takes.
+    final api = matrix.MatrixApi(
+        homeserver: _matrixClient.homeserver,
+        httpClient: _matrixClient.httpClient);
+    final flows = await api.getLoginFlows() ?? [];
+    return [
+      if (flows.any((flow) => flow.type == "m.login.password"))
+        MatrixPasswordLoginFlow(),
+      if (flows.any((flow) => flow.type == "m.login.sso"))
+        ...await _getSsoFlows(api),
+    ];
+  }
+
   @override
   Future<void> close({bool closeDatabase = true}) async {
+    tokenRefresher.state.removeListener(_onTokenRefreshState);
     getComponent<MatrixUserPresenceComponent>()?.dispose();
     for (final listener in _ownMediaListeners) {
       await listener.cancel();
@@ -984,14 +1101,45 @@ class MatrixClient extends Client {
     connectionStatusChanged.add(result);
   }
 
+  /// The homeserver's OAuth 2.0 server metadata (Matrix v1.15
+  /// `auth_metadata`) from the last [setHomeserver], or null when the server
+  /// has no OAuth 2.0 API. The device grant, refresh and account management
+  /// read it from here.
+  matrix.GetAuthMetadataResponse? authMetadata;
+
+  /// Why the last [setHomeserver] refused the server, for the login screen,
+  /// when there is more to say than that it did not answer; null otherwise.
+  String? homeserverError;
+
   @override
   Future<(bool, List<LoginFlow>?)> setHomeserver(Uri uri) async {
+    authMetadata = null;
+    homeserverError = null;
     try {
       var result = await _matrixClient.checkHomeserver(uri);
 
       var flows = result.$3;
 
       var resultFlows = List<LoginFlow>.empty(growable: true);
+
+      final metadata = result.$4;
+      authMetadata = metadata;
+      if (metadata != null &&
+          MatrixOidcLoginFlow.isSupportedBy(metadata) &&
+          MatrixOidcLoginFlow.isAvailableOnThisPlatform) {
+        final serverName = _matrixClient.homeserver?.host ?? uri.host;
+        resultFlows.add(MatrixOidcLoginFlow(
+          authMetadata: metadata,
+          serverName: serverName,
+        ));
+        if (metadata.supportsPromptCreate) {
+          resultFlows.add(MatrixOidcLoginFlow(
+            authMetadata: metadata,
+            serverName: serverName,
+            createAccount: true,
+          ));
+        }
+      }
 
       if (flows.any((element) => element.type == "m.login.password")) {
         resultFlows.add(MatrixPasswordLoginFlow());
@@ -1003,15 +1151,19 @@ class MatrixClient extends Client {
 
       return (true, resultFlows);
     } catch (error, trace) {
+      authMetadata = null;
+      if (error is matrix.InsecureDiscoveryException) {
+        homeserverError = errorLoginHomeserverInsecure;
+      }
       Log.onError(error, trace);
       return (false, null);
     }
   }
 
-  Future<List<LoginFlow>> _getSsoFlows() async {
+  Future<List<LoginFlow>> _getSsoFlows([matrix.MatrixApi? api]) async {
     List<LoginFlow> result = List.empty(growable: true);
 
-    Map<String, dynamic> flows = await _matrixClient.request(
+    Map<String, dynamic> flows = await (api ?? _matrixClient).request(
       matrix.RequestType.GET,
       "/client/v3/login",
     );

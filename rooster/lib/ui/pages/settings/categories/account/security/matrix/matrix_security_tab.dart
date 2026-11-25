@@ -1,9 +1,13 @@
 import 'package:rooster/client/alert.dart';
+import 'package:rooster/client/matrix/auth/matrix_account_lifecycle.dart';
+import 'package:rooster/client/matrix/components/dehydrated_devices/matrix_dehydrated_devices_component.dart';
+import 'package:rooster/client/matrix/components/key_portability/megolm_key_portability.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/ui/molecules/alert_view.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/pages/settings/categories/account/security/matrix/session/matrix_session.dart';
+import 'package:rooster/ui/pages/settings/categories/account/security/matrix/session/matrix_session_name_view.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/links/link_utils.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +17,10 @@ import 'package:tiamat/tiamat.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 import 'cross_signing/cross_signing_page.dart';
+import 'dehydrated_device/matrix_dehydrated_device_panel.dart';
+import 'key_backup/matrix_key_backup_panel.dart';
+import 'key_portability/matrix_key_portability_panel.dart';
+import 'qr_login/qr_link_device.dart';
 
 class MatrixSecurityTab extends StatefulWidget {
   const MatrixSecurityTab(this.client, {super.key});
@@ -68,6 +76,9 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
   /// How many sessions the last fetch found gone from the list before it.
   int sessionsSignedOut = 0;
 
+  /// Why the last rename of a session failed, while its name stays.
+  String? sessionNameError;
+
   Future<void>? _loading;
 
   late final AppLifecycleListener _lifecycle;
@@ -86,17 +97,17 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
   bool get usesAccountPage =>
       supportsLegacyUIA != true && accountManagementUri != null;
 
+  /// Sessions are renamed here, through the client API, unless the
+  /// server's account page manages them. A server that gave no metadata
+  /// does not delegate.
+  bool get canEditSessionNames => !usesAccountPage;
+
   /// The server answered that it has no account page and does not sign
   /// sessions out through the client API either.
   bool get cannotSignOutSessions =>
       supportsLegacyUIA == false &&
       authMetadataAnswered &&
       accountManagementUri == null;
-
-  /// The first of [actions] the server announces, in that order.
-  String? announcedAction(List<String> actions) => actions
-      .where((action) => supportedActions?.contains(action) == true)
-      .firstOrNull;
 
   String get labelMatrixCrossSigning => Intl.message("Cross signing",
       desc: "Title label for matrix cross signing",
@@ -206,7 +217,7 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
     setState(() {
       var encryption = widget.client.getMatrixClient().encryption;
       crossSigningEnabled = encryption?.crossSigning.enabled ?? false;
-      messageBackupEnabled = encryption?.keyManager.enabled ?? false;
+      messageBackupEnabled = encryption?.keyManager.keyBackupEnabled ?? false;
       isVerified = widget.client.matrixClient.isUnknownSession == false;
     });
   }
@@ -313,6 +324,13 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
                         alignment: AlignmentDirectional.centerStart,
                         child: tiamat.Text.labelLow(message)),
                   ),
+                if (sessionNameError != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                    child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: tiamat.Text.error(sessionNameError!)),
+                  ),
                 if ((supportsLegacyUIA == true || usesAccountPage) &&
                     inactiveDevices.isNotEmpty)
                   Padding(
@@ -371,6 +389,9 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
                         device,
                         widget.client.getMatrixClient(),
                         inactive: isDeviceInactive(device),
+                        editName: canEditSessionNames
+                            ? () => editSessionName(device)
+                            : null,
                         removeSession: supportsLegacyUIA == true
                             ? () => removeDeviceUIA(device.deviceId)
                             : usesAccountPage
@@ -384,6 +405,35 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
               ],
             ),
     );
+  }
+
+  /// Renames [device] (`PUT /devices/{id}`), or clears its name, then
+  /// fetches the list again. When the server refuses or cannot be
+  /// reached, the list keeps the name it had.
+  Future<void> editSessionName(Device device) async {
+    final choice = await AdaptiveDialog.show<SessionNameChoice>(context,
+        title: MatrixSessionNameView.labelSessionRenameTitle,
+        builder: (_) => MatrixSessionNameView(currentName: device.displayName));
+    if (choice == null || !mounted) return;
+    final client = widget.client.getMatrixClient();
+    try {
+      final name = choice.name;
+      if (name == null) {
+        await client.deleteDeviceDisplayName(device.deviceId);
+      } else {
+        await client.updateDevice(device.deviceId, displayName: name);
+      }
+    } catch (e, s) {
+      Log.onError(e, s);
+      if (mounted) {
+        setState(() => sessionNameError =
+            MatrixSessionNameView.messageSessionRenameFailed);
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => sessionNameError = null);
+    getDevices();
   }
 
   void removeDeviceUIA(String deviceID) async {
@@ -410,45 +460,38 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
     getDevices();
   }
 
-  /// Opens the account page on signing [deviceID] out: MSC4191's
-  /// `org.matrix.session_end`, or `org.matrix.device_delete`, its older
-  /// name, when only that one is announced.
+  /// Opens the account page on signing [deviceID] out (MSC4191's
+  /// `org.matrix.session_end`), else on the session, else on the list.
   void removeDeviceOAuth(String deviceID) {
-    final action = announcedAction(const [
-          "org.matrix.session_end",
-          "org.matrix.device_delete",
-        ]) ??
-        announcedAction(const [
-          "org.matrix.session_view",
-          "org.matrix.device_view",
-        ]);
-    if (action == null) return openSessionsList();
-    openAccountPage({"action": action, "device_id": deviceID});
+    final page = [
+      AccountManagementActions.sessionEnd,
+      AccountManagementActions.sessionView,
+    ]
+        .map((action) => accountManagementLink(
+            accountManagementUri, supportedActions,
+            action: action, deviceId: deviceID))
+        .nonNulls
+        .firstOrNull;
+    if (page == null) return openSessionsList();
+    openAccountPage(page);
   }
 
   /// Opens the account page on the list of sessions, where the inactive
   /// ones are signed out.
   void openSessionsList() {
-    final action = announcedAction(const [
-      "org.matrix.sessions_list",
-      "org.matrix.devices_list",
-    ]);
-    openAccountPage({if (action != null) "action": action});
+    final page = accountManagementLink(accountManagementUri, supportedActions,
+            action: AccountManagementActions.sessionsList) ??
+        accountManagementLink(accountManagementUri, supportedActions);
+    if (page != null) openAccountPage(page);
   }
 
-  void openAccountPage(Map<String, String> query) {
-    final page = accountManagementUri!;
+  void openAccountPage(Uri page) {
     sentToAccountPage = true;
     // Without a context: nothing to ask, as this screen says where the
     // button leads and the link is the server's own, so on the web the
     // page opens in the same task as the tap (no popup blocker stops it).
-    LinkUtils.open(
-        query.isEmpty
-            ? page
-            : page
-                .replace(queryParameters: {...page.queryParameters, ...query}),
-        filterTrackingParameters: false,
-        bypassConfirmation: true);
+    LinkUtils.open(page,
+        filterTrackingParameters: false, bypassConfirmation: true);
   }
 
   void onUpdated() {
@@ -500,7 +543,12 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
                 ),
               crossSigning(),
               const tiamat.Seperator(),
-              messageBackup()
+              messageBackup(),
+              // MSC4108: sign a new device in from this one.
+              if (widget.client.getMatrixClient().encryption != null) ...[
+                const tiamat.Seperator(),
+                QrLinkDeviceRow(client: widget.client.getMatrixClient()),
+              ],
             ],
           ),
         ));
@@ -548,7 +596,45 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
     );
   }
 
+  late final keyBackupController =
+      MatrixKeyBackupController(widget.client.getMatrixClient());
+
   Widget messageBackup() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 8,
+      children: [
+        messageBackupRow(),
+        // The details, rotation and deletion of the backup on the server
+        // (and m.key_backup, MSC4287), loaded again once it is set up.
+        if (widget.client.getMatrixClient().encryption != null)
+          MatrixKeyBackupPanel(
+            key: ValueKey(messageBackupEnabled),
+            controller: keyBackupController,
+            onChanged: checkState,
+          ),
+        // Room keys to and from a file (the spec's key export format).
+        if (widget.client.getMatrixClient().encryption != null) ...[
+          const tiamat.Seperator(),
+          MatrixKeyPortabilityPanel(controller: keyPortability),
+        ],
+        // MSC3814: keys for messages sent while no session is signed in.
+        if (widget.client.getMatrixClient().encryption != null &&
+            dehydratedDevices != null) ...[
+          const tiamat.Seperator(),
+          MatrixDehydratedDevicePanel(controller: dehydratedDevices!),
+        ],
+      ],
+    );
+  }
+
+  late final dehydratedDevices =
+      widget.client.getComponent<MatrixDehydratedDevicesComponent>();
+
+  late final keyPortability =
+      MegolmKeyPortability(widget.client.getMatrixClient());
+
+  Widget messageBackupRow() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [

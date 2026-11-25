@@ -69,8 +69,10 @@ class CallReplaces {
       };
 }
 
-// TODO: Change to "sdp_stream_metadata" when MSC3077 is merged
-const String sdpStreamMetadataKey = 'org.matrix.msc3077.sdp_stream_metadata';
+// ROOSTER: Matrix v1.10 (MSC3077) stabilized `sdp_stream_metadata`; keep legacy key for fallback reads.
+const String sdpStreamMetadataKey = 'sdp_stream_metadata';
+const String legacySdpStreamMetadataKey =
+    'org.matrix.msc3077.sdp_stream_metadata';
 
 /// https://github.com/matrix-org/matrix-doc/blob/dbkr/msc2747/proposals/2747-voip-call-transfer.md#capability-advertisment
 /// https://github.com/matrix-org/matrix-doc/blob/dbkr/msc2746/proposals/2746-reliable-voip.md#add-dtmf
@@ -139,6 +141,22 @@ class SDPStreamMetadata {
           (key, value) => MapEntry(key, SDPStreamPurpose.fromJson(value)),
         ),
       );
+
+  // ROOSTER: Read stable `sdp_stream_metadata` with fallback to legacy `org.matrix.msc3077.sdp_stream_metadata`.
+  static SDPStreamMetadata? tryFromEventContent(Map<String, dynamic> content) {
+    final raw =
+        content[sdpStreamMetadataKey] ?? content[legacySdpStreamMetadataKey];
+    if (raw is Map<String, dynamic>) {
+      return SDPStreamMetadata.fromJson(raw);
+    }
+    if (raw is Map) {
+      return SDPStreamMetadata.fromJson(
+        raw.map((key, value) => MapEntry(key.toString(), value)),
+      );
+    }
+    return null;
+  }
+
   Map<String, dynamic> toJson() =>
       sdpStreamMetadatas.map((key, value) => MapEntry(key, value.toJson()));
 }

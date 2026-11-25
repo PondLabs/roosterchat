@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:rooster/client/matrix/components/voip_room/call_join.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_memberships.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_ring.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_membership_writes.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_call_membership.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
@@ -20,7 +22,7 @@ class MatrixVoipRoomComponent
     implements
         VoipRoomComponent<MatrixClient, MatrixRoom>,
         MatrixRoomSyncListener {
-  static const callMemberStateEvent = "org.matrix.msc3401.call.member";
+  static const callMemberStateEvent = CallMemberships.legacyType;
 
   @override
   MatrixClient client;
@@ -56,12 +58,18 @@ class MatrixVoipRoomComponent
 
   StreamSubscription? _clockSub;
 
+  /// Someone ringing us to this room's call (MSC4075), and our decline
+  /// (MSC4310). [MatrixClient] hands it the room's notifications as they
+  /// arrive, decrypted.
+  CallRings get rings => _rings ??= CallRings(room.matrixRoom, now: _clock.now);
+  CallRings? _rings;
+
   @override
   onSync(JoinedRoomUpdate update) {
     // A limited sync delivers state changes in `state`, not the timeline: a
-    // leave that came in one was missed, and the member stayed listed.
-    final events = [...?update.state, ...?update.timeline?.events];
-    if (events.any((event) => event.type == callMemberStateEvent)) {
+    // leave that came in one was missed, and the member stayed listed. The
+    // newer format also comes as sticky events.
+    if (CallMemberships.touches(update)) {
       _onParticipantsChanged.add(());
       // Joined again from another device? This one leaves. On the next
       // turn, once the sync is in the room state; the heartbeat checks too.
@@ -84,21 +92,21 @@ class MatrixVoipRoomComponent
 
   @override
   List<String> getCurrentParticipants() {
-    final state = room.matrixRoom.states[callMemberStateEvent];
-    if (state == null) {
+    final now = _clock.now();
+    // Every format, once per device (see CallMemberships).
+    final state = CallMemberships.of(room.matrixRoom, now: now);
+    if (state.isEmpty) {
       _lapseTimer.cancel();
       return [];
     }
 
-    final now = _clock.now();
     final expiries = <DateTime?>[];
     List<String> participants = List.empty(growable: true);
-    for (var pair in state.entries) {
-      if (pair.value.content.isEmpty) {
+    for (final entry in state) {
+      if (entry.content.isEmpty) {
         continue;
       }
 
-      final entry = pair.value;
       final sentAt = entry is Event ? entry.originServerTs : null;
       if (MatrixCallMembership.isExpired(entry.content, sentAt, now)) {
         continue;
@@ -107,13 +115,13 @@ class MatrixVoipRoomComponent
       // A membership left behind by this device (the app was closed or
       // crashed mid-call) is stale: we are only in the call if we hold a live
       // session right now.
-      if (_isOwnDeviceMembership(pair.value) && !_hasActiveSession) {
+      if (_isOwnDeviceMembership(entry) && !_hasActiveSession) {
         continue;
       }
 
       expiries.add(MatrixCallMembership.expiresAt(entry.content, sentAt));
 
-      final sender = pair.value.senderId;
+      final sender = entry.senderId;
       if (participants.contains(sender)) {
         continue;
       }
@@ -193,6 +201,8 @@ class MatrixVoipRoomComponent
 
   @override
   Future<VoipSession?> joinCall() {
+    // Joining answers a ring.
+    _rings?.answered();
     final joining = _joining;
     if (joining != null) return joining;
     final hangUp = Completer<void>();

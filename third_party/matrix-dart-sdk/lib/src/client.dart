@@ -33,6 +33,7 @@ import 'package:matrix/matrix.dart';
 import 'package:matrix/matrix_api_lite/generated/fixed_model.dart';
 import 'package:matrix/msc_extensions/msc_unpublished_custom_refresh_token_lifetime/msc_unpublished_custom_refresh_token_lifetime.dart';
 import 'package:matrix/src/models/timeline_chunk.dart';
+import 'package:matrix/src/sliding_sync/sync_transport_continuity.dart'; // ROOSTER
 import 'package:matrix/src/utils/cached_stream_controller.dart';
 import 'package:matrix/src/utils/client_init_exception.dart';
 import 'package:matrix/src/utils/multilock.dart';
@@ -42,6 +43,10 @@ import 'package:matrix/src/utils/run_in_root.dart';
 import 'package:matrix/src/utils/sync_update_item_count.dart';
 import 'package:matrix/src/utils/try_get_push_rule.dart';
 import 'package:matrix/src/utils/versions_comparator.dart';
+
+// ROOSTER: Simplified Sliding Sync (MSC4186), for the app and tests.
+export 'package:matrix/src/sliding_sync/sliding_sync_hydration.dart';
+export 'package:matrix/src/sliding_sync/sliding_sync_transport.dart';
 
 typedef RoomSorter = int Function(Room a, Room b);
 
@@ -305,36 +310,40 @@ class Client extends MatrixApi {
       throw Exception('Cannot refresh access token when not logged in');
     }
 
-    final tokenResponse = switch (oidcClientId) {
+    // ROOSTER: Distinguish legacy /v3/refresh `expires_in_ms` (milliseconds) from OIDC `expires_in` (seconds), and ignore non-positive lifetimes.
+    final String newAccessToken;
+    final String? newRefreshToken;
+    final DateTime? tokenExpiresAt;
+    if (oidcClientId == null) {
       // We do not use Matrix Native OIDC so we use the legacy /refresh endpoint:
-      null => await refreshWithCustomRefreshTokenLifetime(
-          refreshToken,
-          refreshTokenLifetimeMs: customRefreshTokenLifetime?.inMilliseconds,
-        ).then(
-          (legacyFormat) => OidcAuthResponse(
-            accessToken: legacyFormat.accessToken,
-            tokenType: 'Bearer',
-            refreshToken: legacyFormat.refreshToken,
-            expiresIn: legacyFormat.expiresInMs,
-            scope: null,
-          ),
-        ),
+      final legacyFormat = await refreshWithCustomRefreshTokenLifetime(
+        refreshToken,
+        refreshTokenLifetimeMs: customRefreshTokenLifetime?.inMilliseconds,
+      );
+      newAccessToken = legacyFormat.accessToken;
+      newRefreshToken = legacyFormat.refreshToken;
+      final expiresInMs = legacyFormat.expiresInMs;
+      tokenExpiresAt = expiresInMs != null && expiresInMs > 0
+          ? DateTime.now().add(Duration(milliseconds: expiresInMs))
+          : null;
+    } else {
       // We are using Matrix Native OIDC so we fetch the refresh endpoint first:
-      final String oidcClientId =>
-        await oidcRefresh(oidcClientId, refreshToken),
-    };
+      final oidcResponse = await oidcRefresh(oidcClientId, refreshToken);
+      newAccessToken = oidcResponse.accessToken;
+      newRefreshToken = oidcResponse.refreshToken;
+      final expiresInSeconds = oidcResponse.expiresIn;
+      tokenExpiresAt = expiresInSeconds != null && expiresInSeconds > 0
+          ? DateTime.now().add(Duration(seconds: expiresInSeconds))
+          : null;
+    }
 
-    accessToken = tokenResponse.accessToken;
-    final expiresInMs = tokenResponse.expiresIn;
-    final tokenExpiresAt = expiresInMs == null
-        ? null
-        : DateTime.now().add(Duration(milliseconds: expiresInMs));
+    accessToken = newAccessToken;
     _accessTokenExpiresAt = tokenExpiresAt;
     await database.updateClient(
       homeserverUrl,
-      tokenResponse.accessToken,
+      newAccessToken,
       tokenExpiresAt,
-      tokenResponse.refreshToken,
+      newRefreshToken,
       userId,
       deviceId,
       deviceName,
@@ -568,7 +577,26 @@ class Client extends MatrixApi {
       if (checkWellKnown) {
         try {
           wellKnown = await getWellknown();
-          homeserver = wellKnown.mHomeserver.baseUrl.stripTrailingSlash();
+          final baseUrl = wellKnown.mHomeserver.baseUrl;
+          // ROOSTER: the well-known is fetched over HTTPS; a plain-HTTP
+          // base_url in it would drop TLS for the whole session. Only a
+          // server typed as http:// or one on this machine may use http:.
+          if (homeserverUrl.scheme != 'http' &&
+              baseUrl.scheme == 'http' &&
+              !_isLoopbackHost(baseUrl.host)) {
+            throw InsecureDiscoveryException(
+              InsecureDiscoveryFailure.baseUrl,
+              homeserverUrl,
+              baseUrl,
+            );
+          }
+          homeserver = baseUrl.stripTrailingSlash();
+        } on WellKnownRedirectException {
+          // ROOSTER: a redirect loop or a redirect to a non-HTTP(S) URL is a
+          // broken discovery file (FAIL_PROMPT in the spec), not "no file".
+          rethrow;
+        } on InsecureDiscoveryException {
+          rethrow; // ROOSTER
         } catch (e) {
           Logs().v('Found no well known information', e);
         }
@@ -576,22 +604,21 @@ class Client extends MatrixApi {
 
       // Check if server supports at least one supported version
       final versions = await getVersions();
-      if (!versions.versions
-          .any((version) => supportedVersions.contains(version))) {
+      // ROOSTER: Accept exact supported versions or newer backwards-compatible v1.x versions; fail explicitly otherwise instead of assert(false).
+      if (!_hasCompatibleServerVersion(versions.versions, supportedVersions)) {
         Logs().w(
-          'Server supports the versions: ${versions.toString()} but this application is only compatible with ${supportedVersions.toString()}.',
+          'Server supports the versions: ${versions.versions.toString()} but this application is only compatible with ${supportedVersions.toString()}.',
         );
-        assert(false);
-      }
-
-      final loginTypes = await getLoginFlows() ?? [];
-      if (!loginTypes.any((f) => supportedLoginTypes.contains(f.type))) {
-        throw BadServerLoginTypesException(
-          loginTypes.map((f) => f.type).toSet(),
-          supportedLoginTypes,
+        throw BadServerVersionsException(
+          versions.versions.toSet(),
+          supportedVersions,
         );
       }
 
+      // ROOSTER: ask for `auth_metadata` (Matrix v1.15 OAuth 2.0 API) before
+      // requiring `/v3/login`: a server whose accounts live in an OAuth
+      // authorization server (MAS) may answer `/v3/login` with 404 or no
+      // flows, and is still a server we can sign in to.
       fetchAuthMetadata ??= versions.versions.any(
         (v) => isVersionGreaterThanOrEqualTo(v, 'v1.15'),
       );
@@ -599,11 +626,37 @@ class Client extends MatrixApi {
       if (fetchAuthMetadata) {
         try {
           authMetadata = await getAuthMetadata();
+        } on InsecureDiscoveryException {
+          // ROOSTER: a redirect to plain HTTP is an attack on the sign-in,
+          // not a server without OAuth: do not fall back to /v3/login.
+          rethrow;
         } on MatrixException catch (e, s) {
           if (e.error != MatrixError.M_UNRECOGNIZED) {
             Logs().w('Unable to discover OIDC auth metadata.', e, s);
           }
+        } catch (e, s) {
+          Logs().w('Unable to read OIDC auth metadata.', e, s);
         }
+      }
+
+      final List<LoginFlow> loginTypes;
+      if (authMetadata == null) {
+        loginTypes = await getLoginFlows() ?? [];
+        if (!loginTypes.any((f) => supportedLoginTypes.contains(f.type))) {
+          throw BadServerLoginTypesException(
+            loginTypes.map((f) => f.type).toSet(),
+            supportedLoginTypes,
+          );
+        }
+      } else {
+        List<LoginFlow> flows;
+        try {
+          flows = await getLoginFlows() ?? [];
+        } catch (e) {
+          Logs().v('No legacy login flows next to OAuth 2.0', e);
+          flows = [];
+        }
+        loginTypes = flows;
       }
 
       return (wellKnown, versions, loginTypes, authMetadata);
@@ -630,7 +683,8 @@ class Client extends MatrixApi {
   }) =>
       requestAndCache(
         () async {
-          final wellKnownResponse = await httpClient.get(
+          // ROOSTER: follow 301/302/307/308 (MSC4402, Matrix v1.20).
+          final wellKnownResponse = await _getFollowingDiscoveryRedirects(
             Uri.https(
               userID?.domain ?? homeserver!.host,
               '/.well-known/matrix/client',
@@ -647,6 +701,87 @@ class Client extends MatrixApi {
         cacheLifetime: cacheLifetime,
         throwOnUpdateFailure: throwOnUpdateFailure,
       );
+
+  // ROOSTER: MSC4402 (Matrix v1.20) lets `/.well-known/matrix/client` answer
+  // with a redirect. Each hop resolves `Location` against the URL it came
+  // from; at most [maxWellKnownRedirects] hops, only http(s), no URL twice,
+  // and never from https: to http: (InsecureDiscoveryException). The
+  // `auth_metadata` fetch follows its redirects through the same rules.
+  /// The most redirects followed for `/.well-known/matrix/client`.
+  static const int maxWellKnownRedirects = 5;
+
+  static const Set<int> _wellKnownRedirectStatusCodes = {301, 302, 307, 308};
+
+  // On the web `fetch` follows redirects itself (and refuses non-HTTP(S)
+  // targets); asking it not to would make it fail on the first one.
+  static const bool _browserFollowsRedirects =
+      bool.fromEnvironment('dart.library.js_interop');
+
+  Future<http.Response> _getFollowingDiscoveryRedirects(Uri uri) async {
+    final seen = <Uri>{uri};
+    var current = uri;
+    for (var hops = 0;; hops++) {
+      final request = http.Request('GET', current)
+        ..followRedirects = _browserFollowsRedirects;
+      final response =
+          await http.Response.fromStream(await httpClient.send(request));
+      if (!_wellKnownRedirectStatusCodes.contains(response.statusCode)) {
+        return response;
+      }
+      final location = response.headers['location'];
+      if (location == null || location.isEmpty) {
+        throw WellKnownRedirectException(
+          WellKnownRedirectFailure.missingLocation,
+          current,
+        );
+      }
+      final Uri next;
+      try {
+        next = current.resolve(location.trim());
+      } on FormatException {
+        throw WellKnownRedirectException(
+          WellKnownRedirectFailure.invalidLocation,
+          current,
+        );
+      }
+      if (next.scheme != 'https' && next.scheme != 'http') {
+        throw WellKnownRedirectException(
+          WellKnownRedirectFailure.unsupportedScheme,
+          current,
+          target: next,
+        );
+      }
+      // ROOSTER: checked before the hop, so nothing is asked of the http: host.
+      if (current.scheme == 'https' && next.scheme == 'http') {
+        throw InsecureDiscoveryException(
+          InsecureDiscoveryFailure.redirect,
+          current,
+          next,
+        );
+      }
+      if (hops + 1 > maxWellKnownRedirects) {
+        throw WellKnownRedirectException(
+          WellKnownRedirectFailure.tooManyRedirects,
+          current,
+          target: next,
+        );
+      }
+      if (!seen.add(next)) {
+        throw WellKnownRedirectException(
+          WellKnownRedirectFailure.loop,
+          current,
+          target: next,
+        );
+      }
+      current = next;
+    }
+  }
+
+  // ROOSTER: a homeserver on this machine (local development).
+  static bool _isLoopbackHost(String host) =>
+      host == 'localhost' ||
+      host == '::1' ||
+      RegExp(r'^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$').hasMatch(host);
 
   /// Checks to see if a username is available, and valid, for the server.
   /// Returns the fully-qualified Matrix user ID (MXID) that has been registered.
@@ -782,7 +917,20 @@ class Client extends MatrixApi {
     bool throwOnUpdateFailure = false,
   }) =>
       requestAndCache(
-        super.getAuthMetadata,
+        // ROOSTER: the generated call lets the HTTP client follow redirects,
+        // which on dart:io goes on to http: too. Follow them by hand, under
+        // the well-known's rules, so a downgrade is refused before it is sent.
+        () async {
+          final response = await _getFollowingDiscoveryRedirects(
+            baseUri!.resolveUri(Uri(path: '_matrix/client/v1/auth_metadata')),
+          );
+          if (response.statusCode != 200) {
+            unexpectedResponse(response, response.bodyBytes);
+          }
+          return GetAuthMetadataResponse.fromJson(
+            jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, Object?>,
+          );
+        },
         fromJson: GetAuthMetadataResponse.fromJson,
         toJson: (response) => response.toJson(),
         cacheKey: 'auth_metadata',
@@ -1319,12 +1467,27 @@ class Client extends MatrixApi {
       );
     }
 
+    // ROOSTER: Matrix v1.16 MSC4222 — apply `state_after` after timeline events
+    // on archived/left rooms as well. With it in the update, even empty, the
+    // timeline does not define room state.
+    final stateAfterEvents = roomUpdate.stateAfter;
+
     final timelineEvents = roomUpdate.timeline?.events;
     if (timelineEvents != null) {
       await _handleRoomEvents(
         archivedRoom,
         timelineEvents.reversed.toList(),
         EventUpdateType.timeline,
+        store: false,
+        updateState: stateAfterEvents == null, // ROOSTER
+      );
+    }
+
+    if (stateAfterEvents != null && stateAfterEvents.isNotEmpty) {
+      await _handleRoomEvents(
+        archivedRoom,
+        stateAfterEvents,
+        EventUpdateType.state,
         store: false,
       );
     }
@@ -1630,13 +1793,15 @@ class Client extends MatrixApi {
     contentType ??= lookupMimeType(filename ?? '', headerBytes: file);
     final reserved = currentReservedUpload(); // ROOSTER
     final mxc = reserved != null // ROOSTER
-        ? await _uploadToReserved( // ROOSTER
+        ? await _uploadToReserved(
+            // ROOSTER
             reserved, // ROOSTER
             file, // ROOSTER
             filename: filename, // ROOSTER
             contentType: contentType, // ROOSTER
           ) // ROOSTER
-        : await super.uploadContent( // ROOSTER
+        : await super.uploadContent(
+            // ROOSTER
             file, // ROOSTER
             filename: filename, // ROOSTER
             contentType: contentType, // ROOSTER
@@ -1656,21 +1821,27 @@ class Client extends MatrixApi {
   /// Uploads [file] to [mxc], reserved before: an answer that the media // ROOSTER
   /// is there already (`M_CANNOT_OVERWRITE_MEDIA`) means an earlier // ROOSTER
   /// attempt of the same bytes landed after all. // ROOSTER
-  Future<Uri> _uploadToReserved( // ROOSTER
+  Future<Uri> _uploadToReserved(
+    // ROOSTER
     Uri mxc, // ROOSTER
-    Uint8List file, { // ROOSTER
+    Uint8List file, {
+    // ROOSTER
     String? filename, // ROOSTER
     String? contentType, // ROOSTER
-  }) async { // ROOSTER
-    try { // ROOSTER
-      await uploadContentToMXC( // ROOSTER
+  }) async {
+    // ROOSTER
+    try {
+      // ROOSTER
+      await uploadContentToMXC(
+        // ROOSTER
         mxc.host, // ROOSTER
         mxc.pathSegments.first, // ROOSTER
         file, // ROOSTER
         filename: filename, // ROOSTER
         contentType: contentType, // ROOSTER
       ); // ROOSTER
-    } on MatrixException catch (e) { // ROOSTER
+    } on MatrixException catch (e) {
+      // ROOSTER
       if (e.errcode != 'M_CANNOT_OVERWRITE_MEDIA') rethrow; // ROOSTER
     } // ROOSTER
     return mxc; // ROOSTER
@@ -1679,40 +1850,51 @@ class Client extends MatrixApi {
   /// Uploads [body], [length] bytes, as its request takes them: the file // ROOSTER
   /// is never held whole (file_send_source.dart). Refused by the server's // ROOSTER
   /// limit before [body] is listened to, so nothing of it is read then. // ROOSTER
-  Future<Uri> uploadContentStream( // ROOSTER
+  Future<Uri> uploadContentStream(
+    // ROOSTER
     Stream<List<int>> body, // ROOSTER
-    int length, { // ROOSTER
+    int length, {
+    // ROOSTER
     String? filename, // ROOSTER
     String? contentType, // ROOSTER
-  }) async { // ROOSTER
+  }) async {
+    // ROOSTER
     // Read from its source, it would go to a new address. // ROOSTER
-    if (currentReservedUpload() != null) { // ROOSTER
-      throw StateError('A reserved mxc takes an upload held in memory'); // ROOSTER
+    if (currentReservedUpload() != null) {
+      // ROOSTER
+      throw StateError(
+          'A reserved mxc takes an upload held in memory'); // ROOSTER
     } // ROOSTER
     final maxMediaSize = (await getConfig()).mUploadSize; // ROOSTER
-    if (maxMediaSize != null && maxMediaSize < length) { // ROOSTER
+    if (maxMediaSize != null && maxMediaSize < length) {
+      // ROOSTER
       throw FileTooBigMatrixException(length, maxMediaSize); // ROOSTER
     } // ROOSTER
-    final requestUri = Uri( // ROOSTER
+    final requestUri = Uri(
+      // ROOSTER
       path: '_matrix/media/v3/upload', // ROOSTER
       queryParameters: {if (filename != null) 'filename': filename}, // ROOSTER
     ); // ROOSTER
-    final request = FileSendRequest( // ROOSTER
+    final request = FileSendRequest(
+      // ROOSTER
       'POST', // ROOSTER
       baseUri!.resolveUri(requestUri), // ROOSTER
       body, // ROOSTER
       length, // ROOSTER
     ); // ROOSTER
     request.headers['authorization'] = 'Bearer ${bearerToken!}'; // ROOSTER
-    if (contentType != null) request.headers['content-type'] = contentType; // ROOSTER
+    if (contentType != null)
+      request.headers['content-type'] = contentType; // ROOSTER
     final response = await httpClient.send(request); // ROOSTER
     final responseBody = await response.stream.toBytes(); // ROOSTER
-    if (response.statusCode != 200) { // ROOSTER
+    if (response.statusCode != 200) {
+      // ROOSTER
       unexpectedResponse(response, responseBody); // ROOSTER
     } // ROOSTER
     final json = jsonDecode(utf8.decode(responseBody)); // ROOSTER
     final uri = json['content_uri'] as String; // ROOSTER
-    if (!uri.startsWith('mxc://')) throw Exception('Uri not an mxc URI'); // ROOSTER
+    if (!uri.startsWith('mxc://'))
+      throw Exception('Uri not an mxc URI'); // ROOSTER
     return Uri.parse(uri); // ROOSTER
   } // ROOSTER
 
@@ -1833,7 +2015,164 @@ class Client extends MatrixApi {
     'v1.12',
     'v1.13',
     'v1.14',
+    // ROOSTER: Matrix spec v1.15-v1.19 support.
+    'v1.15',
+    'v1.16',
+    'v1.17',
+    'v1.18',
+    'v1.19',
   };
+
+  // ROOSTER: Strict Matrix v1.<minor> spec version matcher and compatibility check.
+  static final RegExp _v1SpecVersionPattern = RegExp(r'^v1\.(0|[1-9]\d*)$');
+
+  static int? _parseV1MinorVersion(String version) {
+    final match = _v1SpecVersionPattern.firstMatch(version);
+    if (match == null) return null;
+    return int.tryParse(match.group(1)!);
+  }
+
+  static bool _hasCompatibleServerVersion(
+    List<String> serverVersions,
+    Set<String> supportedVersions,
+  ) {
+    if (serverVersions.isEmpty || supportedVersions.isEmpty) {
+      return false;
+    }
+    if (serverVersions.any(supportedVersions.contains)) {
+      return true;
+    }
+    int? maxSupportedV1Minor;
+    for (final version in supportedVersions) {
+      final minor = _parseV1MinorVersion(version);
+      if (minor != null &&
+          (maxSupportedV1Minor == null || minor > maxSupportedV1Minor)) {
+        maxSupportedV1Minor = minor;
+      }
+    }
+    if (maxSupportedV1Minor == null) {
+      return false;
+    }
+    return serverVersions.any((version) {
+      final minor = _parseV1MinorVersion(version);
+      return minor != null && minor > maxSupportedV1Minor!;
+    });
+  }
+
+  // ROOSTER: Strict semantic Matrix spec version parser (`v<major>.<minor>`)
+  // used to negotiate Matrix v1.16+ features such as `use_state_after`.
+  static final RegExp _specVersionPattern =
+      RegExp(r'^v(0|[1-9]\d*)\.(0|[1-9]\d*)$');
+
+  static ({int major, int minor})? _parseSpecVersion(String version) {
+    final match = _specVersionPattern.firstMatch(version);
+    if (match == null) return null;
+    final major = int.tryParse(match.group(1)!);
+    final minor = int.tryParse(match.group(2)!);
+    if (major == null || minor == null) return null;
+    return (major: major, minor: minor);
+  }
+
+  static bool _supportsSpecVersionAtLeast(
+    Iterable<String> serverVersions,
+    int minMajor,
+    int minMinor,
+  ) {
+    for (final version in serverVersions) {
+      final parsed = _parseSpecVersion(version);
+      if (parsed == null) continue;
+      if (parsed.major > minMajor ||
+          (parsed.major == minMajor && parsed.minor >= minMinor)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // ROOSTER: `getVersions()` is cached in the database, so asking on every
+  // sync costs one request per cache lifetime.
+  Future<bool> _supportsUseStateAfter() async {
+    try {
+      return _supportsSpecVersionAtLeast(
+        (await getVersions()).versions,
+        1,
+        16,
+      );
+    } catch (e, s) {
+      Logs().v(
+        'Unable to check server versions for use_state_after; omitting parameter',
+        e,
+        s,
+      );
+      return false;
+    }
+  }
+
+  // ROOSTER: Filter out older state events when paginating backwards (Direction.b)
+  // without mutating the source SyncUpdate event list.
+  Future<List<MatrixEvent>> _filterStateEventsForDirection(
+    Room room,
+    List<MatrixEvent> events,
+    Direction? direction,
+  ) async {
+    if (direction != Direction.b) return events;
+    await room.postLoad();
+    return events.where((stateEvent) {
+      final existingState =
+          room.getState(stateEvent.type, stateEvent.stateKey ?? '');
+      if (existingState == null) return true;
+      if (existingState is User) {
+        return !(existingState.originServerTs
+                ?.isAfter(stateEvent.originServerTs) ??
+            true);
+      }
+      if (existingState is MatrixEvent) {
+        return !existingState.originServerTs.isAfter(stateEvent.originServerTs);
+      }
+      return false;
+    }).toList();
+  }
+
+  // ROOSTER: Normalize per-thread unread notification counts so omitted
+  // `notification_count`/`highlight_count` default to 0 (Matrix v1.4 MSC3773).
+  static Map<String, UnreadNotificationCounts> _normalizeThreadNotifications(
+    Map<String, UnreadNotificationCounts>? raw,
+  ) {
+    if (raw == null || raw.isEmpty) return <String, UnreadNotificationCounts>{};
+    return {
+      for (final entry in raw.entries)
+        entry.key: UnreadNotificationCounts(
+          notificationCount: entry.value.notificationCount ?? 0,
+          highlightCount: entry.value.highlightCount ?? 0,
+        ),
+    };
+  }
+
+  // ROOSTER: The server may omit a thread without notifications, and the whole
+  // `unread_thread_notifications` object when no thread has any. So an update
+  // that brings either the room counts or the thread counts tells the counts
+  // of every thread: the ones it does not name are zero.
+  static bool _carriesThreadNotifications(JoinedRoomUpdate update) =>
+      update.unreadNotifications != null ||
+      update.unreadThreadNotifications != null;
+
+  // ROOSTER: Whether [update] changes the per-thread unread counts of [room].
+  static bool _threadNotificationsChange(Room room, JoinedRoomUpdate update) {
+    if (!_carriesThreadNotifications(update)) return false;
+    final before = room.unreadThreadNotifications;
+    final after =
+        _normalizeThreadNotifications(update.unreadThreadNotifications);
+    if (before.length != after.length) return true;
+    for (final entry in after.entries) {
+      final counts = before[entry.key];
+      if (counts == null ||
+          (counts.notificationCount ?? 0) != entry.value.notificationCount ||
+          (counts.highlightCount ?? 0) != entry.value.highlightCount) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   static const List<String> supportedDirectEncryptionAlgorithms = [
     AlgorithmTypes.olmV1Curve25519AesSha2,
@@ -2319,8 +2658,11 @@ class Client extends MatrixApi {
       userDeviceKeysLoading = database
           .getUserDeviceKeys(this)
           .then((keys) => _userDeviceKeys = keys);
-      roomsLoading = database.getRoomList(this).then((rooms) {
+      roomsLoading = database.getRoomList(this).then((rooms) async {
         _rooms = rooms;
+        // ROOSTER: with the per-thread unread counts they had.
+        await _restoreUnreadThreadNotifications();
+        await _restoreStickyEvents(); // ROOSTER: T5.2
         _sortRooms();
       });
       _accountDataLoading = database.getAccountData().then((data) {
@@ -2406,9 +2748,302 @@ class Client extends MatrixApi {
     _rooms = [];
     _eventsPendingDecryption.clear();
     _unansweredKeyQueries.clear(); // ROOSTER
+    // ROOSTER: Sliding Sync starts again with the next login.
+    _syncContinuity = _slidingSync = _slidingSyncFallbackReason = null;
+    _syncContinuityLoaded = false;
     await encryption?.dispose();
     _encryption = null;
     onLoginStateChanged.add(LoginState.loggedOut);
+  }
+
+  // ROOSTER: Simplified Sliding Sync (MSC4186, Matrix 2.0). The loop uses
+  // it when the homeserver announces it in `/_matrix/client/versions` and
+  // [forceLegacySync] is off; `/v3/sync` otherwise, as before. A refusal
+  // (404, 405, M_UNRECOGNIZED) sends the loop back to `/v3/sync` for the
+  // rest of the run. See third_party/README.md, "Simplified Sliding Sync".
+
+  /// ROOSTER: Keeps the sync loop on `/v3/sync` even where the homeserver
+  /// offers Simplified Sliding Sync. Set while Sliding Sync runs, the next
+  /// request goes to `/v3/sync`, losing and repeating no to-device message.
+  bool forceLegacySync = false;
+
+  /// ROOSTER: Why this run went back to `/v3/sync` from Sliding Sync, or
+  /// null.
+  String? get slidingSyncFallbackReason => _slidingSyncFallbackReason;
+  String? _slidingSyncFallbackReason;
+
+  /// ROOSTER: The transport the sync loop uses now.
+  SyncTransport get syncTransport =>
+      onSyncTransportChanged.value ?? SyncTransport.v3;
+
+  /// ROOSTER: Each change of [syncTransport].
+  final CachedStreamController<SyncTransport> onSyncTransportChanged =
+      CachedStreamController();
+
+  /// ROOSTER: The Sliding Sync connection while the loop uses it (room
+  /// subscriptions go on it).
+  SlidingSyncTransport? get slidingSync => _slidingSync;
+  SlidingSyncTransport? _slidingSync;
+
+  /// ROOSTER: Null for an account that never could use Sliding Sync: the
+  /// `/v3/sync` loop is then the one it always was.
+  SyncTransportContinuity? _syncContinuity;
+  bool _syncContinuityLoaded = false;
+  bool _slidingSyncAnnounced = false;
+
+  /// ROOSTER: The rooms a Sliding Sync answer brings for the first time on
+  /// its connection (`initial`), while it is processed: their events are
+  /// the room as it is, not news, so they notify no one (like an initial
+  /// `/v3/sync`).
+  Set<String> _quietSlidingSyncRooms = const {};
+
+  /// ROOSTER: Set while a Sliding Sync answer is processed: MSC4186 has no
+  /// per-thread unread counts, so an answer says nothing about them (there
+  /// are none to keep: see [_dropThreadNotificationsForSlidingSync]).
+  bool _syncWithoutThreadCounts = false;
+
+  /// ROOSTER: T6.6. Under Sliding Sync the room's own counts from the
+  /// server are the authority. The per-thread counts `/v3/sync` left
+  /// (held, or restored at a restart) would add to the badge until each
+  /// thread is read here, a read on another device never clearing them;
+  /// so they are dropped, and stored dropped, in every room (some are not
+  /// in its answers yet): with its first answer when Sliding Sync takes
+  /// over (a server that announces it and refuses it keeps `/v3/sync` and
+  /// its counts), before each request once it is the transport (counts
+  /// stored before T6.6). Nothing brings them back while it is the
+  /// transport, so nothing stores them again; back on `/v3/sync` they come
+  /// from the server again.
+  Future<void> _dropThreadNotificationsForSlidingSync() async {
+    await roomsLoading;
+    var dropped = false;
+    for (final room in rooms) {
+      if (room.unreadThreadNotifications.isEmpty) continue;
+      room.unreadThreadNotifications = {};
+      dropped = true;
+    }
+    if (dropped || _threadNotificationsDirty) {
+      await storeUnreadThreadNotifications();
+    }
+  }
+
+  /// ROOSTER: Whether events of [room] in this sync are news to announce
+  /// (notifications, call events).
+  bool _announcesNewEvents(Room room) =>
+      prevBatch != null && !_quietSlidingSyncRooms.contains(room.id);
+
+  /// ROOSTER: A limited timeline that overlaps what the database holds has
+  /// no gap: a new Sliding Sync connection sends the latest events of a
+  /// room the client knows with `limited`, which is not a reason to drop
+  /// the stored timeline.
+  Future<void> _keepTimelinesWithoutGap(SyncUpdate update) async {
+    for (final entry in update.rooms?.join?.entries ??
+        const <MapEntry<String, JoinedRoomUpdate>>[]) {
+      final timeline = entry.value.timeline;
+      final room = getRoomById(entry.key);
+      if (timeline?.limited != true || room == null) continue;
+      // The newest events of the stored timeline, where an overlap is.
+      final stored = (await database.getEventIdList(room, limit: 100)).toSet();
+      if (timeline!.events?.any((e) => stored.contains(e.eventId)) ?? false) {
+        timeline.limited = false;
+      }
+    }
+  }
+
+  void _setSyncTransport(SyncTransport transport) {
+    if (onSyncTransportChanged.value != transport) {
+      onSyncTransportChanged.add(transport);
+    }
+  }
+
+  /// ROOSTER: Whether this sync goes through Sliding Sync.
+  Future<bool> _chooseSlidingSync() async {
+    var paths = const <String>[];
+    try {
+      paths = SlidingSyncEndpoint.pathsFor(await getVersions());
+    } catch (e, s) {
+      Logs().v('Unable to check the server versions for Sliding Sync', e, s);
+    }
+    _slidingSyncAnnounced = paths.isNotEmpty;
+    if (!_syncContinuityLoaded) {
+      _syncContinuityLoaded = true;
+      try {
+        final stored = await database
+            .getCustomCacheObject(SyncTransportContinuity.cacheKey);
+        if (stored != null) {
+          _syncContinuity = SyncTransportContinuity.fromJson(stored.content);
+        }
+      } catch (e, s) {
+        Logs().w('Unable to read the sync transport state', e, s);
+      }
+    }
+    if (paths.isEmpty ||
+        forceLegacySync ||
+        _slidingSyncFallbackReason != null) {
+      return false;
+    }
+    final continuity = _syncContinuity;
+    _slidingSync ??= SlidingSyncTransport(this, paths: [...paths])
+      ..pos = continuity?.transport == SyncTransport.slidingSync
+          ? continuity?.pos
+          : null
+      ..toDeviceSince = continuity?.toDeviceSince;
+    return true;
+  }
+
+  /// ROOSTER: The users' device lists are marked outdated, so their keys
+  /// are downloaded again: what a sync that cannot say what changed since
+  /// the last one (a new Sliding Sync connection, an initial `/v3/sync`)
+  /// leaves to do.
+  Future<void> _markDeviceListsOutdated(Iterable<String> userIds) async {
+    for (final userId in userIds.toList()) {
+      final keys = _userDeviceKeys[userId];
+      if (keys == null || keys.outdated) continue;
+      keys.outdated = true;
+      await database.storeUserDeviceKeysInfo(userId, true);
+    }
+  }
+
+  /// ROOSTER: Stores [next] if it changed, in the sync's transaction.
+  Future<void> _storeSyncContinuity(
+    SyncTransportContinuity? before,
+    SyncTransportContinuity next,
+  ) async {
+    final json = next.toJson();
+    if (before != null && jsonEncode(before.toJson()) == jsonEncode(json)) {
+      return;
+    }
+    await database.cacheCustomObject(SyncTransportContinuity.cacheKey, json);
+  }
+
+  /// ROOSTER: One Sliding Sync request, processed like a `/v3/sync`.
+  Future<void> _innerSlidingSync(Duration? timeout) async {
+    final transport = _slidingSync!;
+    final previous = _syncContinuity;
+    final continuity = previous ?? SyncTransportContinuity();
+    final takingOver = continuity.transport != SyncTransport.slidingSync;
+    if (takingOver) {
+      // Taking over: a new connection, and the `/v3/sync` token to go on
+      // from if `/v3/sync` comes back.
+      continuity.legacySince = _prevBatch;
+      transport.resetConnection();
+    } else {
+      // ROOSTER: T6.6, the transport already: announced once they are gone.
+      await _dropThreadNotificationsForSlidingSync();
+      _setSyncTransport(SyncTransport.slidingSync);
+    }
+    timeout ??= const Duration(seconds: 30);
+    await ensureNotSoftLoggedOut(timeout * 2);
+    if (!isLogged() || _disposed || _aborted) return;
+
+    final waits = transport.waitsForNews;
+    final request = transport.sync(timeout: timeout, setPresence: syncPresence);
+    _currentSyncId = request.hashCode;
+    onSyncStatus.add(SyncStatusUpdate(SyncStatus.waitingForResponse));
+    final SlidingSyncResponse response;
+    try {
+      response = waits
+          ? await request.timeout(timeout + const Duration(seconds: 10))
+          : await request;
+    } on SlidingSyncUnavailableException catch (e) {
+      Logs().w('Sliding Sync refused (${e.reason}), back to /v3/sync');
+      _slidingSyncFallbackReason = e.reason;
+      _setSyncTransport(SyncTransport.v3);
+      _slidingSync = null;
+      _syncContinuity = continuity;
+      _retryDelay = Future.value();
+      return;
+    } on MatrixException {
+      rethrow;
+    } catch (e) {
+      throw SyncConnectionException(e);
+    }
+    onSyncStatus.add(SyncStatusUpdate(SyncStatus.processing));
+    if (_currentSyncId != request.hashCode) {
+      Logs().w('Current sync request ID has changed. Dropping this sync loop!');
+      return;
+    }
+
+    final update = slidingSyncToSyncUpdate(
+      response.json,
+      userId: userID!,
+      isJoinedRoom: (roomId) =>
+          getRoomById(roomId)?.membership == Membership.join,
+    );
+    final delivered = [...?update.toDevice];
+    continuity.dropRepeats(update, SyncTransport.slidingSync);
+    final next = SyncTransportContinuity.fromJson(continuity.toJson())
+      ..pos = response.pos ?? transport.pos
+      ..toDeviceSince = response.toDeviceNextBatch ?? transport.toDeviceSince;
+
+    await userDeviceKeysLoading;
+    await roomsLoading;
+    await _accountDataLoading;
+    _currentTransaction = database.transaction(() async {
+      // A new connection cannot say which device lists changed before it.
+      if (response.fromScratch) {
+        await _markDeviceListsOutdated(_userDeviceKeys.keys);
+      }
+      await _keepTimelinesWithoutGap(update);
+      if (takingOver) {
+        // ROOSTER: T6.6, Sliding Sync answered: it is the transport now.
+        await _dropThreadNotificationsForSlidingSync();
+        _setSyncTransport(SyncTransport.slidingSync);
+      }
+      _quietSlidingSyncRooms = response.initialRooms;
+      _syncWithoutThreadCounts = true;
+      try {
+        await _handleSync(update, direction: Direction.f);
+      } finally {
+        _quietSlidingSyncRooms = const {};
+        _syncWithoutThreadCounts = false;
+      }
+      next.record(
+        update,
+        SyncTransport.slidingSync,
+        delivered: delivered,
+      );
+      await _storeSyncContinuity(previous, next);
+    });
+    await runBenchmarked(
+      'Process sync',
+      () async => await _currentTransaction,
+      update.itemCount,
+    );
+    if (_disposed || _aborted) return;
+    transport.commit(response);
+    _syncContinuity = next;
+    // The session is past its first sync (notifications, connection
+    // status). Only kept in memory: the stored token stays the `/v3` one.
+    _prevBatch = transport.pos ?? _prevBatch;
+    onSyncStatus.add(SyncStatusUpdate(SyncStatus.cleaningUp));
+    // ignore: unawaited_futures
+    database.deleteOldFiles(
+      DateTime.now().subtract(Duration(days: 30)).millisecondsSinceEpoch,
+    );
+    await updateUserDeviceKeys();
+    if (encryptionEnabled) {
+      encryption?.onSync();
+    }
+    try {
+      await processToDeviceQueue();
+    } catch (_) {} // we want to dispose any errors this throws
+    _retryDelay = Future.value();
+    onSyncStatus.add(SyncStatusUpdate(SyncStatus.finished));
+  }
+
+  /// ROOSTER: The continuity of a `/v3/sync` request, or null when this
+  /// account never could use Sliding Sync. Back from Sliding Sync, the
+  /// request goes on from the `/v3` token it had before.
+  SyncTransportContinuity? _legacySyncContinuity() {
+    _setSyncTransport(SyncTransport.v3);
+    final continuity = _syncContinuity ??
+        (_slidingSyncAnnounced
+            ? _syncContinuity = SyncTransportContinuity()
+            : null);
+    if (continuity?.transport == SyncTransport.slidingSync) {
+      _prevBatch = continuity!.legacySince;
+    }
+    return continuity;
   }
 
   bool _backgroundSync = true;
@@ -2451,14 +3086,170 @@ class Client extends MatrixApi {
   /// Presence that is set on sync.
   PresenceType? syncPresence;
 
+  // ROOSTER: The filter the stored sync filter id was defined from, so a
+  // session whose filter predates a change to [syncFilter] (Rooster asking
+  // for per-thread unread counts, Matrix v1.4) defines the new one. Read
+  // once per run.
+  static const _definedSyncFilterCacheKey = 'rooster_defined_sync_filter';
+  bool _syncFilterChecked = false;
+
   Future<void> _checkSyncFilter() async {
     final userID = this.userID;
-    if (syncFilterId == null && userID != null) {
-      final syncFilterId =
-          _syncFilterId = await defineFilter(userID, syncFilter);
-      await database.storeSyncFilterId(syncFilterId);
+    if (userID == null) return;
+    // ROOSTER: Define the filter again when it is not the one stored. A
+    // failure leaves the session on the filter it had, which still syncs,
+    // and the next run tries again.
+    final previousId = syncFilterId;
+    if (previousId != null && !_syncFilterChecked) {
+      _syncFilterChecked = true;
+      try {
+        final defined =
+            await database.getCustomCacheObject(_definedSyncFilterCacheKey);
+        if (defined?.content['filter'] != jsonEncode(syncFilter.toJson())) {
+          await _defineSyncFilter(userID);
+        }
+      } catch (e, s) {
+        Logs().w(
+          'Unable to define the sync filter again; keeping $previousId',
+          e,
+          s,
+        );
+      }
+    }
+    if (syncFilterId == null) {
+      await _defineSyncFilter(userID);
     }
     return;
+  }
+
+  Future<void> _defineSyncFilter(String userID) async {
+    final syncFilterId = _syncFilterId = await defineFilter(userID, syncFilter);
+    await database.storeSyncFilterId(syncFilterId);
+    // ROOSTER: Remember what this id was defined from.
+    _syncFilterChecked = true;
+    await database.cacheCustomObject(
+      _definedSyncFilterCacheKey,
+      {'filter': jsonEncode(syncFilter.toJson())},
+    );
+  }
+
+  // ROOSTER: The per-thread unread counts of every room, kept across
+  // restarts. With `unread_thread_notifications` in the sync filter the
+  // server leaves the threads out of a room's own counts, and no
+  // `storeRoomUpdate` stores the per-thread ones (`DatabaseApi` cannot
+  // change: another package implements it). So they go in the custom
+  // cache when a sync changes them, and come back when the rooms are
+  // loaded. Without this a room with unread thread replies looked read
+  // after a restart, until a sync brought its counts again.
+  static const _threadNotificationsCacheKey =
+      'rooster_unread_thread_notifications';
+  bool _threadNotificationsDirty = false;
+
+  /// ROOSTER: Stores the rooms' per-thread unread counts as they are now.
+  /// A sync that changes them does it on its own; call it after changing
+  /// [Room.unreadThreadNotifications] by hand (a thread read locally).
+  Future<void> storeUnreadThreadNotifications() async {
+    _threadNotificationsDirty = false;
+    try {
+      await database.cacheCustomObject(_threadNotificationsCacheKey, {
+        'rooms': {
+          for (final room in rooms)
+            if (room.unreadThreadNotifications.isNotEmpty)
+              room.id: room.unreadThreadNotifications
+                  .map((id, counts) => MapEntry(id, counts.toJson())),
+        },
+      });
+    } catch (e, s) {
+      // Tried again with the next sync.
+      _threadNotificationsDirty = true;
+      Logs().w('Unable to store the per-thread unread counts', e, s);
+    }
+  }
+
+  Future<void> _restoreUnreadThreadNotifications() async {
+    try {
+      final stored =
+          await database.getCustomCacheObject(_threadNotificationsCacheKey);
+      final byRoom = stored?.content.tryGetMap<String, Object?>('rooms');
+      if (byRoom == null) return;
+      for (final room in _rooms) {
+        final threads = byRoom.tryGetMap<String, Object?>(room.id);
+        if (threads == null || room.membership != Membership.join) continue;
+        room.unreadThreadNotifications = _normalizeThreadNotifications({
+          for (final entry in threads.entries)
+            if (entry.value case final Map<String, Object?> counts)
+              entry.key: UnreadNotificationCounts.fromJson(counts),
+        });
+      }
+    } catch (e, s) {
+      Logs().w('Unable to restore the per-thread unread counts', e, s);
+    }
+  }
+
+  // ROOSTER: MSC4354 sticky events (T5.2) are only handed out once by an
+  // incremental sync: kept in the custom cache, so a restart still knows
+  // who is in a call (MatrixRTC memberships are sticky events).
+  static const _stickyEventsCacheKey = 'rooster_msc4354_sticky_events';
+  bool _stickyEventsDirty = false;
+
+  Future<void> _handleStickyEvents(Room room, List<MatrixEvent> sticky) async {
+    for (final raw in sticky) {
+      var event = Event.fromMatrixEvent(raw, room);
+      if (event.type == EventTypes.Encrypted && encryptionEnabled) {
+        try {
+          event = await encryption!.decryptRoomEvent(event);
+        } catch (e, s) {
+          Logs().w('Unable to decrypt a sticky event', e, s);
+        }
+      }
+      if (room.addStickyEvent(event)) _stickyEventsDirty = true;
+    }
+  }
+
+  Future<void> _storeStickyEvents() async {
+    _stickyEventsDirty = false;
+    // Never by this machine's clock: one set hours ahead (Windows reading a
+    // dual boot's UTC hardware clock as local time) forgot every sticky
+    // event as it arrived. A room's are forgotten once long over by our
+    // homeserver's own clock, as far as its sticky events there show it;
+    // whoever reads the rest decides by their own clock (Rooster by the
+    // homeserver's).
+    final homeserver = userID?.domain;
+    for (final room in rooms) {
+      room.pruneStickyEvents(homeserver: homeserver);
+    }
+    try {
+      await database.cacheCustomObject(_stickyEventsCacheKey, {
+        'rooms': {
+          for (final room in rooms)
+            if (room.stickyEvents.isNotEmpty)
+              room.id: [
+                for (final event in room.stickyEvents) event.toJson(),
+              ],
+        },
+      });
+    } catch (e, s) {
+      _stickyEventsDirty = true;
+      Logs().w('Unable to store the sticky events', e, s);
+    }
+  }
+
+  Future<void> _restoreStickyEvents() async {
+    try {
+      final stored = await database.getCustomCacheObject(_stickyEventsCacheKey);
+      final byRoom = stored?.content.tryGetMap<String, Object?>('rooms');
+      if (byRoom == null) return;
+      for (final room in _rooms) {
+        for (final json in byRoom.tryGetList<Object?>(room.id) ?? const []) {
+          if (json is! Map) continue;
+          room.addStickyEvent(
+            Event.fromJson(Map<String, Object?>.from(json), room),
+          );
+        }
+      }
+    } catch (e, s) {
+      Logs().w('Unable to restore the sticky events', e, s);
+    }
   }
 
   Future<void>? _handleSoftLogoutFuture;
@@ -2512,6 +3303,15 @@ class Client extends MatrixApi {
       }
       Object? syncError;
 
+      // ROOSTER: Simplified Sliding Sync (MSC4186) where the server offers
+      // it; else `/v3/sync`, going on from its own token.
+      if (await _chooseSlidingSync()) {
+        if (!isLogged() || _disposed || _aborted) return;
+        await _innerSlidingSync(timeout);
+        return;
+      }
+      final continuity = _legacySyncContinuity(); // ROOSTER
+
       // The timeout we send to the server for the sync loop. It says to the
       // server that we want to receive an empty sync response after this
       // amount of time if nothing happens.
@@ -2523,11 +3323,17 @@ class Client extends MatrixApi {
 
       await _checkSyncFilter();
 
+      // ROOSTER: Matrix v1.16 MSC4222 — request `use_state_after=true` only
+      // when the homeserver advertises Matrix >= v1.16.
+      final useStateAfter = await _supportsUseStateAfter();
+      if (!isLogged() || _disposed || _aborted) return;
+
       final syncRequest = sync(
         filter: syncFilterId,
         since: prevBatch,
         timeout: timeout?.inMilliseconds,
         setPresence: syncPresence,
+        useStateAfter: useStateAfter ? true : null, // ROOSTER
       ).then((v) => Future<SyncUpdate?>.value(v)).catchError((e) {
         if (e is MatrixException) {
           syncError = e;
@@ -2561,10 +3367,36 @@ class Client extends MatrixApi {
       await userDeviceKeysLoading;
       await roomsLoading;
       await _accountDataLoading;
+      // ROOSTER: The first `/v3/sync` after Sliding Sync drops what Sliding
+      // Sync delivered already (to-device messages it had not acknowledged,
+      // device lists it reported).
+      final delivered = [...?syncResp.toDevice];
+      final fromSlidingSync =
+          continuity?.transport == SyncTransport.slidingSync;
+      final checkKeys = continuity?.dropRepeats(syncResp, SyncTransport.v3);
+      final next = continuity == null
+          ? null
+          : SyncTransportContinuity.fromJson(continuity.toJson());
       _currentTransaction = database.transaction(() async {
+        // ROOSTER: An initial `/v3/sync` says no device list changes, and a
+        // repeat after keys were downloaded may hide a newer change.
+        if (fromSlidingSync) {
+          await _markDeviceListsOutdated(
+            prevBatch == null ? _userDeviceKeys.keys : checkKeys ?? const {},
+          );
+        }
         await _handleSync(syncResp, direction: Direction.f);
         if (prevBatch != syncResp.nextBatch) {
           await database.storePrevBatch(syncResp.nextBatch);
+        }
+        if (next != null) {
+          // ROOSTER
+          next.record(
+            syncResp,
+            SyncTransport.v3,
+            delivered: delivered,
+          );
+          await _storeSyncContinuity(continuity, next);
         }
       });
       await runBenchmarked(
@@ -2574,6 +3406,7 @@ class Client extends MatrixApi {
       );
       if (_disposed || _aborted) return;
       _prevBatch = syncResp.nextBatch;
+      if (next != null) _syncContinuity = next; // ROOSTER
       onSyncStatus.add(SyncStatusUpdate(SyncStatus.cleaningUp));
       // ignore: unawaited_futures
       database.deleteOldFiles(
@@ -2699,6 +3532,10 @@ class Client extends MatrixApi {
       );
     }
     _sortRooms();
+    // ROOSTER: keep the per-thread unread counts this sync changed.
+    if (_threadNotificationsDirty) await storeUnreadThreadNotifications();
+    // ROOSTER: and the sticky events it brought (T5.2).
+    if (_stickyEventsDirty) await _storeStickyEvents();
     onSync.add(sync);
   }
 
@@ -2827,27 +3664,11 @@ class Client extends MatrixApi {
 
       /// Handle now all room events and save them in the database
       if (syncRoomUpdate is JoinedRoomUpdate) {
-        final state = syncRoomUpdate.state;
-
-        // If we are receiving states when fetching history we need to check if
-        // we are not overwriting a newer state.
-        if (direction == Direction.b) {
-          await room.postLoad();
-          state?.removeWhere((state) {
-            final existingState =
-                room.getState(state.type, state.stateKey ?? '');
-            if (existingState == null) return false;
-            if (existingState is User) {
-              return existingState.originServerTs
-                      ?.isAfter(state.originServerTs) ??
-                  true;
-            }
-            if (existingState is MatrixEvent) {
-              return existingState.originServerTs.isAfter(state.originServerTs);
-            }
-            return true;
-          });
-        }
+        final rawState = syncRoomUpdate.state;
+        // ROOSTER: Keep legacy `state` before timeline for < v1.16 servers.
+        final state = rawState != null && rawState.isNotEmpty
+            ? await _filterStateEventsForDirection(room, rawState, direction)
+            : null;
 
         if (state != null && state.isNotEmpty) {
           await _handleRoomEvents(
@@ -2857,9 +3678,35 @@ class Client extends MatrixApi {
           );
         }
 
+        // ROOSTER: Matrix v1.16 MSC4222 — apply `state_after` AFTER timeline
+        // events so room state reflects the end of the timeline. With it in
+        // the update, even empty, room state comes from it alone: the timeline
+        // may carry a state event that lost state resolution.
+        final rawStateAfter = syncRoomUpdate.stateAfter;
+
         final timelineEvents = syncRoomUpdate.timeline?.events;
         if (timelineEvents != null && timelineEvents.isNotEmpty) {
-          await _handleRoomEvents(room, timelineEvents, timelineUpdateType);
+          await _handleRoomEvents(
+            room,
+            timelineEvents,
+            timelineUpdateType,
+            updateState: rawStateAfter == null, // ROOSTER
+          );
+        }
+
+        final stateAfter = rawStateAfter != null && rawStateAfter.isNotEmpty
+            ? await _filterStateEventsForDirection(
+                room,
+                rawStateAfter,
+                direction,
+              )
+            : null;
+        if (stateAfter != null && stateAfter.isNotEmpty) {
+          await _handleRoomEvents(
+            room,
+            stateAfter,
+            EventUpdateType.state,
+          );
         }
 
         final ephemeral = syncRoomUpdate.ephemeral;
@@ -2878,15 +3725,53 @@ class Client extends MatrixApi {
             room.roomAccountData[event.type] = event;
           }
         }
+
+        // ROOSTER: MSC4354 sticky events (T5.2), from `/v3/sync` and
+        // Sliding Sync alike (the hydration puts them in the same place).
+        final sticky = syncRoomUpdate.sticky;
+        if (sticky != null && direction != Direction.b) {
+          await _handleStickyEvents(room, sticky);
+        }
       }
 
       if (syncRoomUpdate is LeftRoomUpdate) {
+        // ROOSTER: Apply legacy `state` before timeline events, and Matrix
+        // v1.16 MSC4222 `state_after` after timeline events.
+        final rawState = syncRoomUpdate.state;
+        final state = rawState != null && rawState.isNotEmpty
+            ? await _filterStateEventsForDirection(room, rawState, direction)
+            : null;
+        if (state != null && state.isNotEmpty) {
+          await _handleRoomEvents(
+            room,
+            state,
+            EventUpdateType.state,
+            store: false,
+          );
+        }
+        final rawStateAfter = syncRoomUpdate.stateAfter;
         final timelineEvents = syncRoomUpdate.timeline?.events;
         if (timelineEvents != null && timelineEvents.isNotEmpty) {
           await _handleRoomEvents(
             room,
             timelineEvents,
             timelineUpdateType,
+            store: false,
+            updateState: rawStateAfter == null, // ROOSTER
+          );
+        }
+        final stateAfter = rawStateAfter != null && rawStateAfter.isNotEmpty
+            ? await _filterStateEventsForDirection(
+                room,
+                rawStateAfter,
+                direction,
+              )
+            : null;
+        if (stateAfter != null && stateAfter.isNotEmpty) {
+          await _handleRoomEvents(
+            room,
+            stateAfter,
+            EventUpdateType.state,
             store: false,
           );
         }
@@ -2895,15 +3780,6 @@ class Client extends MatrixApi {
           for (final event in accountData) {
             room.roomAccountData[event.type] = event;
           }
-        }
-        final state = syncRoomUpdate.state;
-        if (state != null && state.isNotEmpty) {
-          await _handleRoomEvents(
-            room,
-            state,
-            EventUpdateType.state,
-            store: false,
-          );
         }
       }
 
@@ -2973,6 +3849,10 @@ class Client extends MatrixApi {
     List<StrippedStateEvent> events,
     EventUpdateType type, {
     bool store = true,
+    // ROOSTER: false for a timeline that came with `state_after` (Matrix
+    // v1.16): its state events are shown, and do not change room state, in
+    // memory or in the database.
+    bool updateState = true,
   }) async {
     // Calling events can be omitted if they are outdated from the same sync. So
     // we collect them first before we handle them.
@@ -3039,9 +3919,25 @@ class Client extends MatrixApi {
           room.setState(user);
         }
       }
-      await _updateRoomsByEventUpdate(room, event, type);
+      await _updateRoomsByEventUpdate(
+        room,
+        event,
+        type,
+        updateState: updateState, // ROOSTER
+      );
       if (store) {
-        await database.storeEventUpdate(room.id, event, type, this);
+        // ROOSTER: a database stores a timeline event that has a state key as
+        // room state too, so one that must not change room state is handed
+        // over as a [_TimelineOnlyEvent].
+        final stateKey = event.stateKey;
+        await database.storeEventUpdate(
+          room.id,
+          !updateState && stateKey != null && event is MatrixEvent
+              ? _TimelineOnlyEvent(Event.fromMatrixEvent(event, room), stateKey)
+              : event,
+          type,
+          this,
+        );
       }
       if (event is MatrixEvent && encryptionEnabled) {
         await encryption?.handleEventUpdate(
@@ -3067,11 +3963,12 @@ class Client extends MatrixApi {
             // the file kept to send it again is let go (the server may // ROOSTER
             // have it although our PUT /send failed). // ROOSTER
             final txid = timelineEvent.transactionId; // ROOSTER
-            if (txid != null && timelineEvent.eventId != txid) { // ROOSTER
+            if (txid != null && timelineEvent.eventId != txid) {
+              // ROOSTER
               room.forgetFileSend(txid); // ROOSTER
             } // ROOSTER
             onTimelineEvent.add(timelineEvent);
-            if (prevBatch != null &&
+            if (_announcesNewEvents(room) && // ROOSTER
                 timelineEvent.senderId != userID &&
                 room.notificationCount > 0 &&
                 pushruleEvaluator.match(timelineEvent).notify) {
@@ -3087,7 +3984,7 @@ class Client extends MatrixApi {
       }
 
       // Trigger local notification for a new invite:
-      if (prevBatch != null &&
+      if (_announcesNewEvents(room) && // ROOSTER
           type == EventUpdateType.inviteState &&
           event.type == EventTypes.RoomMember &&
           event.stateKey == userID) {
@@ -3104,7 +4001,7 @@ class Client extends MatrixApi {
         );
       }
 
-      if (prevBatch != null &&
+      if (_announcesNewEvents(room) && // ROOSTER
           (type == EventUpdateType.timeline ||
               type == EventUpdateType.decryptedTimelineQueue)) {
         if (event is MatrixEvent &&
@@ -3147,6 +4044,10 @@ class Client extends MatrixApi {
                     chatUpdate.unreadNotifications?.highlightCount ?? 0,
                 notificationCount:
                     chatUpdate.unreadNotifications?.notificationCount ?? 0,
+                unreadThreadNotifications: _normalizeThreadNotifications(
+                  // ROOSTER
+                  chatUpdate.unreadThreadNotifications, // ROOSTER
+                ), // ROOSTER
                 summary: chatUpdate.summary,
                 client: this,
               )
@@ -3161,10 +4062,18 @@ class Client extends MatrixApi {
       final position = membership == Membership.invite ? 0 : rooms.length;
       // Add the new chat to the list
       rooms.insert(position, room);
+      // ROOSTER
+      if (room.unreadThreadNotifications.isNotEmpty) {
+        _threadNotificationsDirty = true;
+      }
     }
     // If the membership is "leave" then remove the item and stop here
     else if (found && membership == Membership.leave) {
       rooms.removeAt(roomIndex);
+      // ROOSTER
+      if (room.unreadThreadNotifications.isNotEmpty) {
+        _threadNotificationsDirty = true;
+      }
 
       // in order to keep the archive in sync, add left room to archive
       if (chatUpdate is LeftRoomUpdate) {
@@ -3179,6 +4088,9 @@ class Client extends MatrixApi {
                 (chatUpdate.unreadNotifications?.notificationCount ?? 0) ||
             rooms[roomIndex].highlightCount !=
                 (chatUpdate.unreadNotifications?.highlightCount ?? 0) ||
+            // ROOSTER: or the per-thread counts change.
+            (!_syncWithoutThreadCounts &&
+                _threadNotificationsChange(rooms[roomIndex], chatUpdate)) ||
             chatUpdate.summary != null ||
             chatUpdate.timeline?.prevBatch != null)) {
       /// 1. [InvitedRoomUpdate] doesn't have prev_batch, so we want to set it in case
@@ -3195,6 +4107,19 @@ class Client extends MatrixApi {
             chatUpdate.unreadNotifications?.notificationCount ?? 0;
         rooms[roomIndex].highlightCount =
             chatUpdate.unreadNotifications?.highlightCount ?? 0;
+      }
+
+      // ROOSTER: Per-thread unread counts from /sync (v1.4) replace the ones
+      // we hold, so a thread the server left out is no longer counted.
+      // A Sliding Sync update has no per-thread counts (MSC4186): it says
+      // nothing about them.
+      if (!_syncWithoutThreadCounts &&
+          _carriesThreadNotifications(chatUpdate)) {
+        if (_threadNotificationsChange(rooms[roomIndex], chatUpdate)) {
+          _threadNotificationsDirty = true;
+        }
+        rooms[roomIndex].unreadThreadNotifications =
+            _normalizeThreadNotifications(chatUpdate.unreadThreadNotifications);
       }
 
       final summary = chatUpdate.summary;
@@ -3219,8 +4144,9 @@ class Client extends MatrixApi {
   Future<void> _updateRoomsByEventUpdate(
     Room room,
     StrippedStateEvent eventUpdate,
-    EventUpdateType type,
-  ) async {
+    EventUpdateType type, {
+    bool updateState = true, // ROOSTER
+  }) async {
     if (type == EventUpdateType.history) return;
 
     switch (type) {
@@ -3241,6 +4167,7 @@ class Client extends MatrixApi {
         // Update the room state:
         final stateKey = event.stateKey;
         if (stateKey != null &&
+            updateState && // ROOSTER
             (!room.partial || importantStateEvents.contains(event.type))) {
           room.setState(event);
 
@@ -3427,30 +4354,39 @@ class Client extends MatrixApi {
   /// them, and nothing waits for it). Only those users are queried. One // ROOSTER
   /// whose homeserver failed is not asked again at each send for 5 min, // ROOSTER
   /// as in the sync's query, nor one left unanswered for 1 min. // ROOSTER
-  Future<void> updateStaleUserDeviceKeys(Iterable<String> userIds) async { // ROOSTER
-    bool stale(String userId) { // ROOSTER
+  Future<void> updateStaleUserDeviceKeys(Iterable<String> userIds) async {
+    // ROOSTER
+    bool stale(String userId) {
+      // ROOSTER
       if (_userDeviceKeys[userId]?.outdated == false) return false; // ROOSTER
       final now = DateTime.now(); // ROOSTER
       final failure = _keyQueryFailures[userId.domain]; // ROOSTER
       if (failure != null && // ROOSTER
-          now.subtract(const Duration(minutes: 5)).isBefore(failure)) { // ROOSTER
+          now.subtract(const Duration(minutes: 5)).isBefore(failure)) {
+        // ROOSTER
         return false; // ROOSTER
       } // ROOSTER
       final unanswered = _unansweredKeyQueries[userId]; // ROOSTER
       return unanswered == null || // ROOSTER
-          now.subtract(const Duration(minutes: 1)).isAfter(unanswered); // ROOSTER
+          now
+              .subtract(const Duration(minutes: 1))
+              .isAfter(unanswered); // ROOSTER
     } // ROOSTER
 
     final users = userIds.where(stale).toSet(); // ROOSTER
     if (users.isEmpty || !isLogged()) return; // ROOSTER
-    await updateUserDeviceKeys( // ROOSTER
+    await updateUserDeviceKeys(
+      // ROOSTER
       additionalUsers: users, // ROOSTER
       onlyAdditionalUsers: true, // ROOSTER
     ).timeout(staleDeviceKeysTimeout, onTimeout: () {}); // ROOSTER
-    for (final userId in users) { // ROOSTER
-      if (stale(userId)) { // ROOSTER
+    for (final userId in users) {
+      // ROOSTER
+      if (stale(userId)) {
+        // ROOSTER
         _unansweredKeyQueries[userId] = DateTime.now(); // ROOSTER
-      } else { // ROOSTER
+      } else {
+        // ROOSTER
         _unansweredKeyQueries.remove(userId); // ROOSTER
       } // ROOSTER
     } // ROOSTER
@@ -3458,10 +4394,12 @@ class Client extends MatrixApi {
 
   /// [onlyAdditionalUsers] queries [additionalUsers] alone, not the // ROOSTER
   /// outdated lists of every tracked user, and drops no one. // ROOSTER
-  Future<void> updateUserDeviceKeys({ // ROOSTER
+  Future<void> updateUserDeviceKeys({
+    // ROOSTER
     Set<String>? additionalUsers, // ROOSTER
     bool onlyAdditionalUsers = false, // ROOSTER
-  }) async { // ROOSTER
+  }) async {
+    // ROOSTER
     try {
       final database = this.database;
       if (!isLogged()) return;
@@ -3479,8 +4417,10 @@ class Client extends MatrixApi {
       if (additionalUsers != null) trackedUserIds.addAll(additionalUsers);
 
       // Remove all userIds we no longer need to track the devices of.
-      if (!onlyAdditionalUsers) { // ROOSTER
-        _userDeviceKeys.removeWhere( // ROOSTER
+      if (!onlyAdditionalUsers) {
+        // ROOSTER
+        _userDeviceKeys.removeWhere(
+          // ROOSTER
           (String userId, v) => !trackedUserIds.contains(userId), // ROOSTER
         ); // ROOSTER
       } // ROOSTER
@@ -3491,7 +4431,8 @@ class Client extends MatrixApi {
         outdatedLists[userId] = [];
       }
       // The tracked lists are the sync's own query's to update. // ROOSTER
-      for (final userId in onlyAdditionalUsers ? <String>{} : trackedUserIds) { // ROOSTER
+      for (final userId in onlyAdditionalUsers ? <String>{} : trackedUserIds) {
+        // ROOSTER
         final deviceKeysList =
             _userDeviceKeys[userId] ??= DeviceKeysList(userId, this);
         final failure = _keyQueryFailures[userId.domain];
@@ -3618,7 +4559,8 @@ class Client extends MatrixApi {
             // delete old/unused entries
             for (final oldDeviceKeyEntry in oldKeys.entries) {
               final deviceId = oldDeviceKeyEntry.key;
-              if (!newKeys.containsKey(deviceId)) { // ROOSTER
+              if (!newKeys.containsKey(deviceId)) {
+                // ROOSTER
                 // we need to remove an old key
                 dbActions
                     .add(() => database.removeUserDeviceKey(userId, deviceId));
@@ -4022,9 +4964,25 @@ class Client extends MatrixApi {
   Future<void> clearCache() async {
     await abortSync();
     _prevBatch = null;
+    // ROOSTER: A clean sync on either transport, keeping the to-device
+    // position, which is not cache.
+    final continuity = _syncContinuity;
+    if (continuity != null) {
+      continuity
+        ..legacySince = null
+        ..pos = null;
+      _slidingSync?.resetConnection();
+    }
     _trackedUserIds = null;
     rooms.clear();
     await database.clearCache();
+    if (continuity != null) {
+      // ROOSTER
+      await database.cacheCustomObject(
+        SyncTransportContinuity.cacheKey,
+        continuity.toJson(),
+      );
+    }
     encryption?.keyManager.clearOutboundGroupSessions();
     _eventsPendingDecryption.clear();
     onCacheCleared.add(true);
@@ -4397,6 +5355,83 @@ class BadServerLoginTypesException implements Exception {
       'Server supports the Login Types: ${serverLoginTypes.toString()} but this application is only compatible with ${supportedLoginTypes.toString()}.';
 }
 
+// ROOSTER: Why following `/.well-known/matrix/client` redirects failed (MSC4402).
+enum WellKnownRedirectFailure {
+  /// The same URL came back: the redirects go round in a circle.
+  loop,
+
+  /// More than [Client.maxWellKnownRedirects] redirects.
+  tooManyRedirects,
+
+  /// A redirect to something other than http(s), such as `file:` or
+  /// `javascript:`.
+  unsupportedScheme,
+
+  /// A redirect without a `Location` header.
+  missingLocation,
+
+  /// A `Location` header that is not a URL.
+  invalidLocation,
+}
+
+// ROOSTER: Explicit error for a broken `/.well-known/matrix/client` redirect.
+class WellKnownRedirectException implements Exception {
+  final WellKnownRedirectFailure failure;
+
+  /// The URL that answered with the redirect.
+  final Uri from;
+
+  /// Where it pointed, when it could be read.
+  final Uri? target;
+
+  WellKnownRedirectException(this.failure, this.from, {this.target});
+
+  @override
+  String toString() =>
+      'WellKnownRedirectException: ${failure.name} at $from${target == null ? '' : ' -> ${target!.scheme}:'}';
+}
+
+// ROOSTER: Why the server discovery was refused for leaving HTTPS.
+enum InsecureDiscoveryFailure {
+  /// A `/.well-known/matrix/client` or `auth_metadata` redirect from
+  /// https: to http:.
+  redirect,
+
+  /// A well-known fetched over HTTPS whose `m.homeserver.base_url` is
+  /// http: on another machine.
+  baseUrl,
+}
+
+// ROOSTER: The discovery would go from HTTPS to plain HTTP; nothing was
+// asked of the http: URL.
+class InsecureDiscoveryException implements Exception {
+  final InsecureDiscoveryFailure failure;
+
+  /// The https: URL the discovery was at (for [InsecureDiscoveryFailure.baseUrl],
+  /// the server as it was given).
+  final Uri from;
+
+  /// The http: URL it pointed to.
+  final Uri target;
+
+  InsecureDiscoveryException(this.failure, this.from, this.target);
+
+  @override
+  String toString() =>
+      'InsecureDiscoveryException: ${failure.name} from ${from.host} to http:${target.host}';
+}
+
+// ROOSTER: Explicit exception when a homeserver advertises no compatible Matrix spec version.
+class BadServerVersionsException implements Exception {
+  final Set<String> serverVersions, supportedVersions;
+
+  BadServerVersionsException(this.serverVersions, this.supportedVersions);
+
+  @override
+  String toString() =>
+      'Server supports the versions: ${serverVersions.toString()} but this application is only compatible with ${supportedVersions.toString()}.';
+}
+
 class FileTooBigMatrixException extends MatrixException {
   int actualFileSize;
   int maxFileSize;
@@ -4431,6 +5466,39 @@ class ArchivedRoom {
   final Timeline timeline;
 
   ArchivedRoom({required this.room, required this.timeline});
+}
+
+/// ROOSTER: A state event of a timeline that came with `state_after` (Matrix
+/// v1.16 MSC4222), as the database gets it: an event of the stored timeline
+/// that is not room state.
+///
+/// [DatabaseApi.storeEventUpdate] stores a timeline event that has a state key
+/// as room state too. Its signature cannot say otherwise: the database the app
+/// uses outside the browser (`matrix_dart_sdk_drift_db`) implements
+/// [DatabaseApi] in another package, and would no longer compile. So this
+/// event has no [stateKey], which is what a database looks at before it
+/// stores state, and writes the real one in [toJson], which is what a
+/// database stores in the timeline.
+class _TimelineOnlyEvent extends Event {
+  final String _stateKey;
+
+  _TimelineOnlyEvent(Event event, this._stateKey)
+      : super(
+          status: event.status,
+          content: event.content,
+          type: event.type,
+          eventId: event.eventId,
+          senderId: event.senderId,
+          originServerTs: event.originServerTs,
+          unsigned: event.unsigned,
+          prevContent: event.prevContent,
+          redacts: event.redacts,
+          room: event.room,
+          originalSource: event.originalSource,
+        );
+
+  @override
+  Map<String, dynamic> toJson() => super.toJson()..['state_key'] = _stateKey;
 }
 
 /// An event that is waiting for a key to arrive to decrypt. Times out after some time.

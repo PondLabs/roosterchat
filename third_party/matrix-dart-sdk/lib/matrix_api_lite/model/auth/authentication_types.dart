@@ -26,6 +26,8 @@ abstract class AuthenticationTypes {
   static const String recaptcha = 'm.login.recaptcha';
   static const String token = 'm.login.token';
   static const String oauth2 = 'm.login.oauth2';
+  // ROOSTER: Matrix v1.17 (MSC4312) OAuth 2.0 UIA authentication type.
+  static const String oauth = 'm.oauth';
   static const String sso = 'm.login.sso';
   static const String emailIdentity = 'm.login.email.identity';
   static const String msisdn = 'm.login.msisdn';

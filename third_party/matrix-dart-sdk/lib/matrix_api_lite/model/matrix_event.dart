@@ -23,6 +23,7 @@
 
 import 'package:matrix/matrix_api_lite/model/stripped_state_event.dart';
 import 'package:matrix/matrix_api_lite/utils/map_copy_extension.dart';
+import 'package:matrix/matrix_api_lite/utils/try_get_map_extension.dart';
 
 class MatrixEvent extends StrippedStateEvent {
   String eventId;
@@ -55,6 +56,19 @@ class MatrixEvent extends StrippedStateEvent {
         prevContent = (json['prev_content'] as Map<String, Object?>?)?.copy(),
         redacts = json['redacts'] as String?,
         super.fromJson();
+
+  // ROOSTER: Typed `unsigned.replaces_state` (Matrix v1.19, T1.1b): the id of
+  // the state event this one replaced. Null when absent or not a string.
+  String? get replacesState =>
+      unsigned?.tryGet<String>('replaces_state', TryGet.silent);
+
+  set replacesState(String? eventId) {
+    if (eventId == null) {
+      unsigned?.remove('replaces_state');
+      return;
+    }
+    (unsigned ??= {})['replaces_state'] = eventId;
+  }
 
   @override
   Map<String, Object?> toJson() {

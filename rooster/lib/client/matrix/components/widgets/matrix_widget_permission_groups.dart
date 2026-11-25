@@ -142,6 +142,30 @@ class MatrixWidgetPermissionGroup {
       desc:
           "What the 'Call Permissions' let a room widget do, in the dialog where it asks for them");
 
+  static String get labelWidgetPermissionNavigate => Intl.message(
+      "Open Rooms and Stay on Screen",
+      name: "labelWidgetPermissionNavigate",
+      desc:
+          "A group of permissions a room widget asks for: opening rooms and profiles from matrix.to links, and staying visible");
+
+  static String get labelWidgetPermissionNavigateDescription => Intl.message(
+      "Open rooms and profiles for you, and stay visible while you use the app",
+      name: "labelWidgetPermissionNavigateDescription",
+      desc:
+          "What the 'Open Rooms and Stay on Screen' permissions let a room widget do, in the dialog where it asks for them");
+
+  static String get labelWidgetPermissionUserDirectory => Intl.message(
+      "Search Users",
+      name: "labelWidgetPermissionUserDirectory",
+      desc:
+          "A group of permissions a room widget asks for: searching the homeserver's list of users");
+
+  static String get labelWidgetPermissionUserDirectoryDescription => Intl.message(
+      "Search your homeserver's user directory",
+      name: "labelWidgetPermissionUserDirectoryDescription",
+      desc:
+          "What the 'Search Users' permission lets a room widget do, in the dialog where it asks for it");
+
   static List<MatrixWidgetPermissionGroup> permissionGroups() {
     return [
       adminPowers(),
@@ -149,6 +173,8 @@ class MatrixWidgetPermissionGroup {
       callPermissions(),
       readRoomInformation(),
       media(),
+      navigate(),
+      userDirectory(),
     ];
   }
 
@@ -219,6 +245,32 @@ class MatrixWidgetPermissionGroup {
       groups.values.where((i) => i.permissions.isNotEmpty).toList(),
       ungrouped
     );
+  }
+
+  // Unticked until the user ticks them: these act outside the widget.
+  static MatrixWidgetPermissionGroup navigate() {
+    return MatrixWidgetPermissionGroup(
+        name: labelWidgetPermissionNavigate,
+        description: labelWidgetPermissionNavigateDescription,
+        severity: WidgetPermissionSeverity.mild,
+        defaultValue: false,
+        icon: Icons.open_in_new_rounded,
+        permissions: [
+          "org.matrix.msc2931.navigate",
+          "m.always_on_screen",
+        ].map((i) => MatrixWidgetCapabilityString.parse(i)).toList());
+  }
+
+  static MatrixWidgetPermissionGroup userDirectory() {
+    return MatrixWidgetPermissionGroup(
+        name: labelWidgetPermissionUserDirectory,
+        description: labelWidgetPermissionUserDirectoryDescription,
+        severity: WidgetPermissionSeverity.mild,
+        defaultValue: false,
+        icon: Icons.person_search_rounded,
+        permissions: [
+          "org.matrix.msc3973.user_directory_search",
+        ].map((i) => MatrixWidgetCapabilityString.parse(i)).toList());
   }
 
   static MatrixWidgetPermissionGroup media() {
@@ -292,10 +344,19 @@ class MatrixWidgetPermissionGroup {
           "org.matrix.msc2762.send.event:io.element.call.reaction",
           "org.matrix.msc2762.send.event:org.matrix.msc4310.rtc.decline",
           "org.matrix.msc2762.send.event:org.matrix.msc4143.rtc.member",
+          // The stable names (MSC4143, MSC4310), beside the unstable ones.
+          "org.matrix.msc2762.send.event:m.rtc.member",
+          "org.matrix.msc2762.send.event:m.rtc.decline",
           "org.matrix.msc2762.receive.event:io.element.call.encryption_keys",
           "org.matrix.msc2762.receive.event:io.element.call.reaction",
           "org.matrix.msc2762.receive.event:org.matrix.msc4310.rtc.decline",
           "org.matrix.msc2762.receive.event:org.matrix.msc4143.rtc.member",
+          "org.matrix.msc2762.receive.event:m.rtc.member",
+          "org.matrix.msc2762.receive.event:m.rtc.decline",
+          "org.matrix.msc2762.send.state_event:org.matrix.msc4143.rtc.member",
+          "org.matrix.msc2762.receive.state_event:org.matrix.msc4143.rtc.member",
+          "org.matrix.msc2762.send.state_event:m.rtc.member",
+          "org.matrix.msc2762.receive.state_event:m.rtc.member",
           "org.matrix.msc2762.send.state_event:org.matrix.msc3401.call.member",
           "org.matrix.msc2762.receive.state_event:org.matrix.msc3401.call.member",
           "org.matrix.msc3819.send.to_device:m.call.invite",
@@ -321,6 +382,9 @@ class MatrixWidgetPermissionGroup {
           "org.matrix.msc3819.receive.to_device:m.call.replaces",
           "org.matrix.msc2762.send.event:org.matrix.msc4075.call.notify",
           "org.matrix.msc2762.send.event:org.matrix.msc4075.rtc.notification",
+          "org.matrix.msc2762.send.event:m.rtc.notification",
+          "org.matrix.msc2762.receive.event:org.matrix.msc4075.rtc.notification",
+          "org.matrix.msc2762.receive.event:m.rtc.notification",
           // Maybe these dont need to be in this category?
           "org.matrix.msc4157.send.delayed_event",
           "org.matrix.msc4157.update_delayed_event",

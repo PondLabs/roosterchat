@@ -6,6 +6,9 @@ import 'package:vodozemac/vodozemac.dart' as vod;
 import 'package:matrix/matrix.dart';
 import 'package:matrix/src/utils/crypto/crypto.dart';
 
+// ROOSTER: Matrix v1.15-v1.18 scope negotiation and redirect validation.
+export 'oidc_authorization.dart';
+
 extension Msc2964OidcLoginFlow on Client {
   /// Initializes a new OIDC Login session by creating a state, a code verifier
   /// and an authorization URI.
@@ -22,20 +25,28 @@ extension Msc2964OidcLoginFlow on Client {
     int codeVerifierBytesLength = 32,
     OidcResponseMode? responseMode,
     String? prompt,
+    // ROOSTER: reuse the metadata from checkHomeserver() instead of fetching it again.
+    GetAuthMetadataResponse? authMetadata,
   }) async {
-    final authMetadata = await getAuthMetadata();
+    authMetadata ??= await getAuthMetadata();
     deviceId ??= generateRandomDeviceId();
-    scopes ??= {
-      'openid',
-      //'urn:matrix:client:api:*',
-      //'urn:matrix:device:$deviceId',
-      // For some reason MAS crashes when not using the msc prefixed scopes:
-      'urn:matrix:org.matrix.msc2967.client:api:*',
-      'urn:matrix:org.matrix.msc2967.client:device:$deviceId',
-    };
+    // ROOSTER: stable `urn:matrix:client:*` scopes (Matrix v1.15) when the
+    // server lists them in `scopes_supported`, MSC2967 scopes otherwise.
+    scopes ??= negotiateOidcScopes(
+      scopesSupported: authMetadata.scopesSupported,
+      deviceId: deviceId,
+    );
     responseMode ??= redirectUri.scheme == 'https'
         ? OidcResponseMode.fragment
         : OidcResponseMode.query;
+    // ROOSTER: never ask for a response mode the server does not offer.
+    final modes = authMetadata.responseModesSupported;
+    if (modes.isNotEmpty && !modes.contains(responseMode.name)) {
+      final other = responseMode == OidcResponseMode.fragment
+          ? OidcResponseMode.query
+          : OidcResponseMode.fragment;
+      if (modes.contains(other.name)) responseMode = other;
+    }
 
     final state = base64UrlEncodeNoPadding(secureRandomBytes(32));
     final codeVerifier =
@@ -63,6 +74,9 @@ extension Msc2964OidcLoginFlow on Client {
       redirectUri: redirectUri,
       codeVerifier: codeVerifier,
       state: state,
+      deviceId: deviceId,
+      scopes: scopes,
+      responseMode: responseMode,
     );
   }
 
@@ -73,6 +87,8 @@ extension Msc2964OidcLoginFlow on Client {
     required OidcLoginSession session,
     required String code,
     required String state,
+    // ROOSTER: reuse the metadata from checkHomeserver().
+    GetAuthMetadataResponse? authMetadata,
   }) async {
     if (session.state != state) {
       throw Exception(
@@ -86,7 +102,7 @@ extension Msc2964OidcLoginFlow on Client {
       'client_id': session.oidcClientData.clientId,
       'code_verifier': session.codeVerifier,
     };
-    final authMetadata = await getAuthMetadata();
+    authMetadata ??= await getAuthMetadata();
     final response = await httpClient.post(
       authMetadata.tokenEndpoint,
       body: body,
@@ -101,14 +117,16 @@ extension Msc2964OidcLoginFlow on Client {
     final responseString = utf8.decode(response.bodyBytes);
     final oidcAuthResponse =
         OidcAuthResponse.fromJson(jsonDecode(responseString));
+    // ROOSTER: OAuth 2.0 / OIDC `expires_in` is in seconds (RFC 6749 §5.1); ignore non-positive values.
     final expiresIn = oidcAuthResponse.expiresIn;
+    final tokenExpiresAt = expiresIn != null && expiresIn > 0
+        ? DateTime.now().add(Duration(seconds: expiresIn))
+        : null;
     await init(
       newHomeserver: homeserver,
       newToken: oidcAuthResponse.accessToken,
       newRefreshToken: oidcAuthResponse.refreshToken,
-      newTokenExpiresAt: expiresIn == null
-          ? null
-          : DateTime.now().add(Duration(milliseconds: expiresIn)),
+      newTokenExpiresAt: tokenExpiresAt,
       newOidcClientId: session.oidcClientData.clientId,
     );
   }
@@ -143,8 +161,13 @@ extension Msc2964OidcLoginFlow on Client {
     String tokenType,
   ) async {
     final authMetadata = await getAuthMetadata();
+    // ROOSTER: revocation_endpoint is optional in RFC 8414 / Matrix auth_metadata.
+    final revocationEndpoint = authMetadata.revocationEndpoint;
+    if (revocationEndpoint == null) {
+      throw Exception('OIDC server does not advertise a revocation_endpoint.');
+    }
     final response = await httpClient.post(
-      authMetadata.revocationEndpoint,
+      revocationEndpoint,
       body: <String, String>{
         'token': token,
         'token_type': tokenType,
@@ -174,14 +197,22 @@ class OidcAuthResponse {
     required this.expiresIn,
   });
 
-  factory OidcAuthResponse.fromJson(Map<String, Object?> json) =>
-      OidcAuthResponse(
-        accessToken: json['access_token'] as String,
-        tokenType: json['token_type'] as String,
-        refreshToken: json['refresh_token'] as String?,
-        scope: json['scope'] as String?,
-        expiresIn: json['expires_in'] as int?,
-      );
+  factory OidcAuthResponse.fromJson(Map<String, Object?> json) {
+    // ROOSTER: Parse `expires_in` safely as an integer number of seconds.
+    final rawExpiresIn = json['expires_in'];
+    final expiresIn = rawExpiresIn is int
+        ? rawExpiresIn
+        : (rawExpiresIn is num && rawExpiresIn.isFinite
+            ? rawExpiresIn.toInt()
+            : null);
+    return OidcAuthResponse(
+      accessToken: json['access_token'] as String,
+      tokenType: json['token_type'] as String,
+      refreshToken: json['refresh_token'] as String?,
+      scope: json['scope'] as String?,
+      expiresIn: expiresIn,
+    );
+  }
 }
 
 class OidcLoginSession {
@@ -189,12 +220,21 @@ class OidcLoginSession {
   final Uri authenticationUri, redirectUri;
   final String codeVerifier, state;
 
+  // ROOSTER: what the session asked for, so the redirect is read where the
+  // server puts it and the device ID is known before the token exchange.
+  final String? deviceId;
+  final Set<String> scopes;
+  final OidcResponseMode responseMode;
+
   OidcLoginSession({
     required this.oidcClientData,
     required this.authenticationUri,
     required this.redirectUri,
     required this.codeVerifier,
     required this.state,
+    this.deviceId,
+    this.scopes = const {},
+    this.responseMode = OidcResponseMode.query,
   });
 }
 

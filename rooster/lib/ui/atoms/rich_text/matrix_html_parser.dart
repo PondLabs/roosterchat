@@ -11,21 +11,75 @@ import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/code_block.dart';
 import 'package:rooster/ui/atoms/emoji_widget.dart';
 import 'package:rooster/ui/atoms/mention.dart';
+import 'package:rooster/ui/atoms/rich_text/maths/latex_view.dart';
+import 'package:rooster/ui/atoms/rich_text/matrix_html_sanitizer.dart';
 import 'package:rooster/ui/atoms/rich_text/spans/link.dart';
-import 'package:rooster/utils/color_utils.dart';
 import 'package:rooster/utils/emoji/unicode_emoji.dart';
 import 'package:rooster/utils/links/link_utils.dart';
+import 'package:rooster/utils/matrix_uri/matrix_uri.dart';
 import 'package:rooster/utils/text_utils.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
+import 'package:intl/intl.dart';
 import 'package:tiamat/config/style/theme_extensions.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class MatrixHtmlParser {
+  static final RegExp _mxReplyTagPattern = RegExp(
+    r'<\s*(/?)\s*mx-reply(?=(?:\s|/?>))[^>]*>',
+    caseSensitive: false,
+  );
+
+  /// Removes legacy Matrix `<mx-reply>...</mx-reply>` fallback blocks while
+  /// preserving the reply body. Malformed or unmatched `<mx-reply>` tags are
+  /// stripped without throwing or dropping the remaining text.
+  static String stripMxReply(String html) {
+    if (html.isEmpty) return html;
+    final matches = _mxReplyTagPattern.allMatches(html).toList();
+    if (matches.isEmpty) return html;
+
+    final openStack = <(int start, int end)>[];
+    final removals = <(int start, int end)>[];
+
+    for (final match in matches) {
+      final full = match.group(0)!;
+      final isClosing = match.group(1) == '/';
+      final isSelfClosing = !isClosing && full.endsWith('/>');
+
+      if (isSelfClosing) {
+        removals.add((match.start, match.end));
+      } else if (!isClosing) {
+        openStack.add((match.start, match.end));
+      } else if (openStack.isNotEmpty) {
+        final open = openStack.removeLast();
+        removals.add((open.$1, match.end));
+      } else {
+        removals.add((match.start, match.end));
+      }
+    }
+
+    removals.addAll(openStack);
+    removals.sort((a, b) => a.$1.compareTo(b.$1));
+
+    final buffer = StringBuffer();
+    var cursor = 0;
+    for (final range in removals) {
+      if (range.$2 <= cursor) continue;
+      if (range.$1 > cursor) {
+        buffer.write(html.substring(cursor, range.$1));
+      }
+      cursor = range.$2;
+    }
+    if (cursor < html.length) {
+      buffer.write(html.substring(cursor));
+    }
+    return buffer.toString();
+  }
+
   static Widget parse(String text, MatrixClient client, Room? room,
       {bool mentionsRoom = true}) {
     return MatrixHtmlState(
@@ -51,12 +105,16 @@ class MatrixHtmlState extends StatefulWidget {
 }
 
 class _MatrixHtmlStateState extends State<MatrixHtmlState> {
-  bool hideSpoiler = true;
+  /// Spoilers the reader has revealed, by element of [_document].
+  final Set<dom.Element> revealedSpoilers = {};
+  String? _source;
+  late dom.Document _document;
+  late Map<String, Style> _sanitizedStyles;
 
   static final CodeBlockHtmlExtension _codeBlock = CodeBlockHtmlExtension();
   static final CodeHtmlExtension _code = CodeHtmlExtension();
   static final LineBreakHtmlExtension _lineBreak = LineBreakHtmlExtension();
-  static final ColorHtmlExtension _color = ColorHtmlExtension();
+  static final MathsHtmlExtension _maths = MathsHtmlExtension();
   static final RoomMentionsHtmlExtension _roomMentions =
       RoomMentionsHtmlExtension();
   static const Set<String> allowedHtmlTags = {
@@ -97,23 +155,30 @@ class _MatrixHtmlStateState extends State<MatrixHtmlState> {
     'caption',
     'pre',
     'span',
+    'font',
     'img',
     'details',
     'summary',
   };
 
-  void onTap() {
+  void toggleSpoiler(dom.Element spoiler) {
     setState(() {
-      hideSpoiler = !hideSpoiler;
+      if (!revealedSpoilers.remove(spoiler)) revealedSpoilers.add(spoiler);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final SpoilerHtmlExtension spoiler =
-        SpoilerHtmlExtension(hideSpoiler, onTap);
+    if (_source != widget.text) {
+      _source = widget.text;
+      _document = html_parser.parse(MatrixHtmlParser.stripMxReply(widget.text));
+      MatrixHtmlSanitizer.sanitize(_document);
+      _sanitizedStyles = MatrixHtmlSanitizer.styles(_document);
+      revealedSpoilers.clear();
+    }
 
-    var document = html_parser.parse(widget.text);
+    final spoiler = SpoilerHtmlExtension(revealedSpoilers, toggleSpoiler);
+    final document = _document;
     bool big = shouldDoBigEmoji(document);
 
     var theme = TextTheme.of(context);
@@ -123,9 +188,10 @@ class _MatrixHtmlStateState extends State<MatrixHtmlState> {
     var imageExtension = MatrixImageExtension(widget.client, widget.room);
     var linkify = LinkifyHtmlExtension(widget.client, widget.room, openLink);
 
-    var result = Html(
-      data: widget.text,
+    var result = Html.fromDom(
+      document: document,
       extensions: [
+        _maths,
         extension,
         spoiler,
         _codeBlock,
@@ -133,7 +199,6 @@ class _MatrixHtmlStateState extends State<MatrixHtmlState> {
         linkify,
         _lineBreak,
         imageExtension,
-        _color,
         if (widget.mentionsRoom) _roomMentions,
       ],
       style: {
@@ -191,21 +256,17 @@ class _MatrixHtmlStateState extends State<MatrixHtmlState> {
         "p": Style(
           margin: Margins.all(0),
           padding: HtmlPaddings.all(0),
-        )
+        ),
+        ..._sanitizedStyles,
       },
       onLinkTap: (url, attributes, element) {
-        LinkUtils.open(Uri.parse(url!), context: context);
+        final uri = MatrixHtmlLinks.resolve(url ?? '');
+        if (uri != null) LinkUtils.open(uri, context: context);
       },
       onlyRenderTheseTags: allowedHtmlTags,
     );
 
     return result;
-  }
-
-  void onSpoilerTapped() {
-    setState(() {
-      hideSpoiler = !hideSpoiler;
-    });
   }
 
   openLink(Uri uri) {
@@ -420,14 +481,11 @@ class LinkifyHtmlExtension extends HtmlExtension {
 
   @override
   InlineSpan build(ExtensionContext context) {
-    if (context.node.attributes.containsKey("href")) {
-      var uri = context.node.attributes["href"]!;
-      late Uri href;
-      try {
-        href = Uri.parse(uri);
-      } catch (e, _) {
-        href = Uri();
-      }
+    final resolved =
+        MatrixHtmlLinks.resolve(context.node.attributes["href"] ?? '');
+    if (resolved != null) {
+      final href = resolved;
+      final uri = href.toString();
 
       if (href.host == "matrix.to") {
         var result = MatrixClient.parseMatrixLink(href);
@@ -480,18 +538,10 @@ class LinkifyHtmlExtension extends HtmlExtension {
         }
       }
 
-      late Uri destination;
-
-      try {
-        destination = Uri.parse(context.node.attributes["href"]!);
-      } catch (e, _) {
-        destination = Uri();
-      }
-
       return LinkSpan.create(context.node.text!,
           clientId: client.identifier,
           context: context.buildContext!,
-          destination: destination);
+          destination: href);
     }
 
     return TextSpan(
@@ -501,7 +551,8 @@ class LinkifyHtmlExtension extends HtmlExtension {
 
   @override
   bool matches(ExtensionContext context) {
-    if (context.node.attributes.containsKey("href")) {
+    if (MatrixHtmlLinks.resolve(context.node.attributes["href"] ?? '') !=
+        null) {
       return true;
     }
 
@@ -514,57 +565,122 @@ class LinkifyHtmlExtension extends HtmlExtension {
 }
 
 class SpoilerHtmlExtension extends HtmlExtension {
-  bool hide = true;
-  Function() onTap;
+  final Set<dom.Element> revealed;
+  final void Function(dom.Element spoiler) onTap;
 
-  SpoilerHtmlExtension(this.hide, this.onTap);
+  SpoilerHtmlExtension(this.revealed, this.onTap);
+
+  static String labelSpoilerReason(String reason) =>
+      Intl.message("Spoiler: $reason",
+          name: "labelSpoilerReason",
+          args: [reason],
+          desc: "Shown before a hidden spoiler in a message, with the reason "
+              "its sender gave for hiding it");
+
+  static String get labelSpoilerHidden =>
+      Intl.message("Hidden spoiler, tap to reveal",
+          name: "labelSpoilerHidden",
+          desc: "Read by screen readers in place of the hidden text of a "
+              "spoiler in a message");
 
   @override
   InlineSpan build(ExtensionContext context) {
-    var theme = Theme.of(context.buildContext!);
-    var color = theme.colorScheme.onSurface;
+    final element = context.element!;
+    final hidden = !revealed.contains(element);
+    final reason = element.attributes["data-mx-spoiler"]?.trim() ?? "";
+    final color = Theme.of(context.buildContext!).colorScheme.onSurface;
 
-    var recogniser = TapGestureRecognizer();
-    recogniser.onTap = onTap;
-    return TextSpan(
+    final recogniser = TapGestureRecognizer()..onTap = () => onTap(element);
+    final body = TextSpan(
         text: context.node.text,
         recognizer: recogniser,
+        semanticsLabel: hidden ? labelSpoilerHidden : null,
         style: TextStyle(
             color: color,
-            backgroundColor: hide == true ? color : color.withAlpha(20)));
+            backgroundColor: hidden ? color : color.withAlpha(20)));
+
+    if (!hidden || reason.isEmpty) return body;
+
+    return TextSpan(children: [
+      TextSpan(
+          text: "${labelSpoilerReason(reason)} ",
+          recognizer: recogniser,
+          style: TextStyle(
+              color: color.withAlpha(180), fontStyle: FontStyle.italic)),
+      body,
+    ]);
   }
 
   @override
   bool matches(ExtensionContext context) {
-    return context.attributes.containsKey("data-mx-spoiler");
+    return context.element != null &&
+        context.attributes.containsKey("data-mx-spoiler");
   }
 
   @override
   Set<String> get supportedTags => {};
 }
 
-class ColorHtmlExtension extends HtmlExtension {
-  ColorHtmlExtension();
+/// Renders `data-mx-maths` (Matrix v1.11) on `<span>` (inline) and `<div>`
+/// (block). The element's own content is the fallback for clients without
+/// maths, so it is not shown.
+class MathsHtmlExtension extends HtmlExtension {
+  static const attribute = "data-mx-maths";
 
   @override
   InlineSpan build(ExtensionContext context) {
-    var str = context.attributes["data-mx-color"];
-    str ??= context.attributes["color"];
-    Color? color;
-    if (str != null) {
-      color = ColorUtils.fromHexCode(str);
-    }
-    return TextSpan(text: context.node.text, style: TextStyle(color: color));
+    final element = context.element!;
+    final display = element.localName == "div";
+    final style = TextStyle(
+      fontSize: context.style?.fontSize?.value,
+      color: context.style?.color,
+    );
+
+    final view = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: LatexView(element.attributes[attribute]!,
+          display: display, style: style),
+    );
+    final span =
+        WidgetSpan(alignment: PlaceholderAlignment.middle, child: view);
+    if (!display) return span;
+
+    final siblings = element.parentNode?.nodes ?? const <dom.Node>[];
+    final index = siblings.indexOf(element);
+    bool shown(dom.Node node) =>
+        node is dom.Element || (node.text?.trim().isNotEmpty ?? false);
+
+    return TextSpan(children: [
+      if (siblings.take(index).any(shown)) const TextSpan(text: "\n"),
+      span,
+      if (siblings.skip(index + 1).any(shown)) const TextSpan(text: "\n"),
+    ]);
   }
 
   @override
   bool matches(ExtensionContext context) {
-    return context.attributes.containsKey("data-mx-color") ||
-        context.attributes.containsKey("color");
+    final element = context.element;
+    return element != null &&
+        (element.localName == "span" || element.localName == "div") &&
+        element.attributes.containsKey(attribute);
   }
 
   @override
   Set<String> get supportedTags => {};
+}
+
+/// Where a link in a message goes. `matrix:` URIs become the matrix.to link
+/// the app opens; links the sanitiser does not allow give null.
+class MatrixHtmlLinks {
+  static Uri? resolve(String href) {
+    if (href.trim().isEmpty || !MatrixHtmlSanitizer.isAllowedHref(href)) {
+      return null;
+    }
+    final matrixUri = MatrixUri.tryParse(href);
+    if (matrixUri != null) return matrixUri.toMatrixToUri();
+    return Uri.tryParse(href.trim());
+  }
 }
 
 class RoomMentionsHtmlExtension extends HtmlExtension {

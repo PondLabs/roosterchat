@@ -10,6 +10,8 @@ import 'package:rooster/client/components/pinned_messages/pinned_messages_compon
 import 'package:rooster/client/components/polls/poll_component.dart';
 import 'package:rooster/client/components/push_notification/notification_content.dart';
 import 'package:rooster/client/components/push_notification/notification_manager.dart';
+import 'package:rooster/client/matrix/components/moderation/matrix_room_moderation.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/media/async_photo_send.dart';
 import 'package:rooster/client/matrix/media/interrupted_photo_uploads.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
@@ -28,6 +30,8 @@ import 'package:rooster/ui/molecules/gif_picker.dart';
 import 'package:rooster/ui/molecules/notification_debugger.dart';
 import 'package:rooster/ui/molecules/room_timeline_widget/timeline_selection_area.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/ui/organisms/moderation/moderation_reason_dialog.dart';
+import 'package:rooster/ui/organisms/moderation/report_content_dialog.dart';
 import 'package:rooster/utils/autofill_utils.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/download_utils.dart';
@@ -411,7 +415,18 @@ class TimelineEventMenu {
           name: CommonStrings.promptDelete,
           icon: Icons.delete,
           action: (BuildContext context) {
-            if (preferences.askBeforeDeletingMessageEnabled.value) {
+            final room = timeline.room;
+            if (room is MatrixRoom &&
+                event.senderId != room.client.self?.identifier) {
+              // A moderator deleting someone else's message may say why.
+              ModerationReasonDialog.confirmAndRun(context,
+                  title: CommonStrings.promptDelete,
+                  prompt: ModerationStrings.messageModerationDeleteConfirmation,
+                  confirmText: CommonStrings.promptDelete,
+                  action: (reason) => MatrixRoomModeration(room.matrixRoom)
+                      .redact(event.eventId, reason: reason)).then(
+                  (_) => onActionFinished?.call());
+            } else if (preferences.askBeforeDeletingMessageEnabled.value) {
               AdaptiveDialog.confirmation(context).then((value) {
                 if (value == true) {
                   timeline.deleteEvent(event);
@@ -468,6 +483,20 @@ class TimelineEventMenu {
                 text: selection?.textToCopy(body) ?? body,
               ));
             }),
+      // Someone else's message, once the server has it.
+      if (pending is MatrixTimelineEvent &&
+          event.status == TimelineEventStatus.synced &&
+          pending.event.senderId != pending.event.room.client.userID)
+        TimelineEventMenuEntry(
+          name: ReportContentDialog.promptReportMessage,
+          icon: Icons.flag_outlined,
+          action: (BuildContext context) {
+            onActionFinished?.call();
+            final mx = pending.event;
+            ReportContentDialog.reportEvent(
+                context, mx.room.client, mx.room.id, mx.eventId);
+          },
+        ),
       TimelineEventMenuEntry(
         name: promptShowSource,
         icon: Icons.code,

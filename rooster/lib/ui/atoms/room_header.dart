@@ -2,8 +2,13 @@ import 'dart:async'; // For StreamSubscription
 
 import 'package:rooster/client/components/direct_messages/direct_message_component.dart';
 import 'package:rooster/client/components/user_presence/user_presence_component.dart';
+import 'package:rooster/client/matrix/matrix_client.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_rich_topic.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/main.dart'; // For preferences
+import 'package:rooster/ui/atoms/rich_text/matrix_html_parser.dart';
+import 'package:rooster/ui/molecules/profile/e2ee_trust.dart';
 import 'package:rooster/ui/molecules/user_panel.dart';
 import 'package:rooster/utils/notification_utils.dart';
 import 'package:flutter/cupertino.dart';
@@ -23,6 +28,10 @@ class RoomHeader extends StatefulWidget {
   final void Function()? onBurgerMenuTap;
   @override
   State<RoomHeader> createState() => _RoomHeaderState();
+
+  /// Holds the room's rich topic (Matrix v1.15 `m.topic`) when it has an
+  /// HTML representation, formatted and cut to one line.
+  static const formattedTopicKey = m.ValueKey('room-header-formatted-topic');
 }
 
 class _RoomHeaderState extends State<RoomHeader> {
@@ -126,16 +135,52 @@ class _RoomHeaderState extends State<RoomHeader> {
                 : m.Colors.grey,
       );
     }
+    // A Matrix room's topic is read from its `m.topic` first (the rich
+    // topic, Matrix v1.15), with the legacy `topic` as the fallback. Its
+    // HTML goes through the same sanitizer as a message's.
+    String? topic = widget.room.topic;
+    Widget? formattedTopic;
+    if (widget.room case MatrixRoom room) {
+      final rich = MatrixRichTopic.ofRoom(room.matrixRoom);
+      topic = rich.plain;
+      final html = rich.html;
+      if (html != null) {
+        formattedTopic = KeyedSubtree(
+          key: RoomHeader.formattedTopicKey,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 22),
+            child: ClipRect(
+              child: OverflowBox(
+                alignment: Alignment.topLeft,
+                maxHeight: double.infinity,
+                child: MatrixHtmlParser.parse(
+                    html, room.client as MatrixClient, room,
+                    mentionsRoom: false),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
     return HeaderView(
         showBurger: MediaQuery.sizeOf(context).mobile,
         iconWidget: iconWidget,
         text: widget.room.displayName,
         iconPadding: iconPadding,
-        topic: widget.room.topic,
+        topic: topic,
+        formattedTopic: formattedTopic,
         onTap: widget.onTap,
         onBurgerMenuTap: widget.onBurgerMenuTap,
         menu: widget.menu,
-        status: status);
+        status: status,
+        // Hides itself while the room is not encrypted.
+        trustShield: switch (widget.room) {
+          MatrixRoom room => RoomE2eeTrustShield(
+              key: const m.ValueKey("room-header-trust"),
+              room: room.matrixRoom),
+          _ => null,
+        });
   }
 }
 
@@ -147,9 +192,11 @@ class HeaderView extends StatelessWidget {
     this.onBurgerMenuTap,
     this.status,
     this.topic,
+    this.formattedTopic,
     this.menu,
     this.showBurger = true,
     this.onTap,
+    this.trustShield,
     super.key,
   });
   final void Function()? onTap;
@@ -159,8 +206,14 @@ class HeaderView extends StatelessWidget {
   final EdgeInsets? iconPadding;
   final String text;
   final String? topic;
+
+  /// The topic formatted, shown in place of [topic] when there is one.
+  final Widget? formattedTopic;
   final bool showBurger;
   final Widget? menu;
+
+  /// The room's end-to-end encryption shield, after its name.
+  final Widget? trustShield;
 
   @override
   Widget build(BuildContext context) {
@@ -220,12 +273,20 @@ class HeaderView extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            if (topic != null && topic!.isNotEmpty)
+                            if (trustShield != null)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(6, 0, 0, 0),
+                                child: trustShield,
+                              ),
+                            if (formattedTopic != null ||
+                                (topic != null && topic!.isNotEmpty))
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
                                 child: tiamat.Text.labelLow("—"),
                               ),
-                            if (topic != null && topic!.isNotEmpty)
+                            if (formattedTopic != null)
+                              Flexible(child: formattedTopic!)
+                            else if (topic != null && topic!.isNotEmpty)
                               Flexible(
                                 child: tiamat.Text.labelLow(
                                   topic!,

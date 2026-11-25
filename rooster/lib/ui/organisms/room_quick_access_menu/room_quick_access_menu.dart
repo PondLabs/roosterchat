@@ -7,10 +7,13 @@ import 'package:rooster/client/components/pinned_messages/pinned_messages_compon
 import 'package:rooster/client/components/voip/voip_component.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
 import 'package:rooster/client/components/widgets/widget_component.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/ui/organisms/chat/jump_to_date.dart';
 import 'package:rooster/ui/organisms/invitation_view/send_invitation.dart';
+import 'package:rooster/ui/organisms/threads/threads_panel.dart';
 import 'package:rooster/ui/organisms/voice_activity/voice_activity_view.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/event_bus.dart';
@@ -105,6 +108,21 @@ class RoomQuickAccessMenu {
             action: (context) =>
                 calls.startCall(room.identifier, CallType.voice),
             icon: Icons.call),
+      if (room case MatrixRoom matrixRoom) ...[
+        RoomQuickAccessMenuEntry(
+            id: "Threads",
+            name: ThreadsPanel.labelThreads,
+            action: (context) => AdaptiveDialog.show(context,
+                builder: (context) => ThreadsPanel(room: matrixRoom),
+                title: ThreadsPanel.labelThreads,
+                scrollable: false),
+            icon: Icons.forum_outlined),
+        RoomQuickAccessMenuEntry(
+            id: "Jump to date",
+            name: JumpToDate.promptJumpToDate,
+            action: (context) => JumpToDate.pickAndJump(context, room),
+            icon: Icons.event),
+      ],
       if (preferences.hideRoomSidePanel.value == false ||
           MediaQuery.sizeOf(context).mobile) ...[
         if (calendar?.hasCalendar == true && calendar?.isCalendarRoom == false)

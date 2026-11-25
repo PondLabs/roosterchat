@@ -9,6 +9,7 @@ import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_join.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_warm_up.dart';
+import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/live_media_indicator.dart';
@@ -18,6 +19,7 @@ import 'package:rooster/ui/layout/bento.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/call_view/call.dart';
 import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
+import 'package:rooster/ui/organisms/voip_room_view/call_ring_banner.dart';
 import 'package:rooster/ui/organisms/voip_room_view/warm_up_on_rest.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -235,6 +237,13 @@ class _VoipRoomViewState extends State<VoipRoomView> {
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.max,
       children: [
+        // Someone ringing us to this call (MSC4075), with Join and Decline.
+        if (widget.voip case final MatrixVoipRoomComponent voip)
+          CallRingBanner(
+              rings: voip.rings,
+              nameOf: (userId) =>
+                  widget.voip.room.getMemberOrFallback(userId).displayName,
+              onJoin: () => joinRoomCall()),
         Expanded(
           child: widget.voip.room.isE2EE &&
                   preferences.experimentEnableE2eeElementCall.value == false

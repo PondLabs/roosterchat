@@ -21,6 +21,7 @@ import 'package:rooster/ui/atoms/adaptive_context_menu.dart';
 import 'package:rooster/ui/atoms/anchored_popover.dart';
 import 'package:rooster/ui/atoms/dot_indicator.dart';
 import 'package:rooster/ui/atoms/notification_badge.dart';
+import 'package:rooster/ui/atoms/room_panel_actions.dart';
 import 'package:rooster/ui/atoms/tiny_pill.dart';
 import 'package:rooster/ui/molecules/show_on_hover.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
@@ -202,6 +203,7 @@ class RoomTextButton extends StatefulWidget {
           text: promptRoomMarkAsRead,
           icon: Icons.visibility,
           onPressed: () => room.markAsRead()),
+      ...RoomPanelActions.menuItems(context, room),
       if (!room.isFavorite)
         ContextMenuItem(
             text: promptRoomSetFavorite,
@@ -470,6 +472,7 @@ class _RoomTextButtonState extends State<RoomTextButton> {
 
     if (widget.room.notificationCount > 0 ||
         widget.room.highlightedNotificationCount > 0 ||
+        RoomPanelActions.showsUnreadDot(widget.room) ||
         widget.highlight) {
       color = Theme.of(context).colorScheme.onSurface;
     }
@@ -534,7 +537,8 @@ class _RoomTextButtonState extends State<RoomTextButton> {
 
     final badge = widget.room.displayHighlightedNotificationCount > 0
         ? NotificationBadge(widget.room.displayHighlightedNotificationCount)
-        : widget.room.displayNotificationCount > 0
+        : widget.room.displayNotificationCount > 0 ||
+                RoomPanelActions.showsUnreadDot(widget.room)
             ? const Padding(padding: EdgeInsets.all(2.0), child: DotIndicator())
             : null;
     final showActions = (hovering || widget.highlight) &&

@@ -3,6 +3,9 @@ import 'package:collection/collection.dart';
 import 'package:rooster/client/components/emoticon/emoticon.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
+import 'package:rooster/client/matrix/components/read_receipts/matrix_threaded_receipts.dart';
+import 'package:rooster/client/matrix/components/reporting/matrix_ignored_users.dart';
+import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
@@ -29,6 +32,9 @@ class MatrixTimeline extends Timeline {
 
   matrix.Timeline? get matrixTimeline => _matrixTimeline;
 
+  late final MatrixIgnoredUsers _ignoredUsers;
+  StreamSubscription<Set<String>>? _ignoredUsersChanged;
+
   MatrixTimeline(
     MatrixClient client,
     MatrixRoom room,
@@ -41,6 +47,15 @@ class MatrixTimeline extends Timeline {
     this.room = room;
     _room = room;
     _matrixTimeline = initialTimeline;
+
+    // Hides or shows again what someone sends when they are ignored or
+    // unignored, without reopening the room.
+    _ignoredUsers = MatrixIgnoredUsers.of(matrixRoom.client);
+    _ignoredUsersChanged = _ignoredUsers.onChanged.listen((users) {
+      for (var i = 0; i < events.length; i++) {
+        if (users.contains(events[i].senderId)) notifyChanged(i);
+      }
+    });
 
     if (_matrixTimeline != null) {
       convertAllTimelineEvents();
@@ -200,8 +215,7 @@ class MatrixTimeline extends Timeline {
 
     _readMarkerSentFor = event.eventId;
     try {
-      await timeline.setReadMarker(
-          eventId: markerEventId,
+      await _sendReadMarker(timeline, markerEventId,
           public: receipts?.usePublicReadReceiptsForRoom);
     } catch (e, s) {
       // Asked again next time: the server does not have it, so the badge
@@ -222,6 +236,32 @@ class MatrixTimeline extends Timeline {
         markerEventId) {
       _room.clearUnreadCountsLocally();
     }
+  }
+
+  /// Moves our read marker to [markerEventId], the newest event, and sends
+  /// our receipt for the room's own timeline. A server with threaded
+  /// receipts (Matrix v1.4) gets it with `thread_id: "main"`, on the newest
+  /// event outside any thread, so the threads keep their unread messages
+  /// until they are read; an older one gets the unthreaded receipt.
+  Future<void> _sendReadMarker(matrix.Timeline timeline, String markerEventId,
+      {bool? public}) async {
+    if (!await MatrixThreadedReceipts.supported(_matrixRoom.client)) {
+      await timeline.setReadMarker(eventId: markerEventId, public: public);
+      return;
+    }
+
+    matrix.Event? lookup(String id) =>
+        timeline.events.firstWhereOrNull((e) => e.eventId == id);
+    final mainEvent = timeline.events.firstWhereOrNull((e) =>
+        e.status == matrix.EventStatus.synced &&
+        MatrixThreadedReceipts.threadOf(e, lookup) ==
+            MatrixThreadedReceipts.mainThreadId);
+
+    // The fully read marker has no thread: it goes on the newest event.
+    await _matrixRoom.setReadMarker(markerEventId);
+    if (mainEvent == null) return;
+    await MatrixThreadedReceipts.send(_matrixRoom, mainEvent.eventId,
+        threadId: MatrixThreadedReceipts.mainThreadId, public: public);
   }
 
   @override
@@ -288,6 +328,8 @@ class MatrixTimeline extends Timeline {
 
   @override
   Future<void> close() async {
+    // Not awaited: the subscription's cancel has nothing to wait for.
+    unawaited(_ignoredUsersChanged?.cancel());
     _matrixTimeline?.cancelSubscriptions();
     await onEventAdded.close();
     await onChange.close();
@@ -297,7 +339,9 @@ class MatrixTimeline extends Timeline {
   @override
   bool isEventRedacted(TimelineEvent<Client> event) {
     var e = event as MatrixTimelineEvent;
-    return e.event.getDisplayEvent(_matrixTimeline!).redacted;
+    // An ignored user's message is drawn like a redacted one: not at all.
+    return e.event.getDisplayEvent(_matrixTimeline!).redacted ||
+        _ignoredUsers.hides(e.event);
   }
 
   @override
@@ -306,5 +350,65 @@ class MatrixTimeline extends Timeline {
     var ev = e.event.getDisplayEvent(matrixTimeline!);
 
     return "${event.eventId}-${ev.eventId}";
+  }
+}
+
+/// Why "Jump to date" found no event.
+enum JumpToDateFailure {
+  /// Nothing in the room on that side of the date.
+  notFound,
+
+  /// The homeserver predates `timestamp_to_event` (Matrix v1.6, MSC3030).
+  unsupported,
+}
+
+class JumpToDateException implements Exception {
+  const JumpToDateException(this.failure);
+  final JumpToDateFailure failure;
+
+  @override
+  String toString() => 'JumpToDateException($failure)';
+}
+
+/// "Jump to date": the room's event closest to a moment, from
+/// `GET /_matrix/client/v1/rooms/{roomId}/timestamp_to_event` (Matrix v1.6).
+class MatrixJumpToDate {
+  /// The id of [room]'s event closest to [time]: the first at or after it
+  /// with [matrix.Direction.f], the last at or before it with
+  /// [matrix.Direction.b]. Throws [JumpToDateException] when the room has
+  /// none there or the server cannot tell.
+  static Future<String> eventIdAt(matrix.Room room, DateTime time,
+      {matrix.Direction direction = matrix.Direction.f}) async {
+    final client = room.client;
+    final versions = await client.getVersions();
+    if (!versions.versions.any((v) => isMatrixVersionAtLeast(v, 1, 6))) {
+      throw const JumpToDateException(JumpToDateFailure.unsupported);
+    }
+    try {
+      final found = await client.getEventByTimestamp(
+          room.id, time.millisecondsSinceEpoch, direction);
+      return found.eventId;
+    } on matrix.MatrixException catch (e) {
+      if (e.error == matrix.MatrixError.M_NOT_FOUND) {
+        throw const JumpToDateException(JumpToDateFailure.notFound);
+      }
+      // Advertises v1.6 but has no such endpoint.
+      if (e.error == matrix.MatrixError.M_UNRECOGNIZED) {
+        throw const JumpToDateException(JumpToDateFailure.unsupported);
+      }
+      rethrow;
+    }
+  }
+
+  /// The first event of [day] (local time); the last one before it when
+  /// the room has nothing from that day on.
+  static Future<String> eventIdForDay(matrix.Room room, DateTime day) async {
+    final start = DateTime(day.year, day.month, day.day);
+    try {
+      return await eventIdAt(room, start, direction: matrix.Direction.f);
+    } on JumpToDateException catch (e) {
+      if (e.failure != JumpToDateFailure.notFound) rethrow;
+      return await eventIdAt(room, start, direction: matrix.Direction.b);
+    }
   }
 }

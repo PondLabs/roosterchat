@@ -3,21 +3,31 @@ import 'package:rooster/client/components/direct_messages/direct_message_compone
 import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/components/user_presence/user_presence_component.dart';
+import 'package:rooster/client/matrix/components/key_verification_component/matrix_key_verification_component.dart';
+import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/ui/atoms/code_block.dart';
+import 'package:rooster/ui/atoms/e2ee_trust_shield.dart';
 import 'package:rooster/ui/atoms/inherited_offstage.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/navigation/navigation_utils.dart';
+import 'package:rooster/ui/molecules/profile/e2ee_trust.dart';
+import 'package:rooster/ui/organisms/user_profile/mutual_rooms_view.dart';
 import 'package:rooster/ui/organisms/user_profile/profile_card_theme.dart';
+import 'package:rooster/ui/organisms/user_profile/user_devices.dart';
+import 'package:rooster/ui/pages/matrix/verification/matrix_verification_page.dart';
 import 'package:rooster/ui/pages/settings/app_settings_page.dart';
+import 'package:rooster/utils/error_utils.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/ui/organisms/user_profile/user_profile_view.dart';
+import 'package:rooster/ui/organisms/moderation/profile_moderation_actions.dart';
 import 'package:rooster/utils/timezone_utils.dart';
 import 'package:rooster/client/components/petname/petname_component.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:matrix/matrix.dart' as matrix;
 
 class UserProfile extends StatefulWidget {
   const UserProfile(
@@ -104,6 +114,30 @@ class _UserProfileState extends State<UserProfile> {
   void initState() {
     super.initState();
     loadProfile();
+    loadDeviceKeys();
+  }
+
+  /// The Matrix client whose keys this card shows: none for ourselves, or
+  /// without encryption.
+  matrix.Client? get encryptedClient {
+    final client = widget.client;
+    if (client is! MatrixClient) return null;
+    final mx = client.matrixClient;
+    if (!mx.encryptionEnabled || widget.userId == mx.userID) return null;
+    return mx;
+  }
+
+  /// Asks for their device keys when we have none or they are stale.
+  Future<void> loadDeviceKeys() async {
+    final mx = encryptedClient;
+    final userId = widget.userId;
+    if (mx == null || mx.userDeviceKeys[userId]?.outdated == false) return;
+    try {
+      await mx.updateUserDeviceKeys(additionalUsers: {userId});
+    } catch (e, s) {
+      Log.onError(e, s, content: "Could not fetch a user's device keys");
+    }
+    if (mounted && widget.userId == userId) setState(() {});
   }
 
   @override
@@ -114,6 +148,7 @@ class _UserProfileState extends State<UserProfile> {
         oldWidget.client != widget.client) {
       profile = null;
       loadProfile();
+      loadDeviceKeys();
     }
   }
 
@@ -217,7 +252,36 @@ class _UserProfileState extends State<UserProfile> {
       return Placeholder();
     }
 
-    var result = Theme(
+    final verification =
+        widget.client.getComponent<MatrixKeyVerificationComponent>();
+    final canVerify =
+        verification != null && verification.canVerifyUser(profile.identifier);
+
+    final mx = encryptedClient;
+    if (mx == null) return buildView(profile, bio, canVerify: canVerify);
+    return E2eeTrustBuilder(
+      client: mx,
+      compute: (identities) => E2eeTrustResolver.forUser(mx, profile.identifier,
+          identities: identities),
+      builder: (context, trust, identities) => buildView(profile, bio,
+          canVerify: canVerify,
+          trust: trust,
+          devices: UserDevices.of(mx, profile.identifier),
+          onSetDeviceBlocked: (deviceId, blocked) =>
+              setDeviceBlocked(mx, deviceId, blocked),
+          onWithdrawVerification: identities == null
+              ? null
+              : () => identities.forget(profile.identifier)),
+    );
+  }
+
+  Widget buildView(Profile profile, Widget? bio,
+      {required bool canVerify,
+      E2eeTrust? trust,
+      List<UserDevice> devices = const [],
+      Future<void> Function(String deviceId, bool blocked)? onSetDeviceBlocked,
+      Future<void> Function()? onWithdrawVerification}) {
+    return Theme(
       data: theme!,
       child: UserProfileView(
         userAvatar: avatar,
@@ -234,6 +298,12 @@ class _UserProfileState extends State<UserProfile> {
         showMessageButton: widget.showMessageButton,
         isSelf: widget.client.self!.identifier == profile.identifier,
         onMessageButtonClicked: openDirectMessage,
+        onVerifyUser: canVerify ? verifyUser : null,
+        trust: trust,
+        devices: devices,
+        onSetDeviceBlocked: onSetDeviceBlocked,
+        onWithdrawVerification: onWithdrawVerification,
+        mutualRooms: MutualRoomsView.forUser(widget.client, profile.identifier),
         // Only from the popup: the card shown inside a page has nothing to
         // close first.
         onEditProfile:
@@ -251,10 +321,22 @@ class _UserProfileState extends State<UserProfile> {
                 .getComponent<UserColorComponent>()
                 ?.getOverride(profile.identifier) !=
             null,
+        moderationActions: ProfileModerationActions.of(
+            context, widget.client, profile.identifier,
+            displayName: profile.displayName, onChanged: () {
+          if (mounted) setState(() {});
+        }),
       ),
     );
+  }
 
-    return result;
+  /// Blocks or unblocks one of their devices, then shows it.
+  Future<void> setDeviceBlocked(
+      matrix.Client mx, String deviceId, bool blocked) async {
+    await ErrorUtils.tryRun(context, () async {
+      await UserDevices.setBlocked(mx, widget.userId, deviceId, blocked);
+    });
+    if (mounted) setState(() {});
   }
 
   Future<void> openDirectMessage() async {
@@ -279,6 +361,27 @@ class _UserProfileState extends State<UserProfile> {
 
     if (!mounted) return;
     Navigator.of(context).pop();
+  }
+
+  Future<void> verifyUser() async {
+    final verification =
+        widget.client.getComponent<MatrixKeyVerificationComponent>();
+    final target = profile;
+    if (verification == null || target == null) return;
+
+    await ErrorUtils.tryRun(context, () async {
+      final request =
+          await verification.startUserVerification(target.identifier);
+      if (!mounted) return;
+      await AdaptiveDialog.show(
+        context,
+        title: MatrixKeyVerificationComponent.labelAppVerificationRequest,
+        builder: (_) => MatrixVerificationPage(
+          request: request,
+          component: verification,
+        ),
+      );
+    });
   }
 
   /// Closes the card, then opens Settings on this account's profile.

@@ -1,4 +1,5 @@
 import 'package:rooster/client/client.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_room_topic.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event_add_reaction.dart';
 import 'package:rooster/client/timeline_events/timeline_event_generic.dart';
@@ -33,6 +34,10 @@ class TimelineEventViewGeneric extends StatefulWidget {
   /// Where a reaction's row leads: the message it is on.
   final Function(String eventId, {bool highlight})? jumpToEvent;
 
+  /// Holds a new rich topic (Matrix v1.15 `m.topic`), formatted, under the
+  /// line that says who changed it.
+  static const formattedTopicKey = ValueKey('timeline-formatted-topic');
+
   @override
   State<TimelineEventViewGeneric> createState() =>
       _TimelineEventViewGenericState();
@@ -45,6 +50,9 @@ class _TimelineEventViewGenericState extends State<TimelineEventViewGeneric>
   /// For a reaction, which message it is on.
   String? subtitle;
   String? reactsTo;
+
+  /// Shown under [text]: a rich topic's formatted HTML.
+  Widget? detail;
   IconData? icon;
   ImageProvider? senderAvatar;
 
@@ -133,6 +141,13 @@ class _TimelineEventViewGenericState extends State<TimelineEventViewGeneric>
                                 tiamat.Text.labelLow(subtitle!,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis),
+                              if (detail != null)
+                                Padding(
+                                  key: TimelineEventViewGeneric
+                                      .formattedTopicKey,
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: detail,
+                                ),
                             ],
                           ),
                         )
@@ -172,6 +187,7 @@ class _TimelineEventViewGenericState extends State<TimelineEventViewGeneric>
 
   void loadStateFromEvent(TimelineEvent event) {
     var room = widget.room ?? widget.timeline?.room;
+    detail = null;
     if (event is TimelineEventAddReaction) {
       text = event.plainTextBody;
       icon = Icons.add_reaction_outlined;
@@ -193,6 +209,14 @@ class _TimelineEventViewGenericState extends State<TimelineEventViewGeneric>
 
     text = event.getBody(timeline: widget.timeline);
     icon = event.icon;
+
+    if (event is MatrixTimelineEventRoomTopic) {
+      final formatted = event.buildFormattedTopic();
+      if (formatted != null) {
+        text = event.getFormattedLead(timeline: widget.timeline);
+        detail = formatted;
+      }
+    }
 
     var sender = room!.getMemberOrFallback(event.senderId);
     if (event.showSenderAvatar) {

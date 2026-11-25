@@ -1,11 +1,17 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:rooster/client/attachment.dart';
+import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
+import 'package:rooster/client/matrix/components/read_receipts/matrix_threaded_receipts.dart';
+import 'package:rooster/client/matrix/components/threads/matrix_thread_unread.dart';
+import 'package:rooster/debug/log.dart';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/threads/thread_component.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
+import 'package:rooster/client/matrix/components/reporting/matrix_ignored_users.dart';
 import 'package:rooster/client/matrix/matrix_timeline.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
@@ -86,17 +92,17 @@ class MatrixThreadTimeline implements Timeline {
     var room = this.room as MatrixRoom;
 
     var mx = client.getMatrixClient();
-    var data = await mx.request(matrix.RequestType.GET,
-        "/client/unstable/rooms/${room.identifier}/relations/$threadRootId/m.thread",
-        query: {
-          "limit": limit.toString(),
-          if (nextBatch != null) "from": nextBatch
-        });
+    final response = await mx.getRelatingEventsWithRelType(
+      room.identifier,
+      threadRootId,
+      matrix.RelationshipTypes.thread,
+      limit: limit,
+      from: nextBatch,
+    );
 
-    var chunk = List<Map<String, dynamic>>.from(data["chunk"] as Iterable);
-
-    var mxevents =
-        chunk.map((e) => matrix.Event.fromJson(e, room.matrixRoom)).toList();
+    var mxevents = response.chunk
+        .map((e) => matrix.Event.fromMatrixEvent(e, room.matrixRoom))
+        .toList();
 
     for (var i = 0; i < mxevents.length; i++) {
       var event = mxevents[i];
@@ -118,21 +124,19 @@ class MatrixThreadTimeline implements Timeline {
             room.convertEvent(e, timeline: mainRoomTimeline.matrixTimeline))
         .toList();
 
-    this.nextBatch = data["next_batch"] as String?;
+    this.nextBatch = response.nextBatch;
 
     if (this.nextBatch == null) {
       finished = true;
-      var root = data["original_event"] as Map<String, dynamic>?;
-      if (root != null) {
-        var matrixEvent = matrix.Event.fromJson(root, room.matrixRoom);
-        if (matrixEvent.type == "m.room.encrypted") {
-          var decrypted = await mx.encryption?.decryptRoomEvent(matrixEvent);
-          if (decrypted != null) {
-            matrixEvent = decrypted;
-          }
-        }
-        var event = room.convertEvent(matrixEvent);
-        convertedEvents.add(event);
+      TimelineEvent? root = mainRoomTimeline.tryGetEvent(threadRootId);
+      if (root == null) {
+        try {
+          root = await mainRoomTimeline.fetchEventById(threadRootId);
+        } catch (_) {}
+      }
+      if (root != null &&
+          !convertedEvents.any((e) => e.eventId == root!.eventId)) {
+        convertedEvents.add(root);
       }
     }
 
@@ -215,8 +219,49 @@ class MatrixThreadTimeline implements Timeline {
     throw UnimplementedError();
   }
 
+  /// The reply our last thread receipt was sent for, so the view asking on
+  /// every incoming message makes one request per reply.
+  String? _receiptSentFor;
+
+  /// Sends our receipt for this thread (Matrix v1.4, MSC3771): on its
+  /// newest reply the server has, with `thread_id` set to the root, public
+  /// or private as the room prefers. A thread with no reply yet, or a
+  /// server without threaded receipts, gets none. Then the thread's unread
+  /// badge clears.
   @override
-  void markAsRead(TimelineEvent event) {}
+  Future<void> markAsRead(TimelineEvent event) async {
+    final reply = events.firstWhereOrNull((e) =>
+        e.eventId != threadRootId &&
+        e is MatrixTimelineEvent &&
+        e.event.status.isSynced &&
+        e.event.relationshipType == matrix.RelationshipTypes.thread &&
+        e.event.relationshipEventId == threadRootId);
+    if (reply == null || reply.eventId == _receiptSentFor) return;
+
+    final mxRoom = (room as MatrixRoom).matrixRoom;
+    if (!await MatrixThreadedReceipts.supported(mxRoom.client)) return;
+
+    _receiptSentFor = reply.eventId;
+    try {
+      await MatrixThreadedReceipts.send(mxRoom, reply.eventId,
+          threadId: threadRootId,
+          public: room
+              .getComponent<MatrixReadReceiptComponent>()
+              ?.usePublicReadReceiptsForRoom);
+    } catch (e, s) {
+      // Asked again next time: the server does not have it.
+      if (_receiptSentFor == reply.eventId) _receiptSentFor = null;
+      Log.onError(e, s, content: "Could not send the thread's read receipt");
+      return;
+    }
+
+    // A reply that arrived meanwhile is still unread; its sync owns the
+    // counts.
+    if (events.firstOrNull?.eventId == reply.eventId) {
+      MatrixThreadUnread.clearLocally(mxRoom, threadRootId);
+      (room as MatrixRoom).threadCountsClearedLocally();
+    }
+  }
 
   @override
   void notifyChanged(int index) {}
@@ -365,7 +410,8 @@ class MatrixThreadTimeline implements Timeline {
   @override
   bool isEventRedacted(TimelineEvent<Client> event) {
     var e = event as MatrixTimelineEvent;
-    return e.event.getDisplayEvent(mainRoomTimeline.matrixTimeline!).redacted;
+    return e.event.getDisplayEvent(mainRoomTimeline.matrixTimeline!).redacted ||
+        MatrixIgnoredUsers.of(e.event.room.client).hides(e.event);
   }
 
   @override

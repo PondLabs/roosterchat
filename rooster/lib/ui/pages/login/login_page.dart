@@ -2,21 +2,36 @@ import 'dart:async';
 
 import 'package:rooster/client/auth.dart';
 import 'package:rooster/client/client.dart';
+import 'package:rooster/client/matrix/auth/matrix_account_lifecycle.dart';
+import 'package:rooster/client/matrix/auth/matrix_device_auth_flow.dart';
+import 'package:rooster/client/matrix/auth/matrix_oidc_login_flow.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/pages/login/login_page_view.dart';
+import 'package:rooster/ui/pages/login/password_reset_view.dart';
+import 'package:rooster/ui/pages/login/qr_code_login.dart';
+import 'package:rooster/ui/pages/login/register_view.dart';
 import 'package:rooster/utils/debounce.dart';
 import 'package:rooster/utils/rng.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, this.onSuccess, this.canNavigateBack = false});
+  const LoginPage(
+      {super.key,
+      this.onSuccess,
+      this.canNavigateBack = false,
+      this.createClient});
   final bool canNavigateBack;
   final Function(Client loggedInClient)? onSuccess;
+
+  /// Makes the client that signs in; [MatrixClient.create] when null. Tests
+  /// give one on a fake homeserver.
+  final Future<Client> Function(String internalId)? createClient;
 
   @override
   State<LoginPage> createState() => LoginPageState();
@@ -72,6 +87,9 @@ class LoginPageState extends State<LoginPage> {
   String? pendingHomeserver;
   String? serverInfoError;
   int homeserverRequestId = 0;
+  matrix.GetAuthMetadataResponse? authMetadata;
+  MatrixDeviceAuthFlow? deviceAuthFlow;
+  bool qrLogin = false;
 
   final Debouncer homeserverUpdateDebouncer = Debouncer(
     delay: const Duration(seconds: 1),
@@ -91,8 +109,9 @@ class LoginPageState extends State<LoginPage> {
 
   Future<void> _initializeLoginClient(String internalId) async {
     try {
-      final client = await MatrixClient.create(internalId)
-          .timeout(const Duration(seconds: 15));
+      final client =
+          await (widget.createClient ?? MatrixClient.create)(internalId)
+              .timeout(const Duration(seconds: 15));
       if (!mounted) return;
       loginClient = client;
 
@@ -130,6 +149,12 @@ class LoginPageState extends State<LoginPage> {
       },
       flows: loginFlows,
       doSsoLogin: doSsoLogin,
+      doOidcLogin: doOidcLogin,
+      authMetadata: authMetadata,
+      deviceAuthFlow: deviceAuthFlow,
+      doDeviceLogin: doDeviceLogin,
+      doQrLogin: doQrLogin,
+      qrLoginPanel: qrLoginPanel(),
       doPasswordLogin: doPasswordLogin,
       isLoggingIn: isLoggingIn,
       loadingServerInfo: loadingServerInfo,
@@ -138,7 +163,41 @@ class LoginPageState extends State<LoginPage> {
           loginFlows?.whereType<PasswordLoginFlow>().isNotEmpty == true,
       isServerValid: isServerValid,
       serverInfoError: serverInfoError,
+      onRegister: legacyAccountFlows ? doRegister : null,
+      onForgotPassword: legacyAccountFlows ? doPasswordReset : null,
     );
+  }
+
+  /// Registration and password reset of the legacy API, on a server
+  /// without OAuth 2.0 (which has its own pages for both).
+  bool get legacyAccountFlows =>
+      isServerValid &&
+      authMetadata == null &&
+      loginClient is MatrixClient &&
+      loginFlows?.whereType<PasswordLoginFlow>().isNotEmpty == true;
+
+  Future<void> doRegister() async {
+    final client = loginClient;
+    if (client is! MatrixClient) return;
+    final registered = await AdaptiveDialog.show<bool>(context,
+        title: RegisterView.promptLoginCreateAccount,
+        builder: (_) => RegisterView(
+            lifecycle: MatrixAccountLifecycle(client.matrixClient)));
+    // As any other login: the account is kept for the next start, and what
+    // follows a login (push, invitations, key verification) runs.
+    if (registered == true) {
+      await doLogin(
+          () => client.executeLoginFlow(const RegisteredAccountLoginFlow()));
+    }
+  }
+
+  void doPasswordReset() {
+    final client = loginClient;
+    if (client is! MatrixClient) return;
+    AdaptiveDialog.show(context,
+        title: PasswordResetView.labelPasswordReset,
+        builder: (_) => PasswordResetView(
+            lifecycle: MatrixAccountLifecycle(client.matrixClient)));
   }
 
   Future<void> doLogin(Future<LoginResult> Function() login) async {
@@ -204,6 +263,47 @@ class LoginPageState extends State<LoginPage> {
     await doLogin(() => loginClient!.executeLoginFlow(flow));
   }
 
+  Future<void> doOidcLogin(MatrixOidcLoginFlow flow) async {
+    if (loginClient == null) return;
+    await doLogin(() => loginClient!.executeLoginFlow(flow));
+  }
+
+  Future<void> doDeviceLogin() async {
+    final metadata = authMetadata;
+    if (loginClient == null || metadata == null || deviceAuthFlow != null) {
+      return;
+    }
+    final flow = MatrixDeviceAuthFlow(authMetadata: metadata);
+    setState(() => deviceAuthFlow = flow);
+    try {
+      await doLogin(() => loginClient!.executeLoginFlow(flow));
+    } finally {
+      flow.cancel();
+      if (mounted) setState(() => deviceAuthFlow = null);
+    }
+  }
+
+  void doQrLogin() {
+    if (loginClient is! MatrixClient || authMetadata == null) return;
+    setState(() => qrLogin = true);
+  }
+
+  /// QR code login (MSC4108): the panel shows the code, then signs in
+  /// through [doLogin] like every other flow.
+  Widget? qrLoginPanel() {
+    final client = loginClient;
+    final metadata = authMetadata;
+    if (!qrLogin || client is! MatrixClient || metadata == null) return null;
+    return QrLoginPanel(
+      client: client.matrixClient,
+      authMetadata: metadata,
+      onSignIn: (flow) => doLogin(() => client.executeLoginFlow(flow)),
+      onClose: () {
+        if (mounted) setState(() => qrLogin = false);
+      },
+    );
+  }
+
   Future<void> doPasswordLogin(
     PasswordLoginFlow flow,
     String username,
@@ -235,6 +335,8 @@ class LoginPageState extends State<LoginPage> {
 
     setState(() {
       loginFlows = null;
+      authMetadata = null;
+      qrLogin = false;
       loadingServerInfo = true;
       isServerValid = false;
     });
@@ -254,13 +356,19 @@ class LoginPageState extends State<LoginPage> {
       loadingServerInfo = false;
       isServerValid = result.$1;
       loginFlows = result.$2;
-      serverInfoError = result.$1 ? null : errorLoginHomeserverUnverified;
+      final client = loginClient;
+      authMetadata = client is MatrixClient ? client.authMetadata : null;
+      serverInfoError = result.$1
+          ? null
+          : (client is MatrixClient ? client.homeserverError : null) ??
+              errorLoginHomeserverUnverified;
     });
   }
 
   @override
   void dispose() {
     homeserverUpdateDebouncer.cancel();
+    deviceAuthFlow?.cancel();
     progressSubscription?.cancel();
     super.dispose();
   }

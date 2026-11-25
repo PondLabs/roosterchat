@@ -5,13 +5,14 @@ import 'package:rooster/client/components/emoticon/emoticon.dart';
 import 'package:rooster/client/components/emoticon/emoticon_component.dart';
 import 'package:rooster/client/components/emoticon_recent/recent_emoticon_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon.dart';
+import 'package:rooster/client/matrix/components/emoticon/matrix_image_pack_types.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/room.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/utils/debounce.dart';
 import 'package:rooster/utils/emoji/unicode_emoji.dart';
 import 'package:flutter/widgets.dart';
-import 'package:matrix/matrix_api_lite/model/basic_event.dart';
+import 'package:matrix/matrix.dart' as matrix;
 
 class MatrixRecentEmoticonComponent
     implements RecentEmoticonComponent<MatrixClient>, NeedsPostLoginInit {
@@ -24,7 +25,16 @@ class MatrixRecentEmoticonComponent
   Debouncer typedDebouncer = Debouncer(delay: Duration(seconds: 5));
 
   static const String reactionsKey = "chat.commet.recent_reaction_emoji";
-  static const String typedKey = "chat.commet.recent_emoji";
+
+  /// Recently typed emoji (Matrix v1.18, MSC4356), written. Its entries are
+  /// Unicode emoji; ours from packs go in [customKey] beside them.
+  static const String typedKey = matrix.EventTypes.RecentEmoji;
+
+  /// What [typedKey] replaces, read when the account has no [typedKey].
+  static const String legacyTypedKey = "chat.commet.recent_emoji";
+
+  /// Emoji from packs in the [typedKey] content, as [RecentEmoji.toJson].
+  static const String customKey = "chat.commet.custom_emoji";
 
   @override
   MatrixClient client;
@@ -47,11 +57,50 @@ class MatrixRecentEmoticonComponent
       Log.i("Got ${_reactionEmoji.length} recent reaction emoji");
     }
 
-    var typedData = client.matrixClient.accountData[typedKey];
-    if (typedData != null) {
-      _typedEmoji = toRecentsList(typedData);
-      Log.i("Got ${_typedEmoji.length} recently typed emoji");
+    _typedEmoji = readTypedRecents(client.matrixClient.accountData);
+    Log.i("Got ${_typedEmoji.length} recently typed emoji");
+  }
+
+  /// The recently typed emoji: from `m.recent_emoji` when the account has
+  /// it, from the legacy `chat.commet.recent_emoji` otherwise. Entries that
+  /// are not what the schema says are left out.
+  static List<RecentEmoji> readTypedRecents(
+      Map<String, matrix.BasicEvent> accountData) {
+    final standard = accountData[typedKey];
+    if (standard == null) {
+      final legacy = accountData[legacyTypedKey];
+      return legacy == null ? [] : toRecentsList(legacy);
     }
+
+    final content = matrix.RecentEmojiContent.fromJson(standard.content);
+    return [
+      for (final entry in content.recentEmoji)
+        if (entry.emoji.isNotEmpty)
+          RecentEmoji(key: entry.emoji, count: entry.total),
+      ..._parseList(content.additionalProperties[customKey])
+          .where((e) => e.customPackId != null),
+    ];
+  }
+
+  /// [recents] as `m.recent_emoji` content, most recent first, keeping what
+  /// other clients put in [previous] beside the list.
+  static Map<String, Object?> typedRecentsContent(List<RecentEmoji> recents,
+      {Map<String, Object?>? previous}) {
+    final kept = previous == null
+        ? <String, Object?>{}
+        : matrix.RecentEmojiContent.fromJson(previous).additionalProperties;
+    final custom = recents.where((e) => e.customPackId != null).toList();
+    return matrix.RecentEmojiContent(
+      recentEmoji: [
+        for (final e in recents)
+          if (e.customPackId == null)
+            matrix.RecentEmojiEntry(emoji: e.key, total: e.count),
+      ],
+      additionalProperties: {
+        ...kept..remove(customKey),
+        if (custom.isNotEmpty) customKey: [for (final e in custom) e.toJson()],
+      },
+    ).toJson();
   }
 
   List<Emoticon> toEmoticons(Room? room, List<RecentEmoji> emojis) {
@@ -124,7 +173,7 @@ class MatrixRecentEmoticonComponent
 
         if (pack.emotes.contains(emoticon)) {
           customPackid = pack.identifier;
-          if (customPackid != "im.ponies.user_emotes")
+          if (customPackid != ImagePackTypes.userPackKey)
             customPackRoomId = pack.ownerId;
           break;
         }
@@ -171,8 +220,11 @@ class MatrixRecentEmoticonComponent
         i.customPackRoomId == emoji.customPackRoomId &&
         i.key == emoji.key);
 
+    // Most recent first, as m.recent_emoji keeps them.
     if (existing != null) {
       existing.count++;
+      list.remove(existing);
+      list.insert(0, existing);
     } else {
       list.insert(0, emoji);
     }
@@ -189,19 +241,21 @@ class MatrixRecentEmoticonComponent
   }
 
   Future<void> storeRecentlyTyped() async {
-    var content = {"recent_emoji": _typedEmoji.map((i) => i.toJson()).toList()};
+    final mx = client.matrixClient;
+    final content = typedRecentsContent(_typedEmoji,
+        previous: mx.accountData[typedKey]?.content);
 
-    await client.matrixClient
-        .setAccountData(client.matrixClient.userID!, typedKey, content);
+    await mx.setAccountData(mx.userID!, typedKey, content);
   }
 
-  List<RecentEmoji> toRecentsList(BasicEvent data) {
-    var content = data.content;
-    var list = content["recent_emoji"] as List<dynamic>?;
-    if (list == null) return [];
+  /// A list in our own format (`{key, state_key?, room_id?, count}`).
+  static List<RecentEmoji> toRecentsList(matrix.BasicEvent data) =>
+      _parseList(data.content["recent_emoji"]);
 
+  static List<RecentEmoji> _parseList(Object? list) {
+    if (list is! List) return [];
     return list
-        .map((i) => RecentEmoji.fromjson(i))
+        .map(RecentEmoji.fromjson)
         .nonNulls
         .where((i) => i.key != "")
         .toList();
@@ -238,17 +292,20 @@ class RecentEmoji {
     };
   }
 
-  static RecentEmoji? fromjson(Map<String, dynamic> data) {
-    var key = data["key"] as String?;
-    var packId = data["state_key"] as String?;
-    var customPackRoomId = data["room_id"] as String?;
-    var count = data["count"] as int? ?? 1;
-    if (key == null) return null;
+  /// Null for anything but an object with a string `key`; a field of the
+  /// wrong type is taken as absent.
+  static RecentEmoji? fromjson(Object? data) {
+    if (data is! Map) return null;
+    final key = data["key"];
+    if (key is! String) return null;
+    final packId = data["state_key"];
+    final roomId = data["room_id"];
+    final count = data["count"];
     return RecentEmoji(
-        key: data["key"],
-        customPackId: packId,
-        customPackRoomId: customPackRoomId,
-        count: count);
+        key: key,
+        customPackId: packId is String ? packId : null,
+        customPackRoomId: roomId is String ? roomId : null,
+        count: count is int ? count : 1);
   }
 
   @override

@@ -5,9 +5,12 @@ import 'package:rooster/client/components/invitation/invitation_component.dart';
 import 'package:rooster/client/components/space_banner/space_banner_component.dart';
 import 'package:rooster/client/components/space_color_scheme/space_color_scheme_component.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
+import 'package:rooster/client/matrix/components/knocking/matrix_knocking_component.dart';
+import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/room_preview.dart';
 import 'package:rooster/client/space_child.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/ui/organisms/chat/knock_request_banner.dart';
 import 'package:rooster/ui/organisms/invitation_view/send_invitation.dart';
 import 'package:rooster/ui/organisms/room_quick_access_menu/room_quick_access_menu.dart';
 import 'package:rooster/ui/organisms/space_summary/space_summary_view.dart';
@@ -15,7 +18,9 @@ import 'package:rooster/ui/organisms/voice_activity/voice_activity_view.dart';
 import 'package:rooster/ui/pages/get_or_create_room/get_or_create_room.dart';
 import 'package:rooster/ui/pages/settings/room_settings_page.dart';
 import 'package:rooster/ui/pages/settings/space_settings_page.dart';
+import 'package:rooster/utils/error_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:matrix/matrix.dart' as matrix;
 import '../../navigation/navigation_utils.dart';
 
 class SpaceSummary extends StatefulWidget {
@@ -35,6 +40,7 @@ class SpaceSummary extends StatefulWidget {
 
 class _SpaceSummaryState extends State<SpaceSummary> {
   StreamSubscription? onUpdateSubscription;
+  final Set<String> _knockedRoomIds = {};
 
   @override
   void initState() {
@@ -68,6 +74,9 @@ class _SpaceSummaryState extends State<SpaceSummary> {
       avatar: widget.space.avatar,
       visibility: widget.space.visibility,
       joinRoom: joinRoom,
+      knockRoom: widget.space.client is MatrixClient ? knockRoom : null,
+      isKnockPending: _isKnockPending,
+      isInvited: _isInvited,
       topic: widget.space.topic,
       banner: banner?.banner,
       openSpaceSettings: openSpaceSettings,
@@ -157,5 +166,48 @@ class _SpaceSummaryState extends State<SpaceSummary> {
 
   Future<void> joinRoom(RoomPreview preview) async {
     await widget.space.client.joinRoomFromPreview(preview);
+  }
+
+  matrix.Membership? _membershipIn(RoomPreview preview) {
+    final client = widget.space.client;
+    if (client is! MatrixClient) return null;
+    return client.getMatrixClient().getRoomById(preview.roomId)?.membership;
+  }
+
+  /// An invite (which is also what an approved request to join becomes) is
+  /// accepted with Join; the server refuses a knock from someone invited.
+  bool _isInvited(RoomPreview preview) =>
+      _membershipIn(preview) == matrix.Membership.invite;
+
+  bool _isKnockPending(RoomPreview preview) {
+    final membership = _membershipIn(preview);
+    if (membership == matrix.Membership.knock) {
+      // The sync caught up with the request: from here on the membership
+      // alone says whether it still waits, so one that was declined (back
+      // to leave) stops showing as waiting.
+      _knockedRoomIds.remove(preview.roomId);
+      return true;
+    }
+    // A request just sent counts until the sync shows what became of it.
+    return _knockedRoomIds.contains(preview.roomId) &&
+        (membership == null || membership == matrix.Membership.leave);
+  }
+
+  Future<void> knockRoom(RoomPreview preview) async {
+    final client = widget.space.client;
+    if (client is! MatrixClient) return;
+    final reason = await KnockRequestBanner.promptReason(context);
+    if (reason == null || !mounted) return;
+    await ErrorUtils.tryRun(context, () async {
+      await MatrixKnockingComponent.knockById(
+        client.getMatrixClient(),
+        preview.roomId,
+        reason: reason,
+        via: preview.via,
+      );
+      if (mounted) {
+        setState(() => _knockedRoomIds.add(preview.roomId));
+      }
+    });
   }
 }

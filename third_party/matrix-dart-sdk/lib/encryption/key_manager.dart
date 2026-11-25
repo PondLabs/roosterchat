@@ -18,11 +18,14 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data'; // ROOSTER: MSC4287
 
 import 'package:collection/collection.dart';
 import 'package:vodozemac/vodozemac.dart' as vod;
 
 import 'package:matrix/encryption/encryption.dart';
+import 'package:matrix/encryption/room_key_bundle.dart'; // ROOSTER: MSC4268
+import 'package:matrix/encryption/ssss.dart'; // ROOSTER: MSC4287
 import 'package:matrix/encryption/utils/base64_unpadded.dart';
 import 'package:matrix/encryption/utils/outbound_group_session.dart';
 import 'package:matrix/encryption/utils/pickle_key.dart';
@@ -85,6 +88,125 @@ class KeyManager {
 
   bool get enabled => encryption.ssss.isSecret(megolmKey);
 
+  // ROOSTER: Matrix v1.19 (MSC4287). `m.key_backup` holds the user's choice
+  // to use key backup (`{"enabled": bool}`), shared by all their clients;
+  // the backup's key stays in `m.megolm_backup.v1`, in secret storage.
+  KeyBackupContent? get keyBackupPreference {
+    final content = client.accountData[EventTypes.KeyBackup]?.content;
+    return content == null ? null : KeyBackupContent.fromJson(content);
+  }
+
+  /// Whether the account uses key backup: what `m.key_backup` says, or,
+  /// when no client wrote it yet, whether the backup's key is in secret
+  /// storage (`m.megolm_backup.v1`).
+  bool get keyBackupEnabled => keyBackupPreference?.enabled ?? enabled;
+
+  /// Writes the choice to `m.key_backup`, keeping what else it holds.
+  Future<void> setKeyBackupEnabled(bool on) async {
+    final content = keyBackupPreference ?? KeyBackupContent();
+    if (content.enabled == on) return;
+    content.enabled = on;
+    final json = content.toJson();
+    await client.setAccountData(
+      client.userID!,
+      EventTypes.KeyBackup,
+      json,
+    );
+    await _storeLocalAccountData(EventTypes.KeyBackup, json);
+  }
+
+  /// The backup on the server (its version, number of keys, etag and
+  /// algorithm), or null when there is none.
+  Future<GetRoomKeysVersionCurrentResponse?> getKeyBackupStatus() async {
+    try {
+      return await getRoomKeysBackupInfo(false);
+    } on MatrixException catch (e) {
+      if (e.error != MatrixError.M_NOT_FOUND) rethrow;
+      _roomKeysVersionCache = null;
+      return null;
+    }
+  }
+
+  /// Creates a backup with a new key kept in [secretStorage] (which must be
+  /// unlocked), or replaces the current one (a rotation): the old version
+  /// is deleted only once the new key is stored, and every key is sent
+  /// again. Storing the key turns `m.key_backup` on ([SSSS.store]).
+  /// Returns the new version.
+  Future<String> createKeyBackup(OpenSSSS secretStorage) async {
+    if (!secretStorage.isUnlocked) {
+      throw InvalidPassphraseException('Secret storage is locked');
+    }
+    final previous = (await getKeyBackupStatus())?.version;
+    final keyObj = vod.PkDecryption();
+    final version = await client.postRoomKeysVersion(
+      BackupAlgorithm.mMegolmBackupV1Curve25519AesSha2,
+      {'public_key': keyObj.publicKey},
+    );
+    _roomKeysVersionCache = null;
+    await secretStorage.store(megolmKey, base64.encode(keyObj.privateKey));
+    if (previous != null && previous != version) {
+      try {
+        await client.deleteRoomKeysVersion(previous);
+      } catch (e, s) {
+        Logs().w('[KeyManager] Could not delete the replaced backup', e, s);
+      }
+    }
+    await client.database.markInboundGroupSessionsAsNeedingUpload();
+    await uploadInboundGroupSessions();
+    return version;
+  }
+
+  /// Deletes the backup on the server, turns key backup off for all the
+  /// account's clients (`m.key_backup`) and empties its key in secret
+  /// storage, which no longer opens anything.
+  Future<void> deleteKeyBackup() async {
+    final info = await getKeyBackupStatus();
+    if (info != null) await client.deleteRoomKeysVersion(info.version);
+    _roomKeysVersionCache = null;
+    await setKeyBackupEnabled(false);
+    if (enabled) {
+      await client.setAccountData(client.userID!, megolmKey, {});
+      await _storeLocalAccountData(megolmKey, {});
+    }
+  }
+
+  Future<void> _storeLocalAccountData(
+    String type,
+    Map<String, Object?> content,
+  ) async {
+    await client.database.storeAccountData(type, content);
+    client.accountData[type] = BasicEvent(type: type, content: content);
+  }
+
+  /// Restores every key in the backup with the backup's own recovery key,
+  /// for an account whose backup key is not in secret storage (only
+  /// `m.key_backup` says there is a backup). Throws
+  /// [InvalidPassphraseException] when it is not this backup's key.
+  Future<void> restoreKeyBackupWithRecoveryKey(String recoveryKey) async {
+    final privateKey = SSSS.decodeRecoveryKey(recoveryKey);
+    final info = await getRoomKeysBackupInfo(false);
+    if (_backupDecryption(privateKey, info) == null) {
+      throw InvalidPassphraseException('Not the key of this backup');
+    }
+    await loadFromResponse(
+      await client.getRoomKeys(info.version),
+      privateKey: privateKey,
+    );
+  }
+
+  vod.PkDecryption? _backupDecryption(
+    Uint8List privateKey,
+    GetRoomKeysVersionCurrentResponse info,
+  ) {
+    final decryption = vod.PkDecryption.fromSecretKey(
+      vod.Curve25519PublicKey.fromBytes(privateKey),
+    );
+    return info.algorithm == BackupAlgorithm.mMegolmBackupV1Curve25519AesSha2 &&
+            info.authData['public_key'] == decryption.publicKey
+        ? decryption
+        : null;
+  }
+
   /// clear all cached inbound group sessions. useful for testing
   void clearInboundGroupSessions() {
     _inboundGroupSessions.clear();
@@ -99,22 +221,23 @@ class KeyManager {
     Map<String, String>? senderClaimedKeys,
     bool uploaded = false,
     Map<String, Map<String, int>>? allowedAtIndex,
+    // ROOSTER: false when [senderClaimedKeys] is already the whole answer
+    // (an `m.room_key`, which looks only among the sender's own devices):
+    // no device of any other user is looked up by [senderKey].
+    bool claimDeviceOfSenderKey = true,
   }) async {
     final senderClaimedKeys_ = senderClaimedKeys ?? <String, String>{};
     final allowedAtIndex_ = allowedAtIndex ?? <String, Map<String, int>>{};
     final userId = client.userID;
     if (userId == null) return Future.value();
 
-    if (!senderClaimedKeys_.containsKey('ed25519')) {
+    if (claimDeviceOfSenderKey && // ROOSTER
+        !senderClaimedKeys_.containsKey('ed25519')) {
       final device = client.getUserDeviceKeysByCurve25519Key(senderKey);
       if (device != null && device.ed25519Key != null) {
         senderClaimedKeys_['ed25519'] = device.ed25519Key!;
       }
     }
-    final oldSession = getInboundGroupSession(
-      roomId,
-      sessionId,
-    );
     if (content['algorithm'] != AlgorithmTypes.megolmV1AesSha2) {
       return;
     }
@@ -141,6 +264,34 @@ class KeyManager {
       senderClaimedKeys: senderClaimedKeys_,
       allowedAtIndex: allowedAtIndex_,
     );
+    // ROOSTER: compare with the session the database keeps when none is in
+    // memory, as after a restart: upstream compared only with memory, so a
+    // session from the key backup, a forwarded key or an import that starts
+    // later replaced a better stored one and earlier messages stopped
+    // decrypting. Read without caching it ([loadInboundGroupSession] would
+    // put the stored session back in memory over one a concurrent call has
+    // just set), then look in memory again: a call that ran during the read
+    // set a session already compared with the stored one. No await from here
+    // to the memory writes below. A stored session that is kept goes in
+    // memory, where callers (a key request, a restore) look next.
+    var oldSession = getInboundGroupSession(roomId, sessionId);
+    SessionKey? stored;
+    if (oldSession == null) {
+      try {
+        final dbEntry =
+            await client.database.getInboundGroupSession(roomId, sessionId);
+        if (dbEntry != null) {
+          final dbSession = SessionKey.fromDb(dbEntry, userId);
+          if (dbSession.isValid && dbSession.sessionId == sessionId) {
+            stored = dbSession;
+          }
+        }
+      } catch (e, s) {
+        // An unreadable stored session decrypts nothing: replace it.
+        Logs().w('[KeyManager] Could not read the stored session', e, s);
+      }
+      oldSession = getInboundGroupSession(roomId, sessionId) ?? stored;
+    }
     final oldFirstIndex = oldSession?.inboundGroupSession?.firstKnownIndex ?? 0;
     final newFirstIndex = newSession.inboundGroupSession!.firstKnownIndex;
     if (oldSession == null ||
@@ -151,6 +302,10 @@ class KeyManager {
       // use new session
     } else {
       // we are gonna keep our old session
+      if (stored != null && identical(oldSession, stored)) {
+        (_inboundGroupSessions[roomId] ??= <String, SessionKey>{})[sessionId] =
+            stored; // ROOSTER
+      }
       return;
     }
 
@@ -288,6 +443,110 @@ class KeyManager {
     return roomInboundGroupSessions[sessionId] = dbSess;
   }
 
+  // ROOSTER: sessions stored before Rooster took an `m.room_key`'s claimed
+  // Ed25519 key from its Olm session kept, with no claimed keys of their
+  // own, the key of the device the sender named in `requesting_device_id`
+  // (or any claim the sender wrote) in their content, which
+  // [SessionKey.fromDb] now ignores. Once per database, each such session
+  // claims the key of the one device known with the Olm session's Curve25519
+  // key, or nothing when no single device has it (its messages then have no
+  // verified origin), and the claim leaves its content. Nothing is deleted:
+  // the session is stored again with its own pickle and indexes, so every
+  // message it decrypted still decrypts.
+  static const claimedKeysMigrationCacheKey =
+      'rooster_claimed_keys_from_olm_session';
+  Future<void>? _claimedKeysMigration;
+
+  /// The migration of the claimed keys, once started ([Encryption.onSync]).
+  Future<void>? get claimedKeysMigration => _claimedKeysMigration;
+
+  /// Starts the migration, once per run; the database's mark keeps it from
+  /// running again on later starts.
+  Future<void> migrateClaimedKeysFromOlmSessions() =>
+      _claimedKeysMigration ??= _migrateClaimedKeys();
+
+  static bool _claimsOnlyInContent(StoredInboundGroupSession entry) {
+    final content = Event.getMapFromPayload(entry.content);
+    final chain = content['forwarding_curve25519_key_chain'];
+    return Event.getMapFromPayload(entry.senderClaimedKeys).isEmpty &&
+        (chain is! List || chain.isEmpty) &&
+        (content.containsKey('sender_claimed_ed25519_key') ||
+            content.containsKey('sender_claimed_keys'));
+  }
+
+  /// The Ed25519 key of the one device known with [curve25519Key]: ours, or
+  /// any user's as long as no other device lists the same key.
+  String? _claimOfCurve25519Key(String curve25519Key) {
+    if (curve25519Key == encryption.identityKey) {
+      return encryption.fingerprintKey;
+    }
+    final devices = client.userDeviceKeys.values
+        .expand((list) => list.deviceKeys.values)
+        .where((d) => d.curve25519Key == curve25519Key)
+        .toList();
+    return devices.length == 1 ? devices.single.ed25519Key : null;
+  }
+
+  Future<void> _migrateClaimedKeys() async {
+    final database = client.database;
+    try {
+      final done = await database.getCustomCacheObject(
+        claimedKeysMigrationCacheKey,
+      );
+      if (done?.content['version'] == 1) return;
+      var proven = 0, unproven = 0;
+      for (final listed in await database.getAllInboundGroupSessions()) {
+        if (!_claimsOnlyInContent(listed)) continue;
+        // Read again just before storing, with no await in between: a
+        // session stored meanwhile (a better one, new indexes) is kept.
+        final entry = await database.getInboundGroupSession(
+          listed.roomId,
+          listed.sessionId,
+        );
+        if (entry == null || !_claimsOnlyInContent(entry)) continue;
+        final claim = _claimOfCurve25519Key(entry.senderKey);
+        final claimed = {if (claim != null) 'ed25519': claim};
+        final content = Event.getMapFromPayload(entry.content)
+          ..remove('sender_claimed_ed25519_key')
+          ..remove('sender_claimed_keys');
+        final stored = database.storeInboundGroupSession(
+          entry.roomId,
+          entry.sessionId,
+          entry.pickle,
+          json.encode(content),
+          entry.indexes,
+          entry.allowedAtIndex,
+          entry.senderKey,
+          json.encode(claimed),
+        );
+        final inMemory = getInboundGroupSession(entry.roomId, entry.sessionId);
+        if (inMemory != null &&
+            inMemory.senderKey == entry.senderKey &&
+            inMemory.senderClaimedKeys.isEmpty &&
+            inMemory.forwardingCurve25519KeyChain.isEmpty) {
+          inMemory.senderClaimedKeys = Map.of(claimed);
+          inMemory.content
+            ..remove('sender_claimed_ed25519_key')
+            ..remove('sender_claimed_keys');
+        }
+        await stored;
+        claim == null ? unproven++ : proven++;
+      }
+      await database.cacheCustomObject(
+        claimedKeysMigrationCacheKey,
+        {'version': 1},
+      );
+      Logs().i(
+        '[KeyManager] Claimed keys taken from the Olm session: $proven '
+        'session(s) proven, $unproven left with no verified origin',
+      );
+    } catch (e, s) {
+      // Tried again on the next start; until then such sessions claim
+      // nothing ([SessionKey.fromDb]).
+      Logs().w('[KeyManager] Could not migrate the claimed keys', e, s);
+    }
+  }
+
   Map<String, Map<String, bool>> _getDeviceKeyIdMap(
     List<DeviceKeys> deviceKeys,
   ) {
@@ -346,6 +605,24 @@ class KeyManager {
       Logs().w('No inbound megolm session found for outbound session!');
       assert(inboundSess != null);
       wipe = true;
+    }
+
+    // ROOSTER: MSC3061, the session's `shared_history` mark is decided when
+    // it starts, so a session ends when the room's history visibility starts
+    // or stops letting newcomers read: one marked must not go on encrypting
+    // under `invited` or `joined` (an MSC4268 bundle would hand a later
+    // invitee what was said then), and one not marked would keep what is
+    // said under `shared` from them. The visibility is in memory only once
+    // the room's state is loaded; unloaded, it would read as "not shared"
+    // and end every marked session after a restart.
+    if (!wipe) {
+      await room.postLoad();
+      if ((inboundSess?.content[sharedHistoryKey] == true) !=
+          sessionHistoryIsShared(
+            encryption.roomKeyBundle.historyVisibilityOf(room),
+          )) {
+        wipe = true;
+      }
     }
 
     if (!wipe) {
@@ -545,14 +822,20 @@ class KeyManager {
       );
     }
 
+    // ROOSTER: MSC3061, the history visibility below is kept in memory only
+    // once the room's state is loaded.
+    await room.postLoad();
     final deviceKeys = await room.getUserDeviceKeys();
     final deviceKeyIds = _getDeviceKeyIdMap(deviceKeys);
     // How many devices of the room's members the key leaves out (blocked, // ROOSTER
     // or not cross-signed by their owner: `Client.shareKeysWith`), as a // ROOSTER
     // count with no ids, so a log tells why someone cannot decrypt. // ROOSTER
-    final leftOut = deviceKeys.where((k) => !k.encryptToDevice).length; // ROOSTER
-    if (leftOut > 0) { // ROOSTER
-      Logs().w( // ROOSTER
+    final leftOut =
+        deviceKeys.where((k) => !k.encryptToDevice).length; // ROOSTER
+    if (leftOut > 0) {
+      // ROOSTER
+      Logs().w(
+        // ROOSTER
         '[KeyManager] The room key leaves out $leftOut device(s) of the ' // ROOSTER
         "room's members: blocked, or not cross-signed by their owner", // ROOSTER
       ); // ROOSTER
@@ -565,6 +848,12 @@ class KeyManager {
       'room_id': room.id,
       'session_id': outboundGroupSession.sessionId,
       'session_key': outboundGroupSession.sessionKey,
+      // ROOSTER: MSC3061, newcomers may read this session's messages; only
+      // such sessions go in an MSC4268 bundle on invite.
+      if (sessionHistoryIsShared(
+        encryption.roomKeyBundle.historyVisibilityOf(room),
+      ))
+        sharedHistoryKey: true,
     };
     final allowedAtIndex = <String, Map<String, int>>{};
     for (final device in deviceKeys) {
@@ -661,22 +950,19 @@ class KeyManager {
     return _roomKeysVersionCache!;
   }
 
-  Future<void> loadFromResponse(RoomKeys keys) async {
-    if (!(await isCached())) {
-      return;
+  // ROOSTER: [privateKey] is the backup's key when it does not come from
+  // secret storage ([restoreKeyBackupWithRecoveryKey]).
+  Future<void> loadFromResponse(RoomKeys keys, {Uint8List? privateKey}) async {
+    if (privateKey == null) {
+      if (!(await isCached())) {
+        return;
+      }
+      privateKey =
+          base64decodeUnpadded((await encryption.ssss.getCached(megolmKey))!);
     }
-    final privateKey =
-        base64decodeUnpadded((await encryption.ssss.getCached(megolmKey))!);
-    final info = await getRoomKeysBackupInfo();
-    String backupPubKey;
-
-    final decryption = vod.PkDecryption.fromSecretKey(
-      vod.Curve25519PublicKey.fromBytes(privateKey),
-    );
-    backupPubKey = decryption.publicKey;
-
-    if (info.algorithm != BackupAlgorithm.mMegolmBackupV1Curve25519AesSha2 ||
-        info.authData['public_key'] != backupPubKey) {
+    final decryption =
+        _backupDecryption(privateKey, await getRoomKeysBackupInfo());
+    if (decryption == null) {
       return;
     }
     for (final roomEntry in keys.rooms.entries) {
@@ -867,6 +1153,8 @@ class KeyManager {
         if (!(await isCached())) {
           return; // we can't backup anyways
         }
+        // ROOSTER: MSC4287, the user turned key backup off.
+        if (keyBackupPreference?.enabled == false) return;
         final dbSessions = await database.getInboundGroupSessionsToUpload();
         if (dbSessions.isEmpty) {
           return; // nothing to do
@@ -1138,18 +1426,34 @@ class KeyManager {
         );
         return;
       }
-      final sender_ed25519 = client.userDeviceKeys[event.sender]
-          ?.deviceKeys[event.content['requesting_device_id']]?.ed25519Key;
-      if (sender_ed25519 != null) {
-        event.content['sender_claimed_ed25519_key'] = sender_ed25519;
-      }
+      // ROOSTER: the Ed25519 key the room key claims is the one of the
+      // sender's device whose Curve25519 key is the Olm session's
+      // (`sender_key`), as `/keys/query` or the `sender_device_keys` that
+      // OlmManager checked (MSC4147) gave it; no such device, no claimed key.
+      // Never from the content, which the sender writes: upstream copied the
+      // Ed25519 key of the device named in `requesting_device_id` (any of
+      // the sender's devices, a verified one included), and a
+      // `sender_claimed_ed25519_key` or `sender_claimed_keys` kept in the
+      // content becomes the claim when the session is loaded from the
+      // database with no claimed keys of its own (`SessionKey.fromDb`), then
+      // goes out in forwarded keys and in the key backup.
+      final senderKey = encryptedContent['sender_key'];
+      if (senderKey is! String) return;
+      final claimed = client.userDeviceKeys[event.sender]?.deviceKeys.values
+          .firstWhereOrNull((d) => d.curve25519Key == senderKey)
+          ?.ed25519Key;
+      final content = Map<String, dynamic>.of(event.content)
+        ..remove('sender_claimed_ed25519_key')
+        ..remove('sender_claimed_keys');
       Logs().v('[KeyManager] Keeping room key');
       await setInboundGroupSession(
         roomId,
         sessionId,
-        encryptedContent['sender_key'],
-        event.content,
+        senderKey,
+        content,
         forwarded: false,
+        senderClaimedKeys: {if (claimed != null) 'ed25519': claimed},
+        claimDeviceOfSenderKey: false,
       );
     }
   }
@@ -1216,11 +1520,27 @@ class RoomKeyRequest extends ToDeviceEvent {
     if (session.senderKey.isNotEmpty) {
       message['sender_key'] = session.senderKey;
     }
-    message['sender_claimed_ed25519_key'] =
-        session.senderClaimedKeys['ed25519'] ??
-            (session.forwardingCurve25519KeyChain.isEmpty
+    // ROOSTER: a session received directly that claims no key (it came
+    // before its sender's device was known) claims the key of the device
+    // whose Curve25519 key is the session's, if one is known now: ours for a
+    // session we created, never ours for anyone else's (upstream claimed our
+    // own Ed25519 key for any such session). Still none, it is not
+    // forwarded: `m.forwarded_room_key` requires the key, and a receiver
+    // drops the event without it.
+    final claimed = session.senderClaimedKeys['ed25519'] ??
+        (session.forwardingCurve25519KeyChain.isEmpty
+            ? (session.senderKey == keyManager.encryption.identityKey
                 ? keyManager.encryption.fingerprintKey
-                : null);
+                : keyManager.client
+                    .getUserDeviceKeysByCurve25519Key(session.senderKey)
+                    ?.ed25519Key)
+            : null);
+    if (claimed == null) {
+      Logs().w('[KeyManager] Not forwarding a key that claims no sender');
+      keyManager.incomingShareRequests.remove(request.requestId);
+      return;
+    }
+    message['sender_claimed_ed25519_key'] = claimed;
     message['session_key'] = session.inboundGroupSession!.exportAt(
       index ?? session.inboundGroupSession!.firstKnownIndex,
     );

@@ -95,6 +95,95 @@ void main() {
       expect(await box.get('loki'), null);
     });
 
+    // ROOSTER: `Room.postLoad` reads in a transaction, also from inside the
+    // one a sync or a page of history is stored in.
+    group('A transaction inside another', () {
+      /// What the database holds, read by a collection that cached nothing.
+      Future<Object?> stored(String key) async {
+        final fresh = await BoxCollection.open(
+          'testbox',
+          boxNames,
+          sqfliteDatabase: db,
+          sqfliteFactory: isWeb ? null : databaseFactoryFfi,
+        );
+        try {
+          return await fresh.openBox<Map>('cats').get(key);
+        } finally {
+          // On the VM it shares the database with [collection].
+          if (isWeb) await fresh.close();
+        }
+      }
+
+      test('keeps what the outer one writes after it', () async {
+        final box = collection.openBox<Map>('cats');
+        await collection.transaction(() async {
+          await box.put('fluffy', data);
+          await collection.transaction(() async {
+            expect(await box.get('fluffy'), data);
+          });
+          await box.put('fluffy', data2);
+          await box.put('loki', data2);
+          await box.delete('loki');
+        });
+        expect(await stored('fluffy'), data2);
+        expect(await stored('loki'), null);
+        await box.clear();
+      });
+
+      test('stores what it wrote itself, with the outer one', () async {
+        final box = collection.openBox<Map>('cats');
+        await collection.transaction(() async {
+          await collection.transaction(() async {
+            await box.put('fluffy', data);
+          });
+          // Not before the outer one ends.
+          expect(await stored('fluffy'), null);
+        });
+        expect(await stored('fluffy'), data);
+        await box.clear();
+      });
+
+      test('reads the keys the outer one wrote and deleted', () async {
+        final box = collection.openBox<Map>('cats');
+        await box.put('fluffy', data);
+        await box.put('loki', data2);
+        // The keys were never listed: this reads them from the database.
+        await collection.transaction(() async {
+          await box.put('tom', data);
+          await box.delete('loki');
+          await collection.transaction(() async {
+            expect(await box.getAllKeys(), unorderedEquals(['fluffy', 'tom']));
+          });
+        });
+        expect(await box.getAllKeys(), unorderedEquals(['fluffy', 'tom']));
+        await box.clear();
+      });
+    });
+
+    test('A transaction that throws leaves the next writes working', () async {
+      final box = collection.openBox<Map>('cats');
+      await expectLater(
+        collection.transaction(() async {
+          await box.put('fluffy', data);
+          throw StateError('given up');
+        }),
+        throwsStateError,
+      );
+      await box.put('felix', data2);
+      await collection.transaction(() async => box.put('tiger', data));
+      final fresh = await BoxCollection.open(
+        'testbox',
+        boxNames,
+        sqfliteDatabase: db,
+        sqfliteFactory: isWeb ? null : databaseFactoryFfi,
+      );
+      final cats = fresh.openBox<Map>('cats');
+      expect(await cats.get('felix'), data2);
+      expect(await cats.get('tiger'), data);
+      if (isWeb) await fresh.close();
+      await box.clear();
+    });
+
     test('Box.close', () async {
       await collection.close();
     });
