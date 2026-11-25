@@ -279,6 +279,108 @@ Map<String, Object?> _encryptedRoomWithBob() => {
 
 Future<void> _settle() => Future.delayed(const Duration(milliseconds: 50));
 
+// Review c1-1 (T6.6): a homeserver that announces Sliding Sync and
+// refuses it, whose first `/v3/sync` brings a room with an unread thread.
+MockClient _refusingServer({
+  required bool bare404,
+  required int Function() nextV3,
+}) =>
+    MockClient((request) async {
+      final path = request.url.path;
+      if (path == '/_matrix/client/versions') {
+        return _json({
+          'versions': ['v1.11', 'v1.16'],
+          'unstable_features': {'org.matrix.simplified_msc3575': true},
+        });
+      }
+      if (path == _ssPath) {
+        if (bare404) return http.Response('Not Found', 404);
+        return _json({'errcode': 'M_UNRECOGNIZED', 'error': 'gone'}, 404);
+      }
+      if (path.endsWith('/filter')) return _json({'filter_id': 'f1'});
+      // With vodozemac loaded (this file), the client uploads its keys.
+      if (path == '/_matrix/client/v3/keys/upload') {
+        final body = jsonDecode(request.body) as Map<String, Object?>;
+        final uploaded = (body['one_time_keys'] as Map?)?.length ?? 0;
+        return _json({
+          'one_time_key_counts': {'signed_curve25519': uploaded},
+        });
+      }
+      if (path == '/_matrix/client/v3/keys/query') {
+        return _json({'device_keys': {}});
+      }
+      if (path == '/_matrix/client/v3/sync') {
+        final seq = nextV3();
+        if (seq == 1) {
+          return _json({
+            'next_batch': 'v3_1',
+            'rooms': {
+              'join': {
+                _roomId: {
+                  'state': {
+                    'events': [
+                      {
+                        'type': 'm.room.member',
+                        'state_key': _alice,
+                        'sender': _alice,
+                        'event_id': r'$m1',
+                        'origin_server_ts': 1,
+                        'content': {'membership': 'join'},
+                      },
+                    ],
+                  },
+                  'unread_notifications': {
+                    'notification_count': 0,
+                    'highlight_count': 0,
+                  },
+                  'unread_thread_notifications': {
+                    r'$thread_root': {
+                      'notification_count': 2,
+                      'highlight_count': 1,
+                    },
+                  },
+                },
+              },
+            },
+          });
+        }
+        // Incremental /v3/sync omits rooms without new events.
+        return _json({'next_batch': 'v3_$seq'});
+      }
+      return _json({});
+    });
+
+Future<Client> _open(
+  String name,
+  DatabaseApi database,
+  http.Client httpClient, {
+  bool restart = false,
+  bool forceLegacySync = false,
+}) async {
+  final client = Client(
+    name,
+    httpClient: httpClient,
+    database: database,
+  );
+  client.backgroundSync = false;
+  client.syncErrorTimeoutSec = 0;
+  client.forceLegacySync = forceLegacySync;
+  if (restart) {
+    await client.init(waitForFirstSync: false);
+  } else {
+    await client.init(
+      newHomeserver: Uri.parse('https://hs.example.test'),
+      newToken: 'access_token',
+      newUserID: _alice,
+      newDeviceID: 'ALICEDEV',
+      newDeviceName: 'Test',
+      waitForFirstSync: false,
+    );
+  }
+  await client.abortSync();
+  return client;
+}
+
 void main() {
   Logs().level = Level.error;
 
@@ -1084,22 +1186,20 @@ void main() {
       });
 
       test(
-          'counts restored at a restart on Sliding Sync are cleared before '
-          'its first answer, and not stored again', () async {
+          'counts stored before T6.6 on an account already on Sliding Sync '
+          'are cleared before its first answer, and not stored again',
+          () async {
         final server = _Homeserver();
         final database = await getDatabase();
         const name = 'sliding_sync_thread_counts_restart';
-        final first = await _client(
-          server,
-          database: database,
-          name: name,
-          forceLegacySync: true,
-        );
+        final first = await _client(server, database: database, name: name);
+        server.rooms = {_roomId: slidingRoom(0, initial: true)};
+        await first.oneShotSync();
+        expect(first.syncTransport, SyncTransport.slidingSync);
+        // What a build before T6.6 kept under Sliding Sync.
         await v3ThreadCounts(first, [_roomId]);
         await first.dispose(closeDatabase: false);
 
-        // The app starts again on a server that now offers Sliding Sync,
-        // which does not answer this time.
         final second = await _client(
           server,
           database: database,
@@ -1109,10 +1209,11 @@ void main() {
         expect(threadsOf(second, _roomId), isNotEmpty);
         server.broken = true;
         await second.oneShotSync();
+        expect(second.syncTransport, SyncTransport.slidingSync);
         expect(
           threadsOf(second, _roomId),
           isEmpty,
-          reason: 'Sliding Sync is the transport even before it answers',
+          reason: 'Sliding Sync is already the transport: no need to wait',
         );
         await second.dispose(closeDatabase: false);
 
@@ -1159,6 +1260,103 @@ void main() {
           reason: '/v3/sync stores them as before',
         );
         await restarted.dispose();
+      });
+
+      // Review c1-1: a server that announces Sliding Sync and refuses it
+      // keeps /v3/sync, and its per-thread counts.
+      test(
+          'c1-1: a 404 fallback on restart keeps the /v3/sync per-thread unread '
+          'counts', () async {
+        final db = await getDatabase();
+        const name = 't66_c1_1_fallback_restart';
+        var v3Seq = 0;
+
+        final first = await _open(
+          name,
+          db,
+          _refusingServer(bare404: false, nextV3: () => ++v3Seq),
+        );
+        await first
+            .oneShotSync(); // Sliding Sync refused -> fallback to /v3/sync.
+        expect(first.slidingSyncFallbackReason, 'M_UNRECOGNIZED');
+        await first.oneShotSync(); // /v3/sync delivers unread thread counts.
+        expect(
+          first
+              .getRoomById(_roomId)!
+              .unreadThreadNotifications[r'$thread_root']
+              ?.notificationCount,
+          2,
+        );
+        await first.dispose(closeDatabase: false);
+
+        // Restart: fallback reason is per-run, so Sliding Sync is tried again,
+        // refused again, and incremental /v3/sync omits the quiet room.
+        final second = await _open(
+          name,
+          db,
+          _refusingServer(bare404: false, nextV3: () => ++v3Seq),
+          restart: true,
+        );
+        await second.oneShotSync();
+        expect(second.slidingSyncFallbackReason, 'M_UNRECOGNIZED');
+        expect(second.syncTransport, SyncTransport.v3);
+        await second.oneShotSync();
+
+        final room = second.getRoomById(_roomId)!;
+        expect(
+          room.unreadThreadNotifications[r'$thread_root']?.notificationCount,
+          2,
+          reason: 'Sliding Sync was refused; /v3/sync thread counts must stay',
+        );
+        expect(
+          room.unreadThreadNotifications[r'$thread_root']?.highlightCount,
+          1,
+        );
+        final stored = await db
+            .getCustomCacheObject('rooster_unread_thread_notifications');
+        expect(
+          (stored?.content['rooms'] as Map?)?[_roomId],
+          isNotNull,
+          reason:
+              'the stored /v3/sync thread counts must not be overwritten empty',
+        );
+        await second.dispose();
+      });
+
+      test(
+          'c1-1: leaving forceLegacySync on a server that returns HTTP 404 keeps '
+          'the /v3/sync per-thread unread counts', () async {
+        final db = await getDatabase();
+        const name = 't66_c1_1_fallback_proxy';
+        var v3Seq = 0;
+        final server = _refusingServer(bare404: true, nextV3: () => ++v3Seq);
+
+        final client = await _open(name, db, server, forceLegacySync: true);
+        await client.oneShotSync();
+        expect(
+          client
+              .getRoomById(_roomId)!
+              .unreadThreadNotifications[r'$thread_root']
+              ?.notificationCount,
+          2,
+        );
+
+        client.forceLegacySync = false;
+        await client
+            .oneShotSync(); // Bare 404 from proxy -> fallback to /v3/sync.
+        expect(client.slidingSyncFallbackReason, 'HTTP 404');
+        expect(client.syncTransport, SyncTransport.v3);
+        await client.oneShotSync();
+
+        expect(
+          client
+              .getRoomById(_roomId)!
+              .unreadThreadNotifications[r'$thread_root']
+              ?.notificationCount,
+          2,
+          reason: 'a refused switch to Sliding Sync must not wipe /v3 counts',
+        );
+        await client.dispose();
       });
     });
 

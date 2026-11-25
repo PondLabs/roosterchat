@@ -654,13 +654,17 @@ Changes since the copy:
   An answer without `count` stops growing the range, and one without
   `pos` still waits for news: no polling. Limits of MSC4186: it has no
   per-thread unread counts, so under Sliding Sync the room's own counts
-  from the server are the badge (T6.6): before each Sliding Sync request
+  from the server are the badge (T6.6):
   `Client._dropThreadNotificationsForSlidingSync` empties
   `Room.unreadThreadNotifications` in every room (also the ones its
-  answers do not name yet, and the ones restored at a restart) and stores
-  them empty in `rooster_unread_thread_notifications`. Kept, they added to
-  the badge until each thread was read here, and a read on another device
-  never cleared them. Nothing brings them back while Sliding Sync is the
+  answers do not name yet) and stores them empty in
+  `rooster_unread_thread_notifications`, with the first answer of a
+  Sliding Sync that takes over from `/v3/sync` (a server that announces it
+  and refuses it keeps `/v3/sync` and its counts), and before each request
+  once it is the transport (counts restored at a restart). The transport
+  change is announced after that, so badges are drawn without them.
+  Kept, they added to the badge until each thread was read here, and a
+  read on another device never cleared them. Nothing brings them back while Sliding Sync is the
   transport, so nothing stores them again; back on `/v3/sync` they come
   from the server as before. And it has no presence, so other people's
   presence stops changing while Sliding Sync runs (asking `/presence` for
