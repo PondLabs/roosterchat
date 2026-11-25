@@ -35,29 +35,35 @@ class _RoomMembersListWidgetState extends State<RoomMembersListWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final double? width = MediaQuery.sizeOf(context).desktop
+        ? isDirectMessage
+            ? 300
+            : 200
+        : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (!isDirectMessage)
-          Row(
-            spacing: 6,
-            children: [
-              Flexible(child: tiamat.Text.labelLow(labelRoomMembersHeader)),
-              // The members' trust together; nothing when not encrypted.
-              if (widget.room case MatrixRoom room)
-                RoomE2eeTrustShield(
-                    key: const ValueKey("room-members-trust"),
-                    room: room.matrixRoom,
-                    size: 14),
-            ],
+          // As wide as the list: the desktop side panel gives no width
+          // limit, and the title's Flexible needs one.
+          SizedBox(
+            width: width,
+            child: Row(
+              spacing: 6,
+              children: [
+                Flexible(child: tiamat.Text.labelLow(labelRoomMembersHeader)),
+                // The members' trust together; nothing when not encrypted.
+                if (widget.room case MatrixRoom room)
+                  RoomE2eeTrustShield(
+                      key: const ValueKey("room-members-trust"),
+                      room: room.matrixRoom,
+                      size: 14),
+              ],
+            ),
           ),
         Expanded(
           child: SizedBox(
-            width: MediaQuery.sizeOf(context).desktop
-                ? isDirectMessage
-                    ? 300
-                    : 200
-                : null,
+            width: width,
             child: RoomMemberList(
                 key: ValueKey(
                     "room-participant-list-key-${widget.room.localId}"),
