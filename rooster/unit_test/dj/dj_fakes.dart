@@ -180,6 +180,14 @@ class FakeEngine implements DjPlaybackEngine {
 
   void finish() => _state = DjEngineState.ended;
 
+  /// The audio runs dry for a moment ([on]), as a song still downloading
+  /// does, or plays again.
+  void starve(bool on) {
+    if (_loaded != null && !_paused) {
+      _state = on ? DjEngineState.buffering : DjEngineState.playing;
+    }
+  }
+
   /// The loaded track stops for [why] (a download that broke off).
   void fail(String why) {
     _state = DjEngineState.error;

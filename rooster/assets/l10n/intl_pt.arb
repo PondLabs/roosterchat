@@ -830,6 +830,7 @@
   "tooltipDjStopNothingNext": "Parar (nada a seguir)",
   "tooltipDjNextSong": "Próxima música",
   "promptDjOpenSongPage": "Abrir a página da música",
+  "tooltipDjMakeSound": "Fazer um som do soundboard com esta música",
   "labelDjSourceFile": "Arquivo",
   "labelDjSourceLink": "Link",
   "tooltipDjMusicVolume": "Volume da música, só para você ({percent}%)",

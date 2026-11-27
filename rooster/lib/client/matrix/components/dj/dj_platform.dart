@@ -36,6 +36,10 @@ abstract class DjPlatform {
       {required String addedBy,
       required String Function() newId});
 
+  /// Where [track], a file the DJ added from this computer, is on it; null
+  /// when it is not here (another DJ's file, a browser).
+  Future<String?> localPath(DjTrack track);
+
   static final DjPlatform instance = platform.createDjPlatform();
 
   /// Files the DJ can add from their computer: what the player decodes.

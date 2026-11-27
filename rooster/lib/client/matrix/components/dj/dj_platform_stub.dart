@@ -31,6 +31,9 @@ class _WebDjPlatform implements DjPlatform {
   @override
   DjSources? get sources => null;
 
+  @override
+  Future<String?> localPath(DjTrack track) async => null;
+
   /// A browser gives no paths.
   @override
   Future<List<DjTrack>> localTracks(List<String> paths,
