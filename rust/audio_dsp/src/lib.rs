@@ -467,8 +467,8 @@ pub struct Dsp {
     /// Suppression kept producing NaN however often it was rebuilt: off for
     /// the rest of this DSP's life (`recover`).
     suppression_broken: bool,
-    /// How long the model takes per block, to give way to RNNoise on a
-    /// machine too slow for it (`watch_deep_filter_cost`).
+    /// How long the model takes per block, to give way to RNNoise while
+    /// the machine is too busy for it (`watch_deep_filter_cost`).
     #[cfg(not(target_arch = "wasm32"))]
     deep_filter_cost: Option<dfn::CostMeter>,
     gate: Gate,
@@ -665,16 +665,22 @@ impl Dsp {
     }
 
     /// Whether DeepFilterNet is built and allowed to run (it suppresses
-    /// whenever noise suppression is on).
+    /// whenever noise suppression is on), and not sitting out a busy
+    /// machine.
     pub fn has_deep_filter(&self) -> bool {
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.deep_filter_cost.as_ref().is_some_and(|cost| cost.benched()) {
+            return false;
+        }
         self.deep_filter.is_some() && self.shared.deep_filter_allowed.load(Ordering::Relaxed) != 0
     }
 
     /// Times DeepFilterNet from now on and hands noise suppression to
-    /// RNNoise for good if it takes more than `dfn::BUDGET` per block on
-    /// average: the capture thread would miss its deadlines. For real-time
-    /// callers (the app); a test or a tool on a busy machine would only lose
-    /// the model it means to measure.
+    /// RNNoise for a while (`dfn::BENCH_BLOCKS`, longer each time) after a
+    /// second most of whose blocks took more than `dfn::BUDGET`: the capture
+    /// thread would miss its deadlines. Then the model is tried again. For
+    /// real-time callers (the app); a test or a tool on a busy machine would
+    /// only lose the model it means to measure.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn watch_deep_filter_cost(&mut self) {
         self.deep_filter_cost = Some(dfn::CostMeter::new());
@@ -710,6 +716,17 @@ impl Dsp {
         if self.shared.deep_filter_allowed.load(Ordering::Relaxed) == 0 {
             return false;
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(cost) = self.deep_filter_cost.as_mut() {
+            if cost.benched() {
+                // Back with the audio from before its time out in its
+                // lookahead: it runs beside RNNoise before it is heard.
+                if cost.sit_out() {
+                    self.deep_filter_warmup = dfn::WARMUP_BLOCKS;
+                }
+                return false;
+            }
+        }
         let Some(model) = self.deep_filter.as_mut() else { return false };
         #[cfg(not(target_arch = "wasm32"))]
         let started = std::time::Instant::now();
@@ -721,9 +738,7 @@ impl Dsp {
         self.recent_snr_db[3] = snr_db.unwrap_or(f32::NEG_INFINITY);
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(cost) = self.deep_filter_cost.as_mut() {
-            if cost.too_slow(started.elapsed()) {
-                self.disable_deep_filter();
-            }
+            cost.add(started.elapsed());
         }
         if !ok {
             self.disable_deep_filter();
@@ -1374,34 +1389,80 @@ mod tests {
     }
 
     #[test]
-    fn the_cost_meter_waits_to_settle_and_judges_the_average() {
+    fn the_cost_meter_benches_the_model_after_a_second_of_mostly_slow_blocks() {
         let ms = std::time::Duration::from_millis;
         let mut slow = dfn::CostMeter::new();
         for i in 1..100 {
-            assert!(!slow.too_slow(ms(7)), "judged after {i} blocks");
+            slow.add(ms(7));
+            assert!(!slow.benched(), "judged after {i} blocks");
         }
-        assert!(slow.too_slow(ms(7)));
+        slow.add(ms(7));
+        assert!(slow.benched());
 
         let mut fine = dfn::CostMeter::new();
         for _ in 0..500 {
-            assert!(!fine.too_slow(ms(5)));
+            fine.add(ms(5));
         }
-        // One slow block among fast ones is not a slow machine.
-        assert!(!fine.too_slow(ms(30)));
+        assert!(!fine.benched());
+        // A thread held up now and then is not a slow machine: the average
+        // this used to judge by was over budget after one such stall.
+        for i in 0..1000 {
+            fine.add(ms(if i % 3 == 0 { 400 } else { 1 }));
+        }
+        assert!(!fine.benched());
     }
 
     #[test]
-    fn a_model_too_slow_for_the_machine_hands_over_to_rnnoise() {
+    fn a_time_out_ends_and_the_next_one_is_longer_until_the_model_keeps_up() {
+        let ms = std::time::Duration::from_millis;
+        let slow_second = |meter: &mut dfn::CostMeter| (0..100).for_each(|_| meter.add(ms(20)));
+        let sat_out = |meter: &mut dfn::CostMeter| {
+            let mut blocks = 1;
+            while !meter.sit_out() {
+                blocks += 1;
+            }
+            assert!(!meter.benched());
+            blocks
+        };
+        let mut meter = dfn::CostMeter::new();
+        slow_second(&mut meter);
+        assert_eq!(sat_out(&mut meter), dfn::BENCH_BLOCKS);
+        slow_second(&mut meter);
+        assert_eq!(sat_out(&mut meter), dfn::BENCH_BLOCKS * 2);
+        for _ in 0..10 {
+            slow_second(&mut meter);
+            sat_out(&mut meter);
+        }
+        slow_second(&mut meter);
+        assert_eq!(sat_out(&mut meter), dfn::BENCH_BLOCKS_MAX);
+        // A minute of keeping up, and a busy moment costs the short one.
+        (0..6000).for_each(|_| meter.add(ms(1)));
+        assert!(!meter.benched());
+        slow_second(&mut meter);
+        assert_eq!(sat_out(&mut meter), dfn::BENCH_BLOCKS);
+    }
+
+    #[test]
+    fn a_model_too_slow_for_a_moment_hands_over_to_rnnoise_and_comes_back() {
         let mut dsp = Dsp::new(Params { gate_mode: 0, far_end_ducking: 0, ..Default::default() });
         assert!(dsp.has_deep_filter());
         let mut meter = dfn::CostMeter::new();
-        for _ in 0..200 {
-            meter.too_slow(std::time::Duration::from_millis(20));
+        for _ in 0..100 {
+            meter.add(std::time::Duration::from_millis(20));
         }
         dsp.deep_filter_cost = Some(meter);
-        let drop_db = suppressed_db(&mut dsp, NATIVE_RATE, 100, 41);
         assert!(!dsp.has_deep_filter(), "the model is still running");
+        let drop_db = suppressed_db(&mut dsp, NATIVE_RATE, 100, 41);
         assert!(drop_db > 15.0, "RNNoise took {drop_db:.1} dB off");
+        assert_eq!(dsp.report().flags & REPORT_FLAG_DEEP_FILTER, 0);
+
+        // It used to stay off for the rest of the call.
+        suppressed_db(&mut dsp, NATIVE_RATE, dfn::BENCH_BLOCKS as usize - 100, 42);
+        assert!(dsp.has_deep_filter(), "the model never came back");
+        // Fewer blocks than a verdict takes: a slow test machine cannot
+        // bench it again before this looks.
+        suppressed_db(&mut dsp, NATIVE_RATE, dfn::WARMUP_BLOCKS as usize + 10, 43);
+        assert_ne!(dsp.report().flags & REPORT_FLAG_DEEP_FILTER, 0, "the model is not heard");
     }
 
     #[test]

@@ -275,9 +275,26 @@ crate resamples). The worker hands unit-scale 480-sample blocks.
    speech above the noise (its local SNR over 0 dB) in one of its last four
    blocks (`Dsp::gate_vad`); keeping it open takes only the first. Without the model RNNoise does both, as it used to: in
    the app's first half second while the model is built on a thread of its
-   own (`ModelLoad::Background`, `rooster_dsp_create`), and for good when
-   the model takes over 6 ms a block on average (`dfn::CostMeter`, native)
-   or 8 ms (the web worker's timer), or cannot be built. The model's lookahead holds the last audio it heard,
+   own (`ModelLoad::Background`, `rooster_dsp_create`), for a while when
+   the machine is too busy for the model (native, below), and for good when
+   it takes over 8 ms a block on average in the browser (the web worker's
+   timer) or cannot be built.
+
+   Native (`dfn::CostMeter`): after a second most of whose blocks took over
+   6 ms the model sits out 5 s, then runs again; each slow second that
+   follows doubles the time out, up to 5 min, and a minute of keeping up
+   makes the next one 5 s again. Until 2026-11-27 it was an average over
+   the last 64 blocks and for the rest of the call. Report: "after one of
+   us shares a screen or opens a camera, noise suppression no longer cuts
+   clapping, until they leave the room and come back". One stall of a third
+   of a second on the capture thread (a capture and an encoder starting,
+   often beside a game) put that average over budget, and RNNoise, which
+   lets knocks and claps through, suppressed alone from then on with
+   nothing to show for it. Not reproduced on the reporter's machine: the
+   log now says "Voice DSP: the model gave way to RNNoise" when it sits out
+   for more than a second and "the model is suppressing again" when it is
+   back (`AudioProcessingManager.publishReport`), so the next report can be
+   checked against it. The model's lookahead holds the last audio it heard,
    so a model that arrives mid-stream, one switched back on and one after
    the capture restarts run 20 blocks beside RNNoise before they are heard.
 4. Gate (`gate.rs`): manual threshold, or VAD-driven with hysteresis
@@ -552,7 +569,7 @@ Vendored LiveKit and flutter-webrtc changes are marked `// ROOSTER`.
 ## Building and testing
 
 ```sh
-# 41 unit tests, 15 recording driven ones (tests/speaker_bleed.rs), 5 on
+# 42 unit tests, 15 recording driven ones (tests/speaker_bleed.rs), 5 on
 # knocking (tests/impulsive_noise.rs), 18 on background noise
 # (tests/background_noise.rs), 8 on bad samples (tests/non_finite.rs) and
 # 8 on the user's own voice (tests/voice_gate.rs)
@@ -633,7 +650,7 @@ tools/voice_dsp/native_noise_loop.sh
 | ... and music created with the microphone's options changes nothing, with nothing restored and through another negotiation | `native_noise_loop.sh` | ci `voice-dsp-native` |
 | Noise suppression turned off lets the room noise out, more than 6 dB louder than with WebRTC's suppressor | `native_noise_loop.sh` | ci `voice-dsp-native` |
 | After a mute during which a device listed before the microphone went away, the microphone is heard again, within 3 dB of before (`ReselectRecordingDevice`) | `native_noise_loop.sh` | ci `voice-dsp-native` |
-| A model that fails to load, or that is too slow for the machine, leaves RNNoise suppressing; a rebuild while the model loads in the background gets the model back; suppression holds through capture rate changes (48, 16, 32, 48 kHz) and through an input scale or gate mode out of range | `audio_dsp` unit tests | ci `test` |
+| A model that fails to load, or that is too slow for the machine, leaves RNNoise suppressing; one too slow for a moment comes back after its time out, and a thread held up now and then does not bench it; a rebuild while the model loads in the background gets the model back; suppression holds through capture rate changes (48, 16, 32, 48 kHz) and through an input scale or gate mode out of range | `audio_dsp` unit tests | ci `test` |
 | A DSP that runs without suppressing (a rate it cannot process, or suppression given up after its state kept going bad) is given up on like one that gets no audio, and WebRTC's suppressor takes over; a DSP that suppresses, has not reported yet, or was told not to is left alone | `microphone_noise_suppression_test.dart`, `tests/non_finite.rs` (the report flag it reads) | ci `test` |
 | `audio_dsp::Params` is written the same way in Rust, Dart's FFI struct and the browser worker (fields, order, byte offsets), and every key the worker reads is one `AudioDspSettings.toMap()` sends (a renamed key reads as 0 there: suppression off) | `check_contracts.py` | ci `voice-dsp` |
 | One NaN, infinity or huge input sample leaves the voice as it was a second later (it used to silence the DSP for good); state that went bad is rebuilt | `tests/non_finite.rs` | ci `test` |

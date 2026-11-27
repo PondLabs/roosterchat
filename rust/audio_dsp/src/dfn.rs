@@ -38,20 +38,42 @@ pub const LATENCY: usize = 3 * FRAME_SIZE;
 /// output is the settling noise.
 pub const WARMUP_BLOCKS: u32 = 20;
 
-/// What a block of inference may cost on average before the model gives way
-/// to RNNoise. The capture thread has 10 ms per block for everything;
-/// DeepFilterNet takes about 1 ms on a 2017 laptop.
+/// What a block of inference may cost before it counts as a slow one. The
+/// capture thread has 10 ms per block for everything; DeepFilterNet takes
+/// about 1 ms on a 2017 laptop.
 #[cfg(not(target_arch = "wasm32"))]
 pub const BUDGET: std::time::Duration = std::time::Duration::from_millis(6);
-/// Blocks timed before the average is judged; the first ones allocate.
+/// Blocks a verdict spans, one second. The model is too slow when most of
+/// them took over [`BUDGET`]: a thread that was held up (a screen share or
+/// a camera starting, the machine hitching) has a few very long blocks, not
+/// a majority of slow ones. An average over the last 64 blocks, which this
+/// used to be, was over budget after one stall of a third of a second.
 #[cfg(not(target_arch = "wasm32"))]
-const COST_SETTLE_BLOCKS: u32 = 100;
+const COST_WINDOW_BLOCKS: u32 = 100;
+/// Blocks the model sits out after a slow second, 5 s, doubling with each
+/// slow second that follows up to [`BENCH_BLOCKS_MAX`], 5 min. It used to
+/// be for the rest of the call: one busy moment (starting a screen share
+/// while a game runs) and knocks and claps got through until the user left
+/// and joined again.
+#[cfg(not(target_arch = "wasm32"))]
+pub const BENCH_BLOCKS: u32 = 500;
+#[cfg(not(target_arch = "wasm32"))]
+pub const BENCH_BLOCKS_MAX: u32 = 30_000;
+/// Seconds in a row the model has to keep up for before its next time out
+/// is a short one again.
+#[cfg(not(target_arch = "wasm32"))]
+const BENCH_FORGIVEN_WINDOWS: u32 = 60;
 
-/// A running average of inference time.
+/// Times the model's blocks and sits it out while the machine is too busy
+/// for it.
 #[cfg(not(target_arch = "wasm32"))]
 pub struct CostMeter {
     blocks: u32,
-    average_us: f32,
+    slow: u32,
+    /// Blocks the model still sits out.
+    bench: u32,
+    next_bench: u32,
+    good_windows: u32,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -59,17 +81,48 @@ impl CostMeter {
     pub fn new() -> CostMeter {
         CostMeter {
             blocks: 0,
-            average_us: 0.0,
+            slow: 0,
+            bench: 0,
+            next_bench: BENCH_BLOCKS,
+            good_windows: 0,
         }
     }
 
-    /// Adds one block's time. True when the average is over [`BUDGET`].
-    pub fn too_slow(&mut self, took: std::time::Duration) -> bool {
-        let us = took.as_secs_f32() * 1e6;
-        self.blocks = self.blocks.saturating_add(1);
-        // About the last 64 blocks.
-        self.average_us += (us - self.average_us) / self.blocks.min(64) as f32;
-        self.blocks >= COST_SETTLE_BLOCKS && self.average_us > BUDGET.as_secs_f32() * 1e6
+    /// Whether the model sits this block out.
+    pub fn benched(&self) -> bool {
+        self.bench > 0
+    }
+
+    /// One block sat out. True when it was the last one: the model runs
+    /// again from the next block.
+    pub fn sit_out(&mut self) -> bool {
+        self.bench = self.bench.saturating_sub(1);
+        self.bench == 0
+    }
+
+    /// Adds the time of a block the model ran. At the end of a second most
+    /// of whose blocks were over [`BUDGET`], the model is benched.
+    pub fn add(&mut self, took: std::time::Duration) {
+        self.blocks += 1;
+        if took > BUDGET {
+            self.slow += 1;
+        }
+        if self.blocks < COST_WINDOW_BLOCKS {
+            return;
+        }
+        let too_slow = self.slow * 2 > self.blocks;
+        self.blocks = 0;
+        self.slow = 0;
+        if too_slow {
+            self.bench = self.next_bench;
+            self.next_bench = (self.next_bench * 2).min(BENCH_BLOCKS_MAX);
+            self.good_windows = 0;
+        } else {
+            self.good_windows = self.good_windows.saturating_add(1);
+            if self.good_windows >= BENCH_FORGIVEN_WINDOWS {
+                self.next_bench = BENCH_BLOCKS;
+            }
+        }
     }
 }
 
