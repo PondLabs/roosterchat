@@ -4651,6 +4651,18 @@
     "type": "text",
     "placeholders": {}
   },
+  "promptXPostShowMore": "Show more",
+  "@promptXPostShowMore": {
+    "description": "Under the text of a long X post in its link preview, which shows only the first lines: shows all of the text, in place",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptXPostShowLess": "Show less",
+  "@promptXPostShowLess": {
+    "description": "Under the whole text of a long X post in its link preview: cuts it back to its first lines",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelAppPickAccount": "Pick Account",
   "@labelAppPickAccount": {
     "description": "Title of the dialog that asks which signed-in account to use, when there is more than one",

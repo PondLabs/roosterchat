@@ -1,0 +1,85 @@
+{
+ "code": 200,
+ "message": "OK",
+ "tweet": {
+  "url": "https://x.com/lexfridman/status/2110121501370564776",
+  "id": "2110121501370564776",
+  "text": "It's also on YouTube:\nhttps://youtube.com/watch?v=FGCP2F_7rQk",
+  "raw_text": {
+   "text": "It's also on YouTube:\nhttps://t.co/KIJPad00IK",
+   "display_text_range": [
+    0,
+    45
+   ],
+   "facets": [
+    {
+     "type": "url",
+     "indices": [
+      22,
+      45
+     ],
+     "original": "https://t.co/KIJPad00IK",
+     "replacement": "https://youtube.com/watch?v=FGCP2F_7rQk",
+     "display": "youtube.com/watch?v=FGCP2F…"
+    }
+   ]
+  },
+  "author": {
+   "screen_name": "lexfridman",
+   "url": "https://x.com/lexfridman",
+   "id": "427089628",
+   "followers": 5592809,
+   "following": 703,
+   "likes": 8270,
+   "media_count": 1270,
+   "name": "Lex Fridman",
+   "description": "Host of Lex Fridman Podcast.\nInterested in robots and humans.",
+   "raw_description": {
+    "text": "Host of Lex Fridman Podcast.\nInterested in robots and humans.",
+    "facets": []
+   },
+   "location": "Austin and Boston",
+   "banner_url": "https://pbs.twimg.com/profile_banners/427089628/1763664435",
+   "avatar_url": "https://pbs.twimg.com/profile_images/1854713863817646088/nTmsz7jR_200x200.jpg",
+   "joined": "Sat Dec 03 03:06:19 +0000 2011",
+   "protected": false,
+   "website": {
+    "url": "https://youtube.com/lexfridman",
+    "display_url": "youtube.com/lexfridman"
+   },
+   "verification": {
+    "verified": true,
+    "verified_at": null,
+    "type": "individual"
+   },
+   "avatar_color": null
+  },
+  "replies": 32,
+  "retweets": 41,
+  "likes": 501,
+  "bookmarks": 107,
+  "quotes": 2,
+  "created_at": "Tue Oct 13 21:32:24 +0000 2026",
+  "created_timestamp": 1791927144,
+  "possibly_sensitive": false,
+  "views": 103059,
+  "is_note_tweet": false,
+  "community_note": null,
+  "lang": "en",
+  "replying_to": "lexfridman",
+  "replying_to_status": "2110121495896695028",
+  "media": {
+   "external": {
+    "type": "video",
+    "url": "https://www.youtube.com/embed/FGCP2F_7rQk",
+    "width": 1280,
+    "height": 720,
+    "thumbnail_url": "https://img.youtube.com/vi/FGCP2F_7rQk/maxresdefault.jpg"
+   }
+  },
+  "twitter_card": "player",
+  "color": null,
+  "provider": "twitter",
+  "reposted_by": null
+ }
+}

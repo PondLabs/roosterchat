@@ -1,0 +1,118 @@
+{
+ "code": 200,
+ "message": "OK",
+ "tweet": {
+  "url": "https://x.com/NASA/status/2125270727028859059",
+  "id": "2125270727028859059",
+  "text": "A home away from home 🌕\n \nWe're building a Moon Base, where astronauts will live, work, and explore the lunar surface.\n \nLearn how @NASAMoonBase will be built and how it'll prepare us for future missions: https://go.nasa.gov/4AHWDSY",
+  "raw_text": {
+   "text": "A home away from home 🌕\n \nWe're building a Moon Base, where astronauts will live, work, and explore the lunar surface.\n \nLearn how @NASAMoonBase will be built and how it'll prepare us for future missions: https://t.co/MQ9you9cFg https://t.co/yyL5IjugCO",
+   "display_text_range": [
+    0,
+    228
+   ],
+   "facets": [
+    {
+     "type": "mention",
+     "indices": [
+      131,
+      144
+     ],
+     "original": "NASAMoonBase",
+     "id": "2031457713868386305"
+    },
+    {
+     "type": "url",
+     "indices": [
+      205,
+      228
+     ],
+     "original": "https://t.co/MQ9you9cFg",
+     "replacement": "https://go.nasa.gov/4AHWDSY",
+     "display": "go.nasa.gov/4AHWDSY"
+    },
+    {
+     "type": "media",
+     "indices": [
+      229,
+      252
+     ],
+     "id": "2125270724717764608",
+     "display": "pic.x.com/yyL5IjugCO",
+     "original": "https://t.co/yyL5IjugCO",
+     "replacement": "https://x.com/NASA/status/2125270727028859059/photo/1"
+    }
+   ]
+  },
+  "author": {
+   "screen_name": "NASA",
+   "url": "https://x.com/NASA",
+   "id": "11348282",
+   "followers": 92077861,
+   "following": 115,
+   "likes": 17125,
+   "media_count": 28268,
+   "name": "NASA",
+   "description": "Making the seemingly impossible, possible. ✨",
+   "raw_description": {
+    "text": "Making the seemingly impossible, possible. ✨",
+    "facets": []
+   },
+   "location": "Pale Blue Dot",
+   "banner_url": "https://pbs.twimg.com/profile_banners/11348282/1788992290",
+   "avatar_url": "https://pbs.twimg.com/profile_images/1321163587679784960/0ZxKlEKB_200x200.jpg",
+   "joined": "Wed Dec 19 20:20:32 +0000 2007",
+   "protected": false,
+   "website": {
+    "url": "http://www.nasa.gov/",
+    "display_url": "nasa.gov"
+   },
+   "verification": {
+    "verified": true,
+    "verified_at": null,
+    "type": "government"
+   },
+   "avatar_color": null
+  },
+  "replies": 538,
+  "retweets": 1039,
+  "likes": 8449,
+  "bookmarks": 585,
+  "quotes": 185,
+  "created_at": "Tue Nov 24 16:50:01 +0000 2026",
+  "created_timestamp": 1795539001,
+  "possibly_sensitive": false,
+  "views": 962165,
+  "is_note_tweet": false,
+  "community_note": null,
+  "lang": "en",
+  "replying_to": null,
+  "replying_to_status": null,
+  "media": {
+   "all": [
+    {
+     "type": "photo",
+     "id": "2125270724717764608",
+     "url": "https://pbs.twimg.com/media/HX56dsZW4AAYF6d.jpg?name=orig",
+     "width": 1280,
+     "height": 853,
+     "altText": "The heavily cratered Moon as seen by the Artemis II crew as they traveled around the Moon. The boundary between lunar day and night, or the terminator, is visible at the top of the image. This area is the South Pole-Aitken basin, the largest and oldest basin on the Moon."
+    }
+   ],
+   "photos": [
+    {
+     "type": "photo",
+     "id": "2125270724717764608",
+     "url": "https://pbs.twimg.com/media/HX56dsZW4AAYF6d.jpg?name=orig",
+     "width": 1280,
+     "height": 853,
+     "altText": "The heavily cratered Moon as seen by the Artemis II crew as they traveled around the Moon. The boundary between lunar day and night, or the terminator, is visible at the top of the image. This area is the South Pole-Aitken basin, the largest and oldest basin on the Moon."
+    }
+   ]
+  },
+  "twitter_card": "summary_large_image",
+  "color": null,
+  "provider": "twitter",
+  "reposted_by": null
+ }
+}

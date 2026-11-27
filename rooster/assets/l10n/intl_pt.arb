@@ -694,6 +694,8 @@
   "labelWidgetDebugMessages": "Mensagens",
   "labelWidgetDebugCapabilities": "Capacidades",
   "labelWidgetDebugLogs": "Logs",
+  "promptXPostShowMore": "Mostrar mais",
+  "promptXPostShowLess": "Mostrar menos",
   "labelAppPickAccount": "Escolher conta",
   "labelAppError": "Erro",
   "messageAppAreYouSure": "Tem certeza?",

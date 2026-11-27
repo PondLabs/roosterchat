@@ -10,15 +10,14 @@ import 'package:rooster/ui/atoms/lightbox.dart';
 import 'package:rooster/ui/atoms/message_attachment.dart';
 import 'package:rooster/ui/atoms/shimmer_loading.dart';
 import 'package:rooster/ui/molecules/video_player/video_playback_dialog.dart';
+import 'package:rooster/ui/molecules/x_post_text.dart';
 import 'package:rooster/utils/links/link_utils.dart';
 import 'package:rooster/client/components/video_embed/x_post.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:tiamat/atoms/avatar.dart';
 import 'package:tiamat/atoms/tile.dart';
-import 'package:tiamat/config/style/theme_extensions.dart';
 
 typedef VideoPreviewOpener = Future<void> Function(
   BuildContext context,
@@ -35,6 +34,7 @@ class UrlPreviewWidget extends StatefulWidget {
     this.provider,
     this.supportsOfficialEmbeds,
     this.networkImage,
+    this.onOpenXLink,
   });
 
   final UrlPreviewData? data;
@@ -48,6 +48,11 @@ class UrlPreviewWidget extends StatefulWidget {
   /// Loads the X card's avatars, the cells of a grid that holds a video and
   /// the quoted post's media instead of [NetworkImage], for tests.
   final ImageProvider Function(Uri url)? networkImage;
+
+  /// Opens what an X card links to besides the post it previews (a link,
+  /// @mention or #hashtag in the text, the quoted post, a post whose "+N"
+  /// hides a video) instead of [LinkUtils.open], for tests.
+  final void Function(Uri link)? onOpenXLink;
 
   static String get messageMediaVideoUnavailable =>
       intl.Intl.message("Video unavailable. Please try again.",
@@ -914,7 +919,9 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
       '3.24H4.298Z"/></svg>';
 
   /// iframely's X card: author, text, media, quoted post, date and counts.
-  /// The whole card opens the post. See docs/x-posts.md.
+  /// The whole card opens the post. The text shows whole, or folded under
+  /// a "Show more" button when it is very long ([XPostText]); links,
+  /// @mentions and #hashtags in it open on their own. See docs/x-posts.md.
   Widget _buildXCard(XPost post) {
     final theme = Theme.of(context);
     final secondary = theme.colorScheme.secondary;
@@ -963,11 +970,13 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
                     ),
                     if (post.text.isNotEmpty) ...[
                       const SizedBox(height: 8),
-                      Text.rich(
-                        TextSpan(children: _xText(post.text)),
+                      XPostText(
+                        post.text,
+                        name: 'x-post',
                         style: theme.textTheme.bodyMedium,
-                        maxLines: 12,
-                        overflow: TextOverflow.ellipsis,
+                        wholeLines: XPostText.postWholeLines,
+                        foldedLines: XPostText.postFoldedLines,
+                        onOpenLink: _openXLink,
                       ),
                     ],
                     if (media != null) ...[
@@ -1083,36 +1092,10 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
     );
   }
 
-  static final _xEntity = RegExp(r'https?://\S+|@\w{1,15}|#\w+');
-
-  /// The post's text with links, @mentions and #hashtags tappable.
-  // ponytail: recognizers are not disposed, like LinkSpan's.
-  List<InlineSpan> _xText(String text) {
-    final theme = Theme.of(context);
-    final linkColor =
-        theme.extension<ExtraColors>()?.linkColor ?? theme.colorScheme.primary;
-    final spans = <InlineSpan>[];
-    var last = 0;
-    for (final match in _xEntity.allMatches(text)) {
-      spans.add(TextSpan(text: text.substring(last, match.start)));
-      final entity = match[0]!;
-      final target = switch (entity[0]) {
-        '@' => Uri.https('x.com', '/${entity.substring(1)}'),
-        '#' => Uri.https('x.com', '/hashtag/${entity.substring(1)}'),
-        _ => Uri.tryParse(entity),
-      };
-      spans.add(TextSpan(
-        text: entity,
-        style: TextStyle(color: linkColor),
-        recognizer: target == null
-            ? null
-            : (TapGestureRecognizer()
-              ..onTap = () => LinkUtils.open(target, context: context)),
-      ));
-      last = match.end;
-    }
-    spans.add(TextSpan(text: text.substring(last)));
-    return spans;
+  void _openXLink(Uri link) {
+    final open = widget.onOpenXLink;
+    if (open != null) return open(link);
+    LinkUtils.open(link, context: context);
   }
 
   ImageProvider _networkImage(Uri url) =>
@@ -1132,7 +1115,7 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         key: const ValueKey('x-quote'),
-        onTap: () => LinkUtils.open(quote.url, context: context),
+        onTap: () => _openXLink(quote.url),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -1146,11 +1129,12 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
                   _xAuthor(quote, radius: 11),
                   if (quote.text.isNotEmpty) ...[
                     const SizedBox(height: 6),
-                    Text(
+                    XPostText(
                       quote.text,
+                      name: 'x-quote',
                       style: theme.textTheme.bodySmall,
-                      maxLines: 4,
-                      overflow: TextOverflow.ellipsis,
+                      wholeLines: XPostText.quoteWholeLines,
+                      foldedLines: XPostText.quoteFoldedLines,
                     ),
                   ],
                 ],
@@ -1349,9 +1333,7 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
           : UrlPreviewWidget.promptXQuoteOpenForMore(hidden),
       child: InkWell(
         key: ValueKey('$name-more'),
-        onTap: onlyPhotos
-            ? onOpenPhoto
-            : () => LinkUtils.open(post.url, context: context),
+        onTap: onlyPhotos ? onOpenPhoto : () => _openXLink(post.url),
         child: Stack(
           fit: StackFit.expand,
           children: [picture, _hiddenCount(hidden)],

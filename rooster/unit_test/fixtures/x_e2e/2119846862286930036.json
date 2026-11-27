@@ -1,0 +1,193 @@
+{
+ "code": 200,
+ "message": "OK",
+ "tweet": {
+  "url": "https://x.com/NASA/status/2119846862286930036",
+  "id": "2119846862286930036",
+  "text": "We had a great time at MAX POWER — and made a lot of news!\n\nWe're recruiting a new class of astronauts, making major advancements on the Moon Base, and challenging students to a $1 million design competition. Catch up with everything we announced at the festival: https://www.nasa.gov/general/max-power-nasas-inaugural-aerospace-expo-ignites-americas-future/",
+  "raw_text": {
+   "text": "We had a great time at MAX POWER — and made a lot of news!\n\nWe're recruiting a new class of astronauts, making major advancements on the Moon Base, and challenging students to a $1 million design competition. Catch up with everything we announced at the festival: https://t.co/GrfsD9eADy",
+   "display_text_range": [
+    0,
+    287
+   ],
+   "facets": [
+    {
+     "type": "url",
+     "indices": [
+      264,
+      287
+     ],
+     "original": "https://t.co/GrfsD9eADy",
+     "replacement": "https://www.nasa.gov/general/max-power-nasas-inaugural-aerospace-expo-ignites-americas-future/",
+     "display": "nasa.gov/general/max-po…"
+    },
+    {
+     "type": "media",
+     "indices": [
+      264,
+      287
+     ],
+     "id": "2119846813851078656",
+     "display": "pic.x.com/4lmhzUDKWn",
+     "original": "https://t.co/4lmhzUDKWn",
+     "replacement": "https://x.com/NASA/status/2119846862286930036/photo/1"
+    },
+    {
+     "type": "media",
+     "indices": [
+      264,
+      287
+     ],
+     "id": "2119846822604615680",
+     "display": "pic.x.com/4lmhzUDKWn",
+     "original": "https://t.co/4lmhzUDKWn",
+     "replacement": "https://x.com/NASA/status/2119846862286930036/photo/2"
+    },
+    {
+     "type": "media",
+     "indices": [
+      264,
+      287
+     ],
+     "id": "2119846835502096384",
+     "display": "pic.x.com/4lmhzUDKWn",
+     "original": "https://t.co/4lmhzUDKWn",
+     "replacement": "https://x.com/NASA/status/2119846862286930036/photo/3"
+    },
+    {
+     "type": "media",
+     "indices": [
+      264,
+      287
+     ],
+     "id": "2119846854389116928",
+     "display": "pic.x.com/4lmhzUDKWn",
+     "original": "https://t.co/4lmhzUDKWn",
+     "replacement": "https://x.com/NASA/status/2119846862286930036/photo/4"
+    }
+   ]
+  },
+  "author": {
+   "screen_name": "NASA",
+   "url": "https://x.com/NASA",
+   "id": "11348282",
+   "followers": 92077861,
+   "following": 115,
+   "likes": 17125,
+   "media_count": 28268,
+   "name": "NASA",
+   "description": "Making the seemingly impossible, possible. ✨",
+   "raw_description": {
+    "text": "Making the seemingly impossible, possible. ✨",
+    "facets": []
+   },
+   "location": "Pale Blue Dot",
+   "banner_url": "https://pbs.twimg.com/profile_banners/11348282/1788992290",
+   "avatar_url": "https://pbs.twimg.com/profile_images/1321163587679784960/0ZxKlEKB_200x200.jpg",
+   "joined": "Wed Dec 19 20:20:32 +0000 2007",
+   "protected": false,
+   "website": {
+    "url": "http://www.nasa.gov/",
+    "display_url": "nasa.gov"
+   },
+   "verification": {
+    "verified": true,
+    "verified_at": null,
+    "type": "government"
+   },
+   "avatar_color": null
+  },
+  "replies": 179,
+  "retweets": 228,
+  "likes": 1794,
+  "bookmarks": 81,
+  "quotes": 23,
+  "created_at": "Mon Nov 09 17:37:31 +0000 2026",
+  "created_timestamp": 1794245851,
+  "possibly_sensitive": false,
+  "views": 596025,
+  "is_note_tweet": true,
+  "community_note": null,
+  "lang": "en",
+  "replying_to": null,
+  "replying_to_status": null,
+  "media": {
+   "all": [
+    {
+     "type": "photo",
+     "id": "2119846813851078656",
+     "url": "https://pbs.twimg.com/media/HWs1ch3WUAAyaeo.jpg?name=orig",
+     "width": 6720,
+     "height": 4480,
+     "altText": "A plane trail forms a large heart shape in the blue sky to the left of the giant, cube-shaped Vehicle Assembly Building at NASA's Kennedy Space Center."
+    },
+    {
+     "type": "photo",
+     "id": "2119846822604615680",
+     "url": "https://pbs.twimg.com/media/HWs1dCeWsAAl3Fo.jpg?name=orig",
+     "width": 2048,
+     "height": 1366,
+     "altText": "A child wearing a green hoodie and virtual-reality goggles holds his right arm out, with the controller in his hand at the very front of the photo. Two adults watch behind him."
+    },
+    {
+     "type": "photo",
+     "id": "2119846835502096384",
+     "url": "https://pbs.twimg.com/media/HWs1dyhWoAAgNlr.jpg?name=orig",
+     "width": 8192,
+     "height": 5464,
+     "altText": "NASA astronaut (and Artemis III commander) Randy Bresnik, wearing his blue flight suit, sits atop a vintage blue-green Corvette and waves to the camera."
+    },
+    {
+     "type": "photo",
+     "id": "2119846854389116928",
+     "url": "https://pbs.twimg.com/media/HWs1e44XsAAZhkB.jpg?name=orig",
+     "width": 6720,
+     "height": 4480,
+     "altText": "Two planes, seen from a distance, fly in parallel, their trails forming white lines behind them. A bright Sun shines to their left."
+    }
+   ],
+   "photos": [
+    {
+     "type": "photo",
+     "id": "2119846813851078656",
+     "url": "https://pbs.twimg.com/media/HWs1ch3WUAAyaeo.jpg?name=orig",
+     "width": 6720,
+     "height": 4480,
+     "altText": "A plane trail forms a large heart shape in the blue sky to the left of the giant, cube-shaped Vehicle Assembly Building at NASA's Kennedy Space Center."
+    },
+    {
+     "type": "photo",
+     "id": "2119846822604615680",
+     "url": "https://pbs.twimg.com/media/HWs1dCeWsAAl3Fo.jpg?name=orig",
+     "width": 2048,
+     "height": 1366,
+     "altText": "A child wearing a green hoodie and virtual-reality goggles holds his right arm out, with the controller in his hand at the very front of the photo. Two adults watch behind him."
+    },
+    {
+     "type": "photo",
+     "id": "2119846835502096384",
+     "url": "https://pbs.twimg.com/media/HWs1dyhWoAAgNlr.jpg?name=orig",
+     "width": 8192,
+     "height": 5464,
+     "altText": "NASA astronaut (and Artemis III commander) Randy Bresnik, wearing his blue flight suit, sits atop a vintage blue-green Corvette and waves to the camera."
+    },
+    {
+     "type": "photo",
+     "id": "2119846854389116928",
+     "url": "https://pbs.twimg.com/media/HWs1e44XsAAZhkB.jpg?name=orig",
+     "width": 6720,
+     "height": 4480,
+     "altText": "Two planes, seen from a distance, fly in parallel, their trails forming white lines behind them. A bright Sun shines to their left."
+    }
+   ],
+   "mosaic": {
+    "type": "mosaic_photo"
+   }
+  },
+  "twitter_card": "summary_large_image",
+  "color": null,
+  "provider": "twitter",
+  "reposted_by": null
+ }
+}

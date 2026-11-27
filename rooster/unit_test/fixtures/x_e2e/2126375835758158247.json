@@ -1,0 +1,135 @@
+{
+ "code": 200,
+ "message": "OK",
+ "tweet": {
+  "url": "https://x.com/F1/status/2126375835758158247",
+  "id": "2126375835758158247",
+  "text": "Sparks flying everywhere you look this session! ✨\n\n#F1 #QatarGP",
+  "raw_text": {
+   "text": "Sparks flying everywhere you look this session! ✨\n\n#F1 #QatarGP https://t.co/cOgQKXQ5F7",
+   "display_text_range": [
+    0,
+    63
+   ],
+   "facets": [
+    {
+     "type": "hashtag",
+     "indices": [
+      51,
+      54
+     ],
+     "original": "F1"
+    },
+    {
+     "type": "hashtag",
+     "indices": [
+      55,
+      63
+     ],
+     "original": "QatarGP"
+    },
+    {
+     "type": "media",
+     "indices": [
+      64,
+      87
+     ],
+     "id": "2126375566819364864",
+     "display": "pic.x.com/cOgQKXQ5F7",
+     "original": "https://t.co/cOgQKXQ5F7",
+     "replacement": "https://x.com/F1/status/2126375835758158247/photo/1"
+    }
+   ]
+  },
+  "author": {
+   "screen_name": "F1",
+   "url": "https://x.com/F1",
+   "id": "69008563",
+   "followers": 12863927,
+   "following": 101,
+   "likes": 6118,
+   "media_count": 80448,
+   "name": "Formula 1",
+   "description": "In 2026 It's All To Drive For 🤩",
+   "raw_description": {
+    "text": "In 2026 It's All To Drive For 🤩",
+    "facets": []
+   },
+   "location": "",
+   "banner_url": "https://pbs.twimg.com/profile_banners/69008563/1786885278",
+   "avatar_url": "https://pbs.twimg.com/profile_images/2088954775534514177/8jPk8bwL_200x200.jpg",
+   "joined": "Wed Aug 26 15:19:37 +0000 2009",
+   "protected": false,
+   "website": {
+    "url": "https://f1.com/",
+    "display_url": "f1.com"
+   },
+   "verification": {
+    "verified": true,
+    "verified_at": null,
+    "type": "organization"
+   },
+   "avatar_color": null
+  },
+  "replies": 5,
+  "retweets": 44,
+  "likes": 364,
+  "bookmarks": 9,
+  "quotes": 1,
+  "created_at": "Fri Nov 27 18:01:20 +0000 2026",
+  "created_timestamp": 1795802480,
+  "possibly_sensitive": false,
+  "views": 88786,
+  "is_note_tweet": false,
+  "community_note": null,
+  "lang": "en",
+  "replying_to": null,
+  "replying_to_status": null,
+  "media": {
+   "all": [
+    {
+     "id": "2126375566819364864",
+     "url": "https://video.twimg.com/tweet_video/HYJnT99WkAA5N8T.mp4",
+     "thumbnail_url": "https://pbs.twimg.com/tweet_video_thumb/HYJnT99WkAA5N8T.jpg",
+     "duration": 0,
+     "width": 480,
+     "height": 270,
+     "format": "video/mp4",
+     "type": "gif",
+     "publisher": null,
+     "variants": [
+      {
+       "url": "https://video.twimg.com/tweet_video/HYJnT99WkAA5N8T.mp4",
+       "bitrate": 0,
+       "content_type": "video/mp4"
+      }
+     ]
+    }
+   ],
+   "videos": [
+    {
+     "id": "2126375566819364864",
+     "url": "https://video.twimg.com/tweet_video/HYJnT99WkAA5N8T.mp4",
+     "thumbnail_url": "https://pbs.twimg.com/tweet_video_thumb/HYJnT99WkAA5N8T.jpg",
+     "duration": 0,
+     "width": 480,
+     "height": 270,
+     "format": "video/mp4",
+     "type": "gif",
+     "publisher": null,
+     "variants": [
+      {
+       "url": "https://video.twimg.com/tweet_video/HYJnT99WkAA5N8T.mp4",
+       "bitrate": 0,
+       "content_type": "video/mp4"
+      }
+     ]
+    }
+   ]
+  },
+  "twitter_card": "player",
+  "color": null,
+  "provider": "twitter",
+  "reposted_by": null
+ }
+}

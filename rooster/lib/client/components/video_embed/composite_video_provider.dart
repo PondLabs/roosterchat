@@ -29,6 +29,11 @@ class CompositeVideoProvider {
     _providers.insert(0, provider);
   }
 
+  /// Takes back a provider given to [registerProvider].
+  void unregisterProvider(VideoProvider provider) {
+    _providers.remove(provider);
+  }
+
   bool canHandle(Uri uri) {
     for (final provider in _providers) {
       if (provider.canHandle(uri)) return true;

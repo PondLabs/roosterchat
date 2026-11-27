@@ -1,0 +1,218 @@
+{
+ "code": 200,
+ "message": "OK",
+ "tweet": {
+  "url": "https://x.com/g1/status/2126399250292420812",
+  "id": "2126399250292420812",
+  "text": "Protesto - Servidores públicos e representantes de sindicatos ocuparam o plenário da Câmara Municipal de São Leopoldo, na Região Metropolitana de Porto Alegre, para tentar barrar a votação de dois projetos ligados à Reforma da Previdência Municipal, que estavam previstos na pauta de quinta-feira (26).\n\nA sessão ordinária foi encerrada após o tumulto. De acordo com a Casa, a decisão foi tomada por motivo de segurança diante das ocorrências registradas durante os trabalhos legislativos.\n\nO momento foi transmitido ao vivo. As imagens mostram o tumulto no plenário, em meio a gritos, empurrões e apitos durante o protesto.\n\n➡️ A pauta que trataria das propostas foi retirada e deverá ser apreciada em uma nova reunião. A Câmara informou que a data ainda será definida e posteriormente comunicada aos vereadores e ao público interessado.\n\nEm nota oficial, o Legislativo afirmou que também está levantando possíveis prejuízos ao patrimônio público e impactos ao funcionamento regular das atividades parlamentares.\n\nDurante a manifestação, a Brigada Militar acompanhou a mobilização com apoio de equipes da Força Tática, da Guarda Civil Municipal e da Polícia Civil. Ninguém foi preso.\n\nSaiba mais no #g1.\n\n#confusão #reformadaprevidência #g1riograndedosul #protesto #notícias",
+  "raw_text": {
+   "text": "Protesto - Servidores públicos e representantes de sindicatos ocuparam o plenário da Câmara Municipal de São Leopoldo, na Região Metropolitana de Porto Alegre, para tentar barrar a votação de dois projetos ligados à Reforma da Previdência Municipal, que estavam previstos na pauta de quinta-feira (26).\n\nA sessão ordinária foi encerrada após o tumulto. De acordo com a Casa, a decisão foi tomada por motivo de segurança diante das ocorrências registradas durante os trabalhos legislativos.\n\nO momento foi transmitido ao vivo. As imagens mostram o tumulto no plenário, em meio a gritos, empurrões e apitos durante o protesto.\n\n➡️ A pauta que trataria das propostas foi retirada e deverá ser apreciada em uma nova reunião. A Câmara informou que a data ainda será definida e posteriormente comunicada aos vereadores e ao público interessado.\n\nEm nota oficial, o Legislativo afirmou que também está levantando possíveis prejuízos ao patrimônio público e impactos ao funcionamento regular das atividades parlamentares.\n\nDurante a manifestação, a Brigada Militar acompanhou a mobilização com apoio de equipes da Força Tática, da Guarda Civil Municipal e da Polícia Civil. Ninguém foi preso.\n\nSaiba mais no #g1.\n\n#confusão #reformadaprevidência #g1riograndedosul #protesto #notícias",
+   "display_text_range": [
+    0,
+    1275
+   ],
+   "facets": [
+    {
+     "type": "media",
+     "indices": [
+      281,
+      304
+     ],
+     "id": "2126398943114280960",
+     "display": "pic.x.com/Oh44WRtKhP",
+     "original": "https://t.co/Oh44WRtKhP",
+     "replacement": "https://x.com/g1/status/2126399250292420812/video/1"
+    },
+    {
+     "type": "hashtag",
+     "indices": [
+      1200,
+      1203
+     ],
+     "original": "g1"
+    },
+    {
+     "type": "hashtag",
+     "indices": [
+      1206,
+      1215
+     ],
+     "original": "confusão"
+    },
+    {
+     "type": "hashtag",
+     "indices": [
+      1216,
+      1237
+     ],
+     "original": "reformadaprevidência"
+    },
+    {
+     "type": "hashtag",
+     "indices": [
+      1238,
+      1255
+     ],
+     "original": "g1riograndedosul"
+    },
+    {
+     "type": "hashtag",
+     "indices": [
+      1256,
+      1265
+     ],
+     "original": "protesto"
+    },
+    {
+     "type": "hashtag",
+     "indices": [
+      1266,
+      1275
+     ],
+     "original": "notícias"
+    }
+   ]
+  },
+  "author": {
+   "screen_name": "g1",
+   "url": "https://x.com/g1",
+   "id": "8802752",
+   "followers": 14076693,
+   "following": 67,
+   "likes": 20,
+   "media_count": 346984,
+   "name": "g1",
+   "description": "Siga o g1 nas redes sociais:\nhttp://empli.fi/g1/",
+   "raw_description": {
+    "text": "Siga o g1 nas redes sociais:\nhttps://t.co/Z0QGNc44I7",
+    "facets": [
+     {
+      "type": "url",
+      "indices": [
+       29,
+       52
+      ],
+      "original": "https://t.co/Z0QGNc44I7",
+      "replacement": "http://empli.fi/g1/",
+      "display": "empli.fi/g1/"
+     }
+    ]
+   },
+   "location": "Brasil",
+   "banner_url": "https://pbs.twimg.com/profile_banners/8802752/1665518338",
+   "avatar_url": "https://pbs.twimg.com/profile_images/2080027823415140352/TDhf6g0B_200x200.jpg",
+   "joined": "Tue Sep 11 04:05:49 +0000 2007",
+   "protected": false,
+   "website": {
+    "url": "http://g1.com.br",
+    "display_url": "g1.com.br"
+   },
+   "verification": {
+    "verified": true,
+    "verified_at": null,
+    "type": "organization"
+   },
+   "avatar_color": null
+  },
+  "replies": 1,
+  "retweets": 0,
+  "likes": 3,
+  "bookmarks": 0,
+  "quotes": 1,
+  "created_at": "Fri Nov 27 19:34:22 +0000 2026",
+  "created_timestamp": 1795808062,
+  "possibly_sensitive": false,
+  "views": 4702,
+  "is_note_tweet": true,
+  "community_note": null,
+  "lang": "pt",
+  "replying_to": null,
+  "replying_to_status": null,
+  "media": {
+   "all": [
+    {
+     "id": "2126398943114280960",
+     "url": "https://video.twimg.com/amplify_video/2126398943114280960/vid/avc1/1080x1920/IRIRW_Gv23B0IE2v.mp4?tag=29",
+     "thumbnail_url": "https://pbs.twimg.com/amplify_video_thumb/2126398943114280960/img/RV50qPcs90ce6bzj.jpg",
+     "duration": 61.185,
+     "width": 1080,
+     "height": 1920,
+     "format": "video/mp4",
+     "type": "video",
+     "publisher": null,
+     "variants": [
+      {
+       "url": "https://video.twimg.com/amplify_video/2126398943114280960/pl/egoq9G8GygbdR7-M.m3u8?tag=29&v=d93",
+       "bitrate": 0,
+       "content_type": "application/x-mpegURL"
+      },
+      {
+       "url": "https://video.twimg.com/amplify_video/2126398943114280960/vid/avc1/320x568/j26cFXe1Kh9-z7gH.mp4?tag=29",
+       "bitrate": 632000,
+       "content_type": "video/mp4"
+      },
+      {
+       "url": "https://video.twimg.com/amplify_video/2126398943114280960/vid/avc1/480x852/iz77OMtquoOafIy1.mp4?tag=29",
+       "bitrate": 950000,
+       "content_type": "video/mp4"
+      },
+      {
+       "url": "https://video.twimg.com/amplify_video/2126398943114280960/vid/avc1/720x1280/u0o7nGlwM43aRiTi.mp4?tag=29",
+       "bitrate": 2176000,
+       "content_type": "video/mp4"
+      },
+      {
+       "url": "https://video.twimg.com/amplify_video/2126398943114280960/vid/avc1/1080x1920/IRIRW_Gv23B0IE2v.mp4?tag=29",
+       "bitrate": 10368000,
+       "content_type": "video/mp4"
+      }
+     ]
+    }
+   ],
+   "videos": [
+    {
+     "id": "2126398943114280960",
+     "url": "https://video.twimg.com/amplify_video/2126398943114280960/vid/avc1/1080x1920/IRIRW_Gv23B0IE2v.mp4?tag=29",
+     "thumbnail_url": "https://pbs.twimg.com/amplify_video_thumb/2126398943114280960/img/RV50qPcs90ce6bzj.jpg",
+     "duration": 61.185,
+     "width": 1080,
+     "height": 1920,
+     "format": "video/mp4",
+     "type": "video",
+     "publisher": null,
+     "variants": [
+      {
+       "url": "https://video.twimg.com/amplify_video/2126398943114280960/pl/egoq9G8GygbdR7-M.m3u8?tag=29&v=d93",
+       "bitrate": 0,
+       "content_type": "application/x-mpegURL"
+      },
+      {
+       "url": "https://video.twimg.com/amplify_video/2126398943114280960/vid/avc1/320x568/j26cFXe1Kh9-z7gH.mp4?tag=29",
+       "bitrate": 632000,
+       "content_type": "video/mp4"
+      },
+      {
+       "url": "https://video.twimg.com/amplify_video/2126398943114280960/vid/avc1/480x852/iz77OMtquoOafIy1.mp4?tag=29",
+       "bitrate": 950000,
+       "content_type": "video/mp4"
+      },
+      {
+       "url": "https://video.twimg.com/amplify_video/2126398943114280960/vid/avc1/720x1280/u0o7nGlwM43aRiTi.mp4?tag=29",
+       "bitrate": 2176000,
+       "content_type": "video/mp4"
+      },
+      {
+       "url": "https://video.twimg.com/amplify_video/2126398943114280960/vid/avc1/1080x1920/IRIRW_Gv23B0IE2v.mp4?tag=29",
+       "bitrate": 10368000,
+       "content_type": "video/mp4"
+      }
+     ]
+    }
+   ]
+  },
+  "twitter_card": "player",
+  "color": null,
+  "provider": "twitter",
+  "reposted_by": null
+ }
+}
