@@ -1,0 +1,125 @@
+{
+ "code": 200,
+ "message": "OK",
+ "tweet": {
+  "url": "https://x.com/CazeTVOficial/status/2126364920489169125",
+  "id": "2126364920489169125",
+  "text": "O ABEL FERREIRA FALOU DO FLAMENGO! 👀\n\nPerguntado sobre a disputa pela tríplice coroa e a perda do Brasileirão, o técnico do Palmeiras disse que o Flamengo caiu na Libertadores e na Copa do Brasil e, por isso, conseguiu se preparar melhor pro Campeonato Brasileiro!",
+  "raw_text": {
+   "text": "O ABEL FERREIRA FALOU DO FLAMENGO! 👀\n\nPerguntado sobre a disputa pela tríplice coroa e a perda do Brasileirão, o técnico do Palmeiras disse que o Flamengo caiu na Libertadores e na Copa do Brasil e, por isso, conseguiu se preparar melhor pro Campeonato Brasileiro! https://t.co/swr9X7H26A",
+   "display_text_range": [
+    0,
+    264
+   ],
+   "facets": [
+    {
+     "type": "media",
+     "indices": [
+      265,
+      288
+     ],
+     "id": "2126364890587607040",
+     "display": "pic.x.com/swr9X7H26A",
+     "original": "https://t.co/swr9X7H26A",
+     "replacement": "https://x.com/CazeTVOficial/status/2126364920489169125/photo/1"
+    },
+    {
+     "type": "media",
+     "indices": [
+      265,
+      288
+     ],
+     "id": "2126364897634062336",
+     "display": "pic.x.com/swr9X7H26A",
+     "original": "https://t.co/swr9X7H26A",
+     "replacement": "https://x.com/CazeTVOficial/status/2126364920489169125/photo/2"
+    }
+   ]
+  },
+  "author": {
+   "screen_name": "CazeTVOficial",
+   "url": "https://x.com/CazeTVOficial",
+   "id": "1629179760361279488",
+   "followers": 494048,
+   "following": 248,
+   "likes": 1191,
+   "media_count": 31575,
+   "name": "CazéTV",
+   "description": "Perfil oficial da CazéTV. \n\nE-mail: contato@caze.tv",
+   "raw_description": {
+    "text": "Perfil oficial da CazéTV. \n\nE-mail: contato@caze.tv",
+    "facets": []
+   },
+   "location": "",
+   "banner_url": "https://pbs.twimg.com/profile_banners/1629179760361279488/1793889027",
+   "avatar_url": "https://pbs.twimg.com/profile_images/2079696581566029824/H4wZylCo_200x200.jpg",
+   "joined": "Fri Feb 24 18:02:17 +0000 2023",
+   "protected": false,
+   "website": {
+    "url": "https://linktr.ee/VemPraCazeTV",
+    "display_url": "linktr.ee/VemPraCazeTV"
+   },
+   "verification": {
+    "verified": true,
+    "verified_at": null,
+    "type": "individual"
+   },
+   "avatar_color": null
+  },
+  "replies": 10,
+  "retweets": 1,
+  "likes": 25,
+  "bookmarks": 0,
+  "quotes": 1,
+  "created_at": "Fri Nov 27 17:17:57 +0000 2026",
+  "created_timestamp": 1795799877,
+  "possibly_sensitive": false,
+  "views": 4542,
+  "is_note_tweet": false,
+  "community_note": null,
+  "lang": "pt",
+  "replying_to": null,
+  "replying_to_status": null,
+  "media": {
+   "all": [
+    {
+     "type": "photo",
+     "id": "2126364890587607040",
+     "url": "https://pbs.twimg.com/media/HYJdmh5WMAAiDB-.jpg?name=orig",
+     "width": 1080,
+     "height": 1350
+    },
+    {
+     "type": "photo",
+     "id": "2126364897634062336",
+     "url": "https://pbs.twimg.com/media/HYJdm8JWkAAdxqV.jpg?name=orig",
+     "width": 1080,
+     "height": 1350
+    }
+   ],
+   "photos": [
+    {
+     "type": "photo",
+     "id": "2126364890587607040",
+     "url": "https://pbs.twimg.com/media/HYJdmh5WMAAiDB-.jpg?name=orig",
+     "width": 1080,
+     "height": 1350
+    },
+    {
+     "type": "photo",
+     "id": "2126364897634062336",
+     "url": "https://pbs.twimg.com/media/HYJdm8JWkAAdxqV.jpg?name=orig",
+     "width": 1080,
+     "height": 1350
+    }
+   ],
+   "mosaic": {
+    "type": "mosaic_photo"
+   }
+  },
+  "twitter_card": "summary_large_image",
+  "color": null,
+  "provider": "twitter",
+  "reposted_by": null
+ }
+}

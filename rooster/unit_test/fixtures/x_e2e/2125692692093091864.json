@@ -1,0 +1,154 @@
+{
+ "code": 200,
+ "message": "OK",
+ "tweet": {
+  "url": "https://x.com/folha/status/2125692692093091864",
+  "id": "2125692692093091864",
+  "text": "As conversas para uma posse de Lula que entre para a história estão a pleno vapor. Organizada pela primeira-dama Rosângela da Silva, a Janja, ela pode ter a presença de astros internacionais de primeira grandeza, além de músicos brasileiros que também querem subir ao palco para festejar a vitória do petista. A previsão é que o público chegue a 500 mil pessoas. Falta ainda, no entanto, algo fundamental: saber quem vai pagar a festa, de dimensões que prometem ser inéditas.\n\n📲Leia mais na #Folha: https://mla.bs/99d773beb0\n\n📷 Pedro Ladeira - 1º.jan.23/Folhapress\n📝 Mônica Bergamo\n\n#PraTodosVerem: Palco do Festival do Futuro, na posse do presidente Lula, em 2023",
+  "raw_text": {
+   "text": "As conversas para uma posse de Lula que entre para a história estão a pleno vapor. Organizada pela primeira-dama Rosângela da Silva, a Janja, ela pode ter a presença de astros internacionais de primeira grandeza, além de músicos brasileiros que também querem subir ao palco para festejar a vitória do petista. A previsão é que o público chegue a 500 mil pessoas. Falta ainda, no entanto, algo fundamental: saber quem vai pagar a festa, de dimensões que prometem ser inéditas.\n\n📲Leia mais na #Folha: https://t.co/1hDNd6TPmA\n\n📷 Pedro Ladeira - 1º.jan.23/Folhapress\n📝 Mônica Bergamo\n\n#PraTodosVerem: Palco do Festival do Futuro, na posse do presidente Lula, em 2023",
+   "display_text_range": [
+    0,
+    665
+   ],
+   "facets": [
+    {
+     "type": "media",
+     "indices": [
+      279,
+      302
+     ],
+     "id": "2125692586828410880",
+     "display": "pic.x.com/or91HIAN4P",
+     "original": "https://t.co/or91HIAN4P",
+     "replacement": "https://x.com/folha/status/2125692692093091864/photo/1"
+    },
+    {
+     "type": "hashtag",
+     "indices": [
+      491,
+      497
+     ],
+     "original": "Folha"
+    },
+    {
+     "type": "url",
+     "indices": [
+      499,
+      522
+     ],
+     "original": "https://t.co/1hDNd6TPmA",
+     "replacement": "https://mla.bs/99d773beb0",
+     "display": "mla.bs/99d773beb0"
+    },
+    {
+     "type": "hashtag",
+     "indices": [
+      581,
+      595
+     ],
+     "original": "PraTodosVerem"
+    }
+   ]
+  },
+  "author": {
+   "screen_name": "folha",
+   "url": "https://x.com/folha",
+   "id": "14594813",
+   "followers": 8214817,
+   "following": 157676,
+   "likes": 224,
+   "media_count": 143781,
+   "name": "Folha de S.Paulo",
+   "description": "Um jornal em defesa da energia limpa\n\nNewsletters: http://mla.bs/aa11a8c5\nAssine: http://mla.bs/e085c4e6\nWhatsApp: http://folha.com/wp",
+   "raw_description": {
+    "text": "Um jornal em defesa da energia limpa\n\nNewsletters: https://t.co/NVUcVDAjzm\nAssine: https://t.co/OJOZUvKPWW\nWhatsApp: https://t.co/zAAuCdbnn8",
+    "facets": [
+     {
+      "type": "url",
+      "indices": [
+       51,
+       74
+      ],
+      "original": "https://t.co/NVUcVDAjzm",
+      "replacement": "http://mla.bs/aa11a8c5",
+      "display": "mla.bs/aa11a8c5"
+     },
+     {
+      "type": "url",
+      "indices": [
+       83,
+       106
+      ],
+      "original": "https://t.co/OJOZUvKPWW",
+      "replacement": "http://mla.bs/e085c4e6",
+      "display": "mla.bs/e085c4e6"
+     },
+     {
+      "type": "url",
+      "indices": [
+       117,
+       140
+      ],
+      "original": "https://t.co/zAAuCdbnn8",
+      "replacement": "http://folha.com/wp",
+      "display": "folha.com/wp"
+     }
+    ]
+   },
+   "location": "São Paulo, Brazil",
+   "banner_url": "https://pbs.twimg.com/profile_banners/14594813/1651254420",
+   "avatar_url": "https://pbs.twimg.com/profile_images/1895068664161828864/Dsx8poRS_200x200.jpg",
+   "joined": "Wed Apr 30 02:33:39 +0000 2008",
+   "protected": false,
+   "website": {
+    "url": "http://www.folha.com.br",
+    "display_url": "folha.com.br"
+   },
+   "verification": {
+    "verified": true,
+    "verified_at": null,
+    "type": "organization"
+   },
+   "avatar_color": null
+  },
+  "replies": 70,
+  "retweets": 5,
+  "likes": 23,
+  "bookmarks": 4,
+  "quotes": 3,
+  "created_at": "Wed Nov 25 20:46:45 +0000 2026",
+  "created_timestamp": 1795639605,
+  "possibly_sensitive": false,
+  "views": 6208,
+  "is_note_tweet": true,
+  "community_note": null,
+  "lang": "pt",
+  "replying_to": null,
+  "replying_to_status": null,
+  "media": {
+   "all": [
+    {
+     "type": "photo",
+     "id": "2125692586828410880",
+     "url": "https://pbs.twimg.com/media/HX_6JTOWsAAJkKA.jpg?name=orig",
+     "width": 1080,
+     "height": 1350
+    }
+   ],
+   "photos": [
+    {
+     "type": "photo",
+     "id": "2125692586828410880",
+     "url": "https://pbs.twimg.com/media/HX_6JTOWsAAJkKA.jpg?name=orig",
+     "width": 1080,
+     "height": 1350
+    }
+   ]
+  },
+  "twitter_card": "summary_large_image",
+  "color": null,
+  "provider": "twitter",
+  "reposted_by": null
+ }
+}

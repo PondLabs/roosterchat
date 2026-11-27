@@ -1,0 +1,166 @@
+{
+ "code": 200,
+ "message": "OK",
+ "tweet": {
+  "url": "https://x.com/MKBHD/status/2121423916006617237",
+  "id": "2121423916006617237",
+  "text": "The memes are everywhere, so let’s go back over the bet: Cybercab publicly available for under $30k by the end of 2026\n\nMy hair is safe for several reasons\n1: No deliveries yet. But they’re estimating starting in December so that’s neat\n2: Invite only, not actually publicly available yet\n3: You can’t actually use it as a cab(??!) It’s limited to private use only. Inside the existing geofenced locations. It’s a paperweight if I take this thing home. That’s one’s not actually part of the bet but yeah not exactly what was promised in this first wave\n\nHey @grok, set a timer for 48 days from now",
+  "raw_text": {
+   "text": "The memes are everywhere, so let’s go back over the bet: Cybercab publicly available for under $30k by the end of 2026\n\nMy hair is safe for several reasons\n1: No deliveries yet. But they’re estimating starting in December so that’s neat\n2: Invite only, not actually publicly available yet\n3: You can’t actually use it as a cab(??!) It’s limited to private use only. Inside the existing geofenced locations. It’s a paperweight if I take this thing home. That’s one’s not actually part of the bet but yeah not exactly what was promised in this first wave\n\nHey @grok, set a timer for 48 days from now",
+   "display_text_range": [
+    0,
+    597
+   ],
+   "facets": [
+    {
+     "type": "mention",
+     "indices": [
+      558,
+      563
+     ],
+     "original": "grok",
+     "id": "1720665183188922368"
+    }
+   ]
+  },
+  "author": {
+   "screen_name": "MKBHD",
+   "url": "https://x.com/MKBHD",
+   "id": "29873662",
+   "followers": 6167672,
+   "following": 487,
+   "likes": 30439,
+   "media_count": 8958,
+   "name": "Marques Brownlee",
+   "description": "Web Video Producer | ⋈ | Pro Ultimate Frisbee Player | Host of @WVFRM @TheStudio",
+   "raw_description": {
+    "text": "Web Video Producer | ⋈ | Pro Ultimate Frisbee Player | Host of @WVFRM @TheStudio",
+    "facets": []
+   },
+   "location": "NYC",
+   "banner_url": "https://pbs.twimg.com/profile_banners/29873662/1642786557",
+   "avatar_url": "https://pbs.twimg.com/profile_images/1990855181785759745/CP3H7WsL_200x200.jpg",
+   "joined": "Thu Apr 09 00:50:00 +0000 2009",
+   "protected": false,
+   "website": {
+    "url": "http://MKBHD.com",
+    "display_url": "MKBHD.com"
+   },
+   "verification": {
+    "verified": true,
+    "verified_at": null,
+    "type": "individual"
+   },
+   "avatar_color": null
+  },
+  "replies": 2363,
+  "retweets": 491,
+  "likes": 19210,
+  "bookmarks": 1717,
+  "quotes": 251,
+  "created_at": "Sat Nov 14 02:04:10 +0000 2026",
+  "created_timestamp": 1794621850,
+  "views": 5263090,
+  "is_note_tweet": true,
+  "community_note": null,
+  "lang": "en",
+  "replying_to": null,
+  "replying_to_status": null,
+  "quote": {
+   "url": "https://x.com/MKBHD/status/2121420350160302304",
+   "id": "2121420350160302304",
+   "text": "Alright chat I’m in. Here’s the deal\n\nCybercab order page is live. Invite only. Must accept delivery to one of these cities in Texas. Only operates in those existing geofenced areas. Requires a $300 monthly subscription to operate. One vehicle per customer. “Estimated delivery” December",
+   "raw_text": {
+    "text": "Alright chat I’m in. Here’s the deal\n\nCybercab order page is live. Invite only. Must accept delivery to one of these cities in Texas. Only operates in those existing geofenced areas. Requires a $300 monthly subscription to operate. One vehicle per customer. “Estimated delivery” December",
+    "display_text_range": [
+     0,
+     287
+    ],
+    "facets": [
+     {
+      "type": "media",
+      "indices": [
+       279,
+       302
+      ],
+      "id": "2121420346586783744",
+      "display": "pic.x.com/JEzAZpngoA",
+      "original": "https://t.co/JEzAZpngoA",
+      "replacement": "https://x.com/MKBHD/status/2121420350160302304/photo/1"
+     }
+    ]
+   },
+   "author": {
+    "screen_name": "MKBHD",
+    "url": "https://x.com/MKBHD",
+    "id": "29873662",
+    "followers": 6167672,
+    "following": 487,
+    "likes": 30439,
+    "media_count": 8958,
+    "name": "Marques Brownlee",
+    "description": "Web Video Producer | ⋈ | Pro Ultimate Frisbee Player | Host of @WVFRM @TheStudio",
+    "raw_description": {
+     "text": "Web Video Producer | ⋈ | Pro Ultimate Frisbee Player | Host of @WVFRM @TheStudio",
+     "facets": []
+    },
+    "location": "NYC",
+    "banner_url": "https://pbs.twimg.com/profile_banners/29873662/1642786557",
+    "avatar_url": "https://pbs.twimg.com/profile_images/1990855181785759745/CP3H7WsL_200x200.jpg",
+    "joined": "Thu Apr 09 00:50:00 +0000 2009",
+    "protected": false,
+    "website": {
+     "url": "http://MKBHD.com",
+     "display_url": "MKBHD.com"
+    },
+    "verification": {
+     "verified": true,
+     "verified_at": null,
+     "type": "individual"
+    },
+    "avatar_color": null
+   },
+   "replies": 1396,
+   "retweets": 660,
+   "likes": 25169,
+   "bookmarks": 2596,
+   "quotes": 259,
+   "created_at": "Sat Nov 14 01:50:00 +0000 2026",
+   "created_timestamp": 1794621000,
+   "possibly_sensitive": false,
+   "views": 6381749,
+   "is_note_tweet": true,
+   "community_note": null,
+   "lang": "en",
+   "replying_to": null,
+   "replying_to_status": null,
+   "media": {
+    "all": [
+     {
+      "type": "photo",
+      "id": "2121420346586783744",
+      "url": "https://pbs.twimg.com/media/HXDMkMGXYAAbTBn.jpg?name=orig",
+      "width": 2048,
+      "height": 1492
+     }
+    ],
+    "photos": [
+     {
+      "type": "photo",
+      "id": "2121420346586783744",
+      "url": "https://pbs.twimg.com/media/HXDMkMGXYAAbTBn.jpg?name=orig",
+      "width": 2048,
+      "height": 1492
+     }
+    ]
+   },
+   "twitter_card": "summary_large_image",
+   "color": null,
+   "provider": "twitter",
+   "reposted_by": null
+  },
+  "color": null,
+  "provider": "twitter",
+  "reposted_by": null
+ }
+}

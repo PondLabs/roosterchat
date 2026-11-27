@@ -66,6 +66,27 @@ class XPost {
     return size.of(item.url);
   }
 
+  // A hashtag takes any script's letters, marks and digits. `\w` is ASCII
+  // in a Dart RegExp: with it "#notícias" was a link only up to "#not", and
+  // opened that other hashtag.
+  static final _link =
+      RegExp(r'https?://\S+|@\w{1,15}|#[\p{L}\p{M}\p{N}_]+', unicode: true);
+
+  /// The links, @mentions and #hashtags of [text], a post's text, in the
+  /// order they appear, each with what a tap on it opens: the link itself,
+  /// the account's page, the hashtag's page.
+  static List<XTextLink> linksIn(String text) => [
+        for (final match in _link.allMatches(text))
+          if (_linkTarget(match[0]!) case final target?)
+            (start: match.start, end: match.end, target: target),
+      ];
+
+  static Uri? _linkTarget(String entity) => switch (entity[0]) {
+        '@' => Uri.https('x.com', '/${entity.substring(1)}'),
+        '#' => Uri.https('x.com', '/hashtag/${entity.substring(1)}'),
+        _ => Uri.tryParse(entity),
+      };
+
   /// Null when [json] is not a status (missing author or url).
   static XPost? fromFxJson(Map<String, dynamic> json) {
     final author = json['author'];
@@ -106,6 +127,11 @@ class XPost {
     );
   }
 }
+
+/// A link, @mention or #hashtag in a post's text: where it is in the text
+/// ([start] to [end], as [String.substring] takes them) and what a tap on
+/// it opens.
+typedef XTextLink = ({int start, int end, Uri target});
 
 enum XMediaType { photo, video, gif }
 

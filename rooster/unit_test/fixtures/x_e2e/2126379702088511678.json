@@ -1,0 +1,113 @@
+{
+ "code": 200,
+ "message": "OK",
+ "tweet": {
+  "url": "https://x.com/F1/status/2126379702088511678",
+  "id": "2126379702088511678",
+  "text": "Another good session for Kimi 👊\n\n🏁 END OF FP2 🏁\nAntonelli\nRussell\nNorris\nPiastri\nVerstappen\nHadjar\nLeclerc\nHamilton\nLawson \nLindblad\n\n#F1 #QatarGP",
+  "raw_text": {
+   "text": "Another good session for Kimi 👊\n\n🏁 END OF FP2 🏁\nAntonelli\nRussell\nNorris\nPiastri\nVerstappen\nHadjar\nLeclerc\nHamilton\nLawson \nLindblad\n\n#F1 #QatarGP https://t.co/j4u4Vo9FkH",
+   "display_text_range": [
+    0,
+    146
+   ],
+   "facets": [
+    {
+     "type": "hashtag",
+     "indices": [
+      134,
+      137
+     ],
+     "original": "F1"
+    },
+    {
+     "type": "hashtag",
+     "indices": [
+      138,
+      146
+     ],
+     "original": "QatarGP"
+    },
+    {
+     "type": "media",
+     "indices": [
+      147,
+      170
+     ],
+     "id": "2126379535239139328",
+     "display": "pic.x.com/j4u4Vo9FkH",
+     "original": "https://t.co/j4u4Vo9FkH",
+     "replacement": "https://x.com/F1/status/2126379702088511678/photo/1"
+    }
+   ]
+  },
+  "author": {
+   "screen_name": "F1",
+   "url": "https://x.com/F1",
+   "id": "69008563",
+   "followers": 12863933,
+   "following": 101,
+   "likes": 6118,
+   "media_count": 80448,
+   "name": "Formula 1",
+   "description": "In 2026 It's All To Drive For 🤩",
+   "raw_description": {
+    "text": "In 2026 It's All To Drive For 🤩",
+    "facets": []
+   },
+   "location": "",
+   "banner_url": "https://pbs.twimg.com/profile_banners/69008563/1786885278",
+   "avatar_url": "https://pbs.twimg.com/profile_images/2088954775534514177/8jPk8bwL_200x200.jpg",
+   "joined": "Wed Aug 26 15:19:37 +0000 2009",
+   "protected": false,
+   "website": {
+    "url": "https://f1.com/",
+    "display_url": "f1.com"
+   },
+   "verification": {
+    "verified": true,
+    "verified_at": null,
+    "type": "organization"
+   },
+   "avatar_color": null
+  },
+  "replies": 7,
+  "retweets": 88,
+  "likes": 688,
+  "bookmarks": 10,
+  "quotes": 9,
+  "created_at": "Fri Nov 27 18:16:41 +0000 2026",
+  "created_timestamp": 1795803401,
+  "possibly_sensitive": false,
+  "views": 109685,
+  "is_note_tweet": false,
+  "community_note": null,
+  "lang": "en",
+  "replying_to": null,
+  "replying_to_status": null,
+  "media": {
+   "all": [
+    {
+     "type": "photo",
+     "id": "2126379535239139328",
+     "url": "https://pbs.twimg.com/media/HYJq69eW0AAtw8h.jpg?name=orig",
+     "width": 1920,
+     "height": 1080
+    }
+   ],
+   "photos": [
+    {
+     "type": "photo",
+     "id": "2126379535239139328",
+     "url": "https://pbs.twimg.com/media/HYJq69eW0AAtw8h.jpg?name=orig",
+     "width": 1920,
+     "height": 1080
+    }
+   ]
+  },
+  "twitter_card": "summary_large_image",
+  "color": null,
+  "provider": "twitter",
+  "reposted_by": null
+ }
+}

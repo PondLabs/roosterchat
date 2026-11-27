@@ -1,0 +1,64 @@
+{
+ "code": 200,
+ "message": "OK",
+ "tweet": {
+  "url": "https://x.com/NASA/status/2125318351341994436",
+  "id": "2125318351341994436",
+  "text": "As part of a coordinated, whole-of-government effort, NASA has rapidly mobilized specialized research aircraft, space-based observation capabilities, and scientific personnel to support ongoing efforts at the Iowa Army Ammunition Plant in Middletown, Iowa. NASA stands ready to bring its unique capabilities and world-class scientific expertise to bear whenever called upon in service of the nation and the American people.\n\nIn support of this effort, NASA has deployed a P-3 Orion and Gulfstream III from the agency's Langley Research Center in Virginia and a NASA Ames contracted B200, and is leveraging observations from its space-based Tropospheric Emissions: Monitoring of Pollution (TEMPO) instrument.\n\nWorking alongside our partners across the federal government, NASA is utilizing its advanced scientific instruments and expertise to collect environmental and atmospheric data to inform the broader federal response.",
+  "raw_text": {
+   "text": "As part of a coordinated, whole-of-government effort, NASA has rapidly mobilized specialized research aircraft, space-based observation capabilities, and scientific personnel to support ongoing efforts at the Iowa Army Ammunition Plant in Middletown, Iowa. NASA stands ready to bring its unique capabilities and world-class scientific expertise to bear whenever called upon in service of the nation and the American people.\n\nIn support of this effort, NASA has deployed a P-3 Orion and Gulfstream III from the agency's Langley Research Center in Virginia and a NASA Ames contracted B200, and is leveraging observations from its space-based Tropospheric Emissions: Monitoring of Pollution (TEMPO) instrument.\n\nWorking alongside our partners across the federal government, NASA is utilizing its advanced scientific instruments and expertise to collect environmental and atmospheric data to inform the broader federal response.",
+   "display_text_range": [
+    0,
+    924
+   ],
+   "facets": []
+  },
+  "author": {
+   "screen_name": "NASA",
+   "url": "https://x.com/NASA",
+   "id": "11348282",
+   "followers": 92077861,
+   "following": 115,
+   "likes": 17125,
+   "media_count": 28268,
+   "name": "NASA",
+   "description": "Making the seemingly impossible, possible. ✨",
+   "raw_description": {
+    "text": "Making the seemingly impossible, possible. ✨",
+    "facets": []
+   },
+   "location": "Pale Blue Dot",
+   "banner_url": "https://pbs.twimg.com/profile_banners/11348282/1788992290",
+   "avatar_url": "https://pbs.twimg.com/profile_images/1321163587679784960/0ZxKlEKB_200x200.jpg",
+   "joined": "Wed Dec 19 20:20:32 +0000 2007",
+   "protected": false,
+   "website": {
+    "url": "http://www.nasa.gov/",
+    "display_url": "nasa.gov"
+   },
+   "verification": {
+    "verified": true,
+    "verified_at": null,
+    "type": "government"
+   },
+   "avatar_color": null
+  },
+  "replies": 2162,
+  "retweets": 3323,
+  "likes": 37810,
+  "bookmarks": 9641,
+  "quotes": 1611,
+  "created_at": "Tue Nov 24 19:59:16 +0000 2026",
+  "created_timestamp": 1795550356,
+  "views": 14085944,
+  "is_note_tweet": true,
+  "community_note": null,
+  "lang": "en",
+  "replying_to": null,
+  "replying_to_status": null,
+  "twitter_card": "tweet",
+  "color": null,
+  "provider": "twitter",
+  "reposted_by": null
+ }
+}

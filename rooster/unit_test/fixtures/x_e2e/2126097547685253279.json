@@ -1,0 +1,176 @@
+{
+ "code": 200,
+ "message": "OK",
+ "tweet": {
+  "url": "https://x.com/CazeTVOficial/status/2126097547685253279",
+  "id": "2126097547685253279",
+  "text": "O COMEÇO DA FURIA NOVORIZONTINO SERÁ COM OS PÉS NO CHÃO 👀\n\nAndré Akkari, CEO da FURIA, foi HONESTO e também reconheceu a dificuldade do Brasileirão na hora de falar sobre o que a FURIA Novorizontino espera para o Brasileirão de 2027 ⚽🇧🇷",
+  "raw_text": {
+   "text": "O COMEÇO DA FURIA NOVORIZONTINO SERÁ COM OS PÉS NO CHÃO 👀\n\nAndré Akkari, CEO da FURIA, foi HONESTO e também reconheceu a dificuldade do Brasileirão na hora de falar sobre o que a FURIA Novorizontino espera para o Brasileirão de 2027 ⚽🇧🇷 https://t.co/H0ssAw4JwS",
+   "display_text_range": [
+    0,
+    236
+   ],
+   "facets": [
+    {
+     "type": "media",
+     "indices": [
+      237,
+      260
+     ],
+     "id": "2126097462771294208",
+     "display": "pic.x.com/H0ssAw4JwS",
+     "original": "https://t.co/H0ssAw4JwS",
+     "replacement": "https://x.com/CazeTVOficial/status/2126097547685253279/video/1"
+    },
+    {
+     "type": "media",
+     "indices": [
+      237,
+      260
+     ],
+     "id": "2126097470576877568",
+     "display": "pic.x.com/H0ssAw4JwS",
+     "original": "https://t.co/H0ssAw4JwS",
+     "replacement": "https://x.com/CazeTVOficial/status/2126097547685253279/video/2"
+    }
+   ]
+  },
+  "author": {
+   "screen_name": "CazeTVOficial",
+   "url": "https://x.com/CazeTVOficial",
+   "id": "1629179760361279488",
+   "followers": 494048,
+   "following": 248,
+   "likes": 1191,
+   "media_count": 31575,
+   "name": "CazéTV",
+   "description": "Perfil oficial da CazéTV. \n\nE-mail: contato@caze.tv",
+   "raw_description": {
+    "text": "Perfil oficial da CazéTV. \n\nE-mail: contato@caze.tv",
+    "facets": []
+   },
+   "location": "",
+   "banner_url": "https://pbs.twimg.com/profile_banners/1629179760361279488/1793889027",
+   "avatar_url": "https://pbs.twimg.com/profile_images/2079696581566029824/H4wZylCo_200x200.jpg",
+   "joined": "Fri Feb 24 18:02:17 +0000 2023",
+   "protected": false,
+   "website": {
+    "url": "https://linktr.ee/VemPraCazeTV",
+    "display_url": "linktr.ee/VemPraCazeTV"
+   },
+   "verification": {
+    "verified": true,
+    "verified_at": null,
+    "type": "individual"
+   },
+   "avatar_color": null
+  },
+  "replies": 37,
+  "retweets": 15,
+  "likes": 1129,
+  "bookmarks": 69,
+  "quotes": 27,
+  "created_at": "Thu Nov 26 23:35:31 +0000 2026",
+  "created_timestamp": 1795736131,
+  "possibly_sensitive": false,
+  "views": 135334,
+  "is_note_tweet": false,
+  "community_note": null,
+  "lang": "pt",
+  "replying_to": null,
+  "replying_to_status": null,
+  "media": {
+   "all": [
+    {
+     "type": "photo",
+     "id": "2126097462771294208",
+     "url": "https://pbs.twimg.com/media/HYFqYLpXoAAIc3n.jpg?name=orig",
+     "width": 1080,
+     "height": 1350
+    },
+    {
+     "id": "2126097470576877568",
+     "url": "https://video.twimg.com/amplify_video/2126097470576877568/vid/avc1/720x900/geFrMnJDvBI6mNvF.mp4?tag=29",
+     "thumbnail_url": "https://pbs.twimg.com/amplify_video_thumb/2126097470576877568/img/KbHQuqL3BQGjOu7H.jpg",
+     "duration": 59.141,
+     "width": 720,
+     "height": 900,
+     "format": "video/mp4",
+     "type": "video",
+     "publisher": null,
+     "variants": [
+      {
+       "url": "https://video.twimg.com/amplify_video/2126097470576877568/pl/rUMyAywkHNLc4yD0.m3u8?tag=29&v=c27",
+       "bitrate": 0,
+       "content_type": "application/x-mpegURL"
+      },
+      {
+       "url": "https://video.twimg.com/amplify_video/2126097470576877568/vid/avc1/320x400/c2XsnTUqe0fexOrS.mp4?tag=29",
+       "bitrate": 632000,
+       "content_type": "video/mp4"
+      },
+      {
+       "url": "https://video.twimg.com/amplify_video/2126097470576877568/vid/avc1/480x600/yyB3lPvjGq0AXUKG.mp4?tag=29",
+       "bitrate": 950000,
+       "content_type": "video/mp4"
+      },
+      {
+       "url": "https://video.twimg.com/amplify_video/2126097470576877568/vid/avc1/720x900/geFrMnJDvBI6mNvF.mp4?tag=29",
+       "bitrate": 2176000,
+       "content_type": "video/mp4"
+      }
+     ]
+    }
+   ],
+   "photos": [
+    {
+     "type": "photo",
+     "id": "2126097462771294208",
+     "url": "https://pbs.twimg.com/media/HYFqYLpXoAAIc3n.jpg?name=orig",
+     "width": 1080,
+     "height": 1350
+    }
+   ],
+   "videos": [
+    {
+     "id": "2126097470576877568",
+     "url": "https://video.twimg.com/amplify_video/2126097470576877568/vid/avc1/720x900/geFrMnJDvBI6mNvF.mp4?tag=29",
+     "thumbnail_url": "https://pbs.twimg.com/amplify_video_thumb/2126097470576877568/img/KbHQuqL3BQGjOu7H.jpg",
+     "duration": 59.141,
+     "width": 720,
+     "height": 900,
+     "format": "video/mp4",
+     "type": "video",
+     "publisher": null,
+     "variants": [
+      {
+       "url": "https://video.twimg.com/amplify_video/2126097470576877568/pl/rUMyAywkHNLc4yD0.m3u8?tag=29&v=c27",
+       "bitrate": 0,
+       "content_type": "application/x-mpegURL"
+      },
+      {
+       "url": "https://video.twimg.com/amplify_video/2126097470576877568/vid/avc1/320x400/c2XsnTUqe0fexOrS.mp4?tag=29",
+       "bitrate": 632000,
+       "content_type": "video/mp4"
+      },
+      {
+       "url": "https://video.twimg.com/amplify_video/2126097470576877568/vid/avc1/480x600/yyB3lPvjGq0AXUKG.mp4?tag=29",
+       "bitrate": 950000,
+       "content_type": "video/mp4"
+      },
+      {
+       "url": "https://video.twimg.com/amplify_video/2126097470576877568/vid/avc1/720x900/geFrMnJDvBI6mNvF.mp4?tag=29",
+       "bitrate": 2176000,
+       "content_type": "video/mp4"
+      }
+     ]
+    }
+   ]
+  },
+  "twitter_card": "player",
+  "color": null,
+  "provider": "twitter",
+  "reposted_by": null
+ }
+}

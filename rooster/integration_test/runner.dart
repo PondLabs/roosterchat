@@ -11,6 +11,7 @@ import 'matrix/multi_account_test.dart' as multi_account_test;
 import 'matrix/change_space_name_test.dart' as change_space_name_test;
 import 'speed/request_counts_test.dart' as request_counts_test;
 import 'activities/sunny_side_putt_test.dart' as sunny_side_putt_test;
+import 'chat/x_post_card_test.dart' as x_post_card_test;
 
 void main() async {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -23,5 +24,6 @@ void main() async {
   multi_account_test.main();
   change_space_name_test.main();
   request_counts_test.main();
+  x_post_card_test.main();
   sunny_side_putt_test.main();
 }

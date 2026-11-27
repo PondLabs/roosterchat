@@ -1,0 +1,175 @@
+{
+ "code": 200,
+ "message": "OK",
+ "tweet": {
+  "url": "https://x.com/elonmusk/status/2126390700660920546",
+  "id": "2126390700660920546",
+  "text": "Grok Build upgrades",
+  "raw_text": {
+   "text": "Grok Build upgrades",
+   "display_text_range": [
+    0,
+    19
+   ],
+   "facets": []
+  },
+  "author": {
+   "screen_name": "elonmusk",
+   "url": "https://x.com/elonmusk",
+   "id": "44196397",
+   "followers": 239740325,
+   "following": 1428,
+   "likes": 260437,
+   "media_count": 4789,
+   "name": "Elon Musk",
+   "description": "http://Terafab.AI",
+   "raw_description": {
+    "text": "https://t.co/ZdBx5WABYx",
+    "facets": [
+     {
+      "type": "url",
+      "indices": [
+       0,
+       23
+      ],
+      "original": "https://t.co/ZdBx5WABYx",
+      "replacement": "http://Terafab.AI",
+      "display": "Terafab.AI"
+     }
+    ]
+   },
+   "location": "",
+   "banner_url": "https://pbs.twimg.com/profile_banners/44196397/1774145451",
+   "avatar_url": "https://pbs.twimg.com/profile_images/2122506092437504001/NSS4RHyZ_200x200.jpg",
+   "joined": "Tue Jun 02 20:12:29 +0000 2009",
+   "protected": false,
+   "website": null,
+   "verification": {
+    "verified": true,
+    "verified_at": null,
+    "type": "individual"
+   },
+   "avatar_color": null
+  },
+  "replies": 452,
+  "retweets": 267,
+  "likes": 2690,
+  "bookmarks": 172,
+  "quotes": 42,
+  "created_at": "Fri Nov 27 19:00:24 +0000 2026",
+  "created_timestamp": 1795806024,
+  "views": 722839,
+  "is_note_tweet": false,
+  "community_note": null,
+  "lang": "en",
+  "replying_to": null,
+  "replying_to_status": null,
+  "quote": {
+   "url": "https://x.com/XFreeze/status/2123959003084664952",
+   "id": "2123959003084664952",
+   "text": "Grok Build just got a solid upgrade for headless agents, MCP integrations, and remote terminal workflows\n\nHeadless sessions can now include images returned by MCP tools in streaming and JSON output, positional prompts automatically run headless when no interactive terminal is available, and local file links open directly from responses\n\nLong-running headless tasks also get better reliability, with a five-minute inactivity timeout that prevents sessions from hanging indefinitely. Image pasting now works through remote tmux and nested terminal wrappers, while session recovery and hook inspection are more dependable\n\nThere’s also a performance improvement that eliminates unnecessary directory watching when Grok only needs to track the current Git branch\n\nRelease Notes: v1.0.92\n\nFeatures:\n\n• Positional prompts without `-p` now run headless and print their reply when the process has no terminal for the TUI\n• MCP tool results that contain images now include those images in headless streaming and JSON output\n• Clickable `file://` links to local files now open the file the same way bare paths do\n\nBug Fixes:\n\n• Question cards in minimal mode now keep the first option visible instead of scrolling it off-screen\n• Headless runs (`grok -p`) now stop after 5 minutes of no model output instead of hanging indefinitely\n• Session resume errors now give the same helpful instruction on every route instead of suggesting the TUI picker\n• `grok inspect` now shows the hooks a headless run would actually load, with a note for those that still need folder trust\n• Image paste with `grok wrap` now works when Grok runs inside a remote tmux or through a second wrap\n\nPerformance:\n\n• Grok no longer watches every directory when only tracking the current Git branch",
+   "raw_text": {
+    "text": "Grok Build just got a solid upgrade for headless agents, MCP integrations, and remote terminal workflows\n\nHeadless sessions can now include images returned by MCP tools in streaming and JSON output, positional prompts automatically run headless when no interactive terminal is available, and local file links open directly from responses\n\nLong-running headless tasks also get better reliability, with a five-minute inactivity timeout that prevents sessions from hanging indefinitely. Image pasting now works through remote tmux and nested terminal wrappers, while session recovery and hook inspection are more dependable\n\nThere’s also a performance improvement that eliminates unnecessary directory watching when Grok only needs to track the current Git branch\n\nRelease Notes: v1.0.92\n\nFeatures:\n\n• Positional prompts without `-p` now run headless and print their reply when the process has no terminal for the TUI\n• MCP tool results that contain images now include those images in headless streaming and JSON output\n• Clickable `file://` links to local files now open the file the same way bare paths do\n\nBug Fixes:\n\n• Question cards in minimal mode now keep the first option visible instead of scrolling it off-screen\n• Headless runs (`grok -p`) now stop after 5 minutes of no model output instead of hanging indefinitely\n• Session resume errors now give the same helpful instruction on every route instead of suggesting the TUI picker\n• `grok inspect` now shows the hooks a headless run would actually load, with a note for those that still need folder trust\n• Image paste with `grok wrap` now works when Grok runs inside a remote tmux or through a second wrap\n\nPerformance:\n\n• Grok no longer watches every directory when only tracking the current Git branch",
+    "display_text_range": [
+     0,
+     1761
+    ],
+    "facets": [
+     {
+      "type": "media",
+      "indices": [
+       277,
+       300
+      ],
+      "id": "2123958995342020608",
+      "display": "pic.x.com/PhGRK1Rx0S",
+      "original": "https://t.co/PhGRK1Rx0S",
+      "replacement": "https://x.com/XFreeze/status/2123959003084664952/photo/1"
+     }
+    ]
+   },
+   "author": {
+    "screen_name": "XFreeze",
+    "url": "https://x.com/XFreeze",
+    "id": "1818311005698678784",
+    "followers": 302014,
+    "following": 2134,
+    "likes": 44995,
+    "media_count": 9998,
+    "name": "X Freeze",
+    "description": "try Grok Bot templates here http://xfreeze.com/grok-bots",
+    "raw_description": {
+     "text": "try Grok Bot templates here https://t.co/17cPsDtzhk",
+     "facets": [
+      {
+       "type": "url",
+       "indices": [
+        28,
+        51
+       ],
+       "original": "https://t.co/17cPsDtzhk",
+       "replacement": "http://xfreeze.com/grok-bots",
+       "display": "xfreeze.com/grok-bots"
+      }
+     ]
+    },
+    "location": "",
+    "banner_url": "https://pbs.twimg.com/profile_banners/1818311005698678784/1778551477",
+    "avatar_url": "https://pbs.twimg.com/profile_images/1876785200010539008/2_HFJjq9_200x200.jpg",
+    "joined": "Tue Jul 30 15:42:27 +0000 2024",
+    "protected": false,
+    "website": {
+     "url": "http://xfreeze.com",
+     "display_url": "xfreeze.com"
+    },
+    "verification": {
+     "verified": true,
+     "verified_at": null,
+     "type": "individual"
+    },
+    "avatar_color": null
+   },
+   "replies": 69,
+   "retweets": 35,
+   "likes": 274,
+   "bookmarks": 83,
+   "quotes": 8,
+   "created_at": "Sat Nov 21 01:57:42 +0000 2026",
+   "created_timestamp": 1795226262,
+   "possibly_sensitive": false,
+   "views": 302451,
+   "is_note_tweet": true,
+   "community_note": null,
+   "lang": "en",
+   "replying_to": null,
+   "replying_to_status": null,
+   "media": {
+    "all": [
+     {
+      "type": "photo",
+      "id": "2123958995342020608",
+      "url": "https://pbs.twimg.com/media/HXnRc_rbUAAEgAC.jpg?name=orig",
+      "width": 1588,
+      "height": 899
+     }
+    ],
+    "photos": [
+     {
+      "type": "photo",
+      "id": "2123958995342020608",
+      "url": "https://pbs.twimg.com/media/HXnRc_rbUAAEgAC.jpg?name=orig",
+      "width": 1588,
+      "height": 899
+     }
+    ]
+   },
+   "twitter_card": "summary_large_image",
+   "color": null,
+   "provider": "twitter",
+   "reposted_by": null
+  },
+  "color": null,
+  "provider": "twitter",
+  "reposted_by": null
+ }
+}
