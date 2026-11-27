@@ -45,8 +45,8 @@ class UrlPreviewWidget extends StatefulWidget {
   /// Overrides [VideoPlaybackDialog.supportsOfficialEmbeds], for tests.
   final bool? supportsOfficialEmbeds;
 
-  /// Loads the X card's avatars and quoted media instead of [NetworkImage],
-  /// for tests.
+  /// Loads the X card's avatars, the cells of a grid that holds a video and
+  /// the quoted post's media instead of [NetworkImage], for tests.
   final ImageProvider Function(Uri url)? networkImage;
 
   static String get messageMediaVideoUnavailable =>
@@ -78,9 +78,21 @@ class UrlPreviewWidget extends StatefulWidget {
           other: "Open the post to see $howMany more items",
           name: "promptXQuoteOpenForMore",
           args: [howMany],
-          desc: "Read by screen readers for the last cell of a quoted X "
-              "post's media grid when what did not fit includes videos: "
-              "it opens the post on X, where every photo and video is");
+          desc: "Read by screen readers for the last cell of an X post's "
+              "media grid (the linked post's or the quoted post's) when "
+              "what did not fit includes videos: it opens the post on X, "
+              "where every photo and video is");
+
+  static String get promptMediaGridPlayVideo => intl.Intl.message("Play video",
+      name: "promptMediaGridPlayVideo",
+      desc: "Read by screen readers for a video in the media grid of an X "
+          "post's link preview, next to its photos or other videos: "
+          "activating it plays that video");
+
+  static String get promptMediaGridPlayGif => intl.Intl.message("Play GIF",
+      name: "promptMediaGridPlayGif",
+      desc: "Read by screen readers for an animated GIF in the media grid "
+          "of an X post's link preview: activating it plays that GIF");
 
   @override
   State<UrlPreviewWidget> createState() => _UrlPreviewWidgetState();
@@ -337,6 +349,13 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
         (isShortForm ? (9.0 / 16.0) : (16.0 / 9.0));
     final platformName =
         widget.data?.videoEmbedInfo?.platformName ?? widget.data?.siteName;
+    // An X post's GIF has no length; it says what it is instead.
+    final duration = widget.data?.videoEmbedInfo?.duration;
+    final badge = widget.data?.xPost?.video?.type == XMediaType.gif
+        ? _gifBadge
+        : duration != null
+            ? _formatDuration(duration)
+            : null;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(6),
@@ -445,11 +464,12 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
                   ),
                 ),
               ),
-            if (widget.data?.videoEmbedInfo?.duration != null)
+            if (badge != null)
               Positioned(
                 bottom: 8,
                 right: 8,
                 child: Container(
+                  key: const ValueKey('url-preview-duration'),
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
@@ -457,7 +477,7 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    _formatDuration(widget.data!.videoEmbedInfo!.duration!),
+                    badge,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,
@@ -471,6 +491,9 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
       ),
     );
   }
+
+  // Not translated: the format's name, written the same in every language.
+  static const _gifBadge = 'GIF';
 
   String _formatDuration(Duration duration) {
     final minutes = duration.inMinutes;
@@ -649,23 +672,30 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
 
   static const double _photoGridGap = 4;
 
-  /// X's layout: 2 photos side by side, 3 as one large photo next to two
-  /// stacked ones, 4 as a 2x2. Cells are cropped squares; each opens in the
-  /// lightbox on tap, like multi-image room messages. A post with more
-  /// (X allows 20, an Instagram carousel has up to 20) shows its first four,
-  /// the fourth dimmed under "+N"; the lightbox pages through every photo.
+  /// A post's photos in [_mediaGrid]. Each opens in the lightbox on tap,
+  /// like multi-image room messages. A post with more than four (X allows
+  /// 20, an Instagram carousel has up to 20) shows its first four, the
+  /// fourth dimmed under "+N"; the lightbox pages through every photo.
   Widget _buildPhotoGrid() {
     final all = widget.data!.images;
-    final photos = all.take(4).toList();
-    final hidden = all.length - photos.length;
+    final shown = min(all.length, 4);
+    final hidden = all.length - shown;
     // Only the last cell carries the count of what did not fit.
-    Widget cell(int index, double size) => _photoCell(all, index, size,
-        hidden: index == photos.length - 1 ? hidden : 0);
+    return _mediaGrid(
+      shown,
+      (index, size) =>
+          _photoCell(all, index, size, hidden: index == shown - 1 ? hidden : 0),
+    );
+  }
 
+  /// X's layout for [count] cells, two to four: 2 side by side, 3 as one
+  /// large cell next to two stacked ones, 4 as a 2x2. Cells are squares;
+  /// [cell] builds cell [index], [size] wide and tall.
+  Widget _mediaGrid(int count, Widget Function(int index, double size) cell) {
     return LayoutBuilder(builder: (context, constraints) {
       const gap = _photoGridGap;
 
-      if (photos.length == 3) {
+      if (count == 3) {
         final large =
             min((constraints.maxWidth - gap) * 2 / 3, constraints.maxHeight);
         final small = (large - gap) / 2;
@@ -688,7 +718,7 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
         );
       }
 
-      final rows = photos.length <= 2 ? 1 : 2;
+      final rows = count <= 2 ? 1 : 2;
       final side = min(
           (constraints.maxWidth - gap) / 2,
           rows == 1
@@ -700,13 +730,13 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (var row = 0; row < (photos.length + 1) ~/ 2; row++) ...[
+          for (var row = 0; row < (count + 1) ~/ 2; row++) ...[
             if (row > 0) const SizedBox(height: gap),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 cell(row * 2, side),
-                if (row * 2 + 1 < photos.length) ...[
+                if (row * 2 + 1 < count) ...[
                   const SizedBox(width: gap),
                   cell(row * 2 + 1, side),
                 ],
@@ -889,13 +919,17 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
     final theme = Theme.of(context);
     final secondary = theme.colorScheme.secondary;
     final images = widget.data!.images;
-    final Widget? media = images.length > 1
-        ? _buildPhotoGrid()
-        : images.length == 1
-            ? image()
-            : isVideo
-                ? _buildVideoThumbnail()
-                : null;
+    // A grid with a video in it comes first: the photo grid would leave
+    // the videos out, and the video thumbnail holds only one of them.
+    final Widget? media = post.hasVideoGrid
+        ? _xPostMedia(post)
+        : images.length > 1
+            ? _buildPhotoGrid()
+            : images.length == 1
+                ? image()
+                : isVideo
+                    ? _buildVideoThumbnail()
+                    : null;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
@@ -1137,74 +1171,29 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
 
   /// The official embed's media grid: one item at its own shape, two side by
   /// side, three as one tall item next to two stacked, four as a 2x2; two to
-  /// four always fill a 16:9 box. A post with more (X allows 20) shows its
-  /// first four, the fourth dimmed under "+N". Cells draw small copies of
-  /// the photos and the lightbox large ones.
+  /// four always fill a 16:9 box. The cells are [_xMediaCells].
   Widget _xQuoteMedia(XPost quote) {
-    final media = quote.media.take(4).toList();
-    final hidden = quote.media.length - media.length;
-    final photos = quote.photos;
-    final cells = [
-      for (final photo in photos) _networkImage(quote.cellImageUrl(photo)!)
-    ];
-    final gallery = [
-      for (final photo in photos) _networkImage(XPhotoSize.large.of(photo.url))
-    ];
-
-    void openPhoto(int galleryIndex) => Lightbox.show(
-          context,
-          image: gallery[galleryIndex],
-          gallery: gallery,
-          galleryThumbnails: cells,
-          galleryAspectRatios: [for (final photo in photos) photo.aspectRatio],
-          initialIndex: galleryIndex,
-        );
-
-    Widget cell(int i) {
-      final item = media[i];
-      final galleryIndex = photos.indexOf(item);
-      final picture = _xQuotePicture(
-          quote, item, galleryIndex >= 0 ? cells[galleryIndex] : null);
-      if (hidden > 0 && i == media.length - 1) {
-        return _xQuoteOverflowCell(quote, picture,
-            from: i,
-            hidden: hidden,
-            onOpenPhoto:
-                galleryIndex >= 0 ? () => openPhoto(galleryIndex) : null);
-      }
-      if (item.type == XMediaType.photo) {
-        return Semantics(
-          button: true,
-          label: Lightbox.labelPhotoPosition(galleryIndex + 1, photos.length),
-          child: InkWell(
-            key: ValueKey('x-quote-photo-$i'),
-            onTap: () => openPhoto(galleryIndex),
-            child: picture,
-          ),
-        );
-      }
-      return _xQuoteVideoCell(quote, item, picture, index: i);
-    }
+    final cells = _xMediaCells(quote, name: 'x-quote');
 
     Widget row(List<int> items) => Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (final i in items) ...[
               if (i != items.first) const SizedBox(width: _xQuoteGap),
-              Expanded(child: cell(i)),
+              Expanded(child: cells[i]),
             ],
           ],
         );
 
-    if (media.length == 1) {
-      final aspectRatio = media.single.aspectRatio ?? 16 / 9;
+    if (cells.length == 1) {
+      final aspectRatio = quote.media.first.aspectRatio ?? 16 / 9;
       return LayoutBuilder(
         key: const ValueKey('x-quote-media'),
         builder: (context, constraints) => SizedBox(
           width: constraints.maxWidth,
           height:
               min(constraints.maxWidth / aspectRatio, _xQuoteMaxMediaHeight),
-          child: cell(0),
+          child: cells[0],
         ),
       );
     }
@@ -1212,20 +1201,20 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
     return AspectRatio(
       key: const ValueKey('x-quote-media'),
       aspectRatio: 16 / 9,
-      child: switch (media.length) {
+      child: switch (cells.length) {
         2 => row([0, 1]),
         3 => Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: cell(0)),
+              Expanded(child: cells[0]),
               const SizedBox(width: _xQuoteGap),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(child: cell(1)),
+                    Expanded(child: cells[1]),
                     const SizedBox(height: _xQuoteGap),
-                    Expanded(child: cell(2)),
+                    Expanded(child: cells[2]),
                   ],
                 ),
               ),
@@ -1243,12 +1232,90 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
     );
   }
 
-  /// One photo or video poster of the quoted post, cropped to its cell. A
-  /// photo is drawn from [photo], the copy the lightbox's gallery also uses
-  /// while its large one loads.
-  Widget _xQuotePicture(XPost quote, XMedia media, ImageProvider? photo) {
+  /// The linked post's media when a video or GIF is among several items
+  /// ([XPost.hasVideoGrid]): a cell for each, in the photo grid's layout,
+  /// so no video is left out. The cells are [_xMediaCells].
+  Widget _xPostMedia(XPost post) {
+    final cells = _xMediaCells(post, name: 'x-post');
+    return KeyedSubtree(
+      key: const ValueKey('x-post-media'),
+      child: _mediaGrid(
+        cells.length,
+        (index, size) => SizedBox(
+          width: size,
+          height: size,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: cells[index],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The cells of [post]'s media grid, one for each photo, video and GIF in
+  /// post order, four at most. A photo opens the lightbox on itself, paging
+  /// through the post's photos; a video or GIF plays in the video dialog.
+  /// A post with more than four items (X allows 20) has its fourth dimmed
+  /// under "+N". Cells draw small copies of the photos and the lightbox
+  /// large ones. Each cell fills the box its layout gives it; [name] starts
+  /// the cells' keys ("x-post" for the linked post, "x-quote" for a quote).
+  List<Widget> _xMediaCells(XPost post, {required String name}) {
+    final media = post.media.take(4).toList();
+    final hidden = post.media.length - media.length;
+    final photos = post.photos;
+    final cells = [
+      for (final photo in photos) _networkImage(post.cellImageUrl(photo)!)
+    ];
+    final gallery = [
+      for (final photo in photos) _networkImage(XPhotoSize.large.of(photo.url))
+    ];
+
+    void openPhoto(int galleryIndex) => Lightbox.show(
+          context,
+          image: gallery[galleryIndex],
+          gallery: gallery,
+          galleryThumbnails: cells,
+          galleryAspectRatios: [for (final photo in photos) photo.aspectRatio],
+          initialIndex: galleryIndex,
+        );
+
+    Widget cell(int i) {
+      final item = media[i];
+      final galleryIndex = photos.indexOf(item);
+      final picture = _xMediaPicture(
+          post, item, galleryIndex >= 0 ? cells[galleryIndex] : null);
+      if (hidden > 0 && i == media.length - 1) {
+        return _xMediaOverflowCell(post, picture,
+            name: name,
+            from: i,
+            hidden: hidden,
+            onOpenPhoto:
+                galleryIndex >= 0 ? () => openPhoto(galleryIndex) : null);
+      }
+      if (item.type == XMediaType.photo) {
+        return Semantics(
+          button: true,
+          label: Lightbox.labelPhotoPosition(galleryIndex + 1, photos.length),
+          child: InkWell(
+            key: ValueKey('$name-photo-$i'),
+            onTap: () => openPhoto(galleryIndex),
+            child: picture,
+          ),
+        );
+      }
+      return _xMediaVideoCell(post, item, picture, name: name, index: i);
+    }
+
+    return [for (var i = 0; i < media.length; i++) cell(i)];
+  }
+
+  /// One photo or video poster of an X post, cropped to its cell. A photo
+  /// is drawn from [photo], the copy the lightbox's gallery also uses while
+  /// its large one loads.
+  Widget _xMediaPicture(XPost post, XMedia media, ImageProvider? photo) {
     final poster =
-        media.type == XMediaType.photo ? null : quote.cellImageUrl(media);
+        media.type == XMediaType.photo ? null : post.cellImageUrl(media);
     final image = photo ?? (poster == null ? null : _networkImage(poster));
     if (image == null) {
       return ColoredBox(
@@ -1258,29 +1325,33 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
       image: image,
       fit: BoxFit.cover,
       filterQuality: FilterQuality.medium,
+      frameBuilder: _fadeIn,
       errorBuilder: (_, __, ___) => const SizedBox.shrink(),
     );
   }
 
-  /// The last cell of a quote's grid when its media does not all fit: the
+  /// The last cell of an X post's grid when its media does not all fit: the
   /// item dimmed under "+N" for the [hidden] items past it. When this item
   /// and every hidden one are photos, it opens the lightbox on this one,
   /// the rest a step away. When a video or GIF is among them the lightbox
   /// could not reach it, so it opens the post on X instead.
-  Widget _xQuoteOverflowCell(XPost quote, Widget picture,
-      {required int from, required int hidden, VoidCallback? onOpenPhoto}) {
+  Widget _xMediaOverflowCell(XPost post, Widget picture,
+      {required String name,
+      required int from,
+      required int hidden,
+      VoidCallback? onOpenPhoto}) {
     final onlyPhotos = onOpenPhoto != null &&
-        quote.media.skip(from).every((m) => m.type == XMediaType.photo);
+        post.media.skip(from).every((m) => m.type == XMediaType.photo);
     return Semantics(
       button: true,
       label: onlyPhotos
           ? UrlPreviewWidget.promptMediaGridShowMorePhotos(hidden)
           : UrlPreviewWidget.promptXQuoteOpenForMore(hidden),
       child: InkWell(
-        key: const ValueKey('x-quote-more'),
+        key: ValueKey('$name-more'),
         onTap: onlyPhotos
             ? onOpenPhoto
-            : () => LinkUtils.open(quote.url, context: context),
+            : () => LinkUtils.open(post.url, context: context),
         child: Stack(
           fit: StackFit.expand,
           children: [picture, _hiddenCount(hidden)],
@@ -1289,64 +1360,89 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
     );
   }
 
-  /// A video or GIF of the quoted post: its poster with a play button.
-  Widget _xQuoteVideoCell(XPost quote, XMedia media, Widget picture,
-      {required int index}) {
+  /// A video or GIF of an X post: its poster under a play mark, with the
+  /// video's length or "GIF" in the corner. The whole cell plays it, as a
+  /// photo's whole cell opens it. One that came with no file
+  /// ([XMedia.canPlay]) is its poster alone, and a tap on it falls to the
+  /// card, which opens the post.
+  Widget _xMediaVideoCell(XPost post, XMedia media, Widget picture,
+      {required String name, required int index}) {
+    if (!media.canPlay) return picture;
+    final isGif = media.type == XMediaType.gif;
     final duration = media.duration;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        picture,
-        Center(
-          child: InkWell(
-            key: ValueKey('x-quote-play-$index'),
-            onTap: () => _playQuoteVideo(quote, media),
-            customBorder: const CircleBorder(),
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.7),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.8),
-                  width: 1.5,
+    final badge = isGif
+        ? _gifBadge
+        : duration != null
+            ? _formatDuration(duration)
+            : null;
+    return Semantics(
+      button: true,
+      label: isGif
+          ? UrlPreviewWidget.promptMediaGridPlayGif
+          : UrlPreviewWidget.promptMediaGridPlayVideo,
+      child: InkWell(
+        key: ValueKey('$name-play-$index'),
+        onTap: () => _playXVideo(post, media),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            picture,
+            // The label above says what the cell does; the mark and the
+            // badge are its picture.
+            ExcludeSemantics(
+              child: Center(
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.7),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.8),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 26,
+                  ),
                 ),
               ),
-              child: const Icon(
-                Icons.play_arrow_rounded,
-                color: Colors.white,
-                size: 26,
-              ),
             ),
-          ),
+            if (badge != null)
+              Positioned(
+                bottom: 6,
+                left: 6,
+                child: ExcludeSemantics(
+                  child: Container(
+                    key: ValueKey('$name-badge-$index'),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.8),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      badge,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
-        if (duration != null && media.type == XMediaType.video)
-          Positioned(
-            bottom: 6,
-            left: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.8),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                _formatDuration(duration),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ),
-      ],
+      ),
     );
   }
 
-  Future<void> _playQuoteVideo(XPost quote, XMedia media) async {
-    final video = TwitterProvider.videoOf(quote, media,
+  /// Plays [media], one of [post]'s videos or GIFs, in the video dialog.
+  Future<void> _playXVideo(XPost post, XMedia media) async {
+    final video = TwitterProvider.videoOf(post, media,
         thumbnail: media.thumbnailUrl == null
             ? null
             : _networkImage(media.thumbnailUrl!));

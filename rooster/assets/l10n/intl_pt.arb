@@ -660,6 +660,8 @@
   "labelMediaGridHiddenCount": "+{howMany}",
   "promptMediaGridShowMorePhotos": "{howMany,plural, =1{Mostrar mais 1 foto}other{Mostrar mais {howMany} fotos}}",
   "promptXQuoteOpenForMore": "{howMany,plural, =1{Abrir a publicação para ver mais 1 item}other{Abrir a publicação para ver mais {howMany} itens}}",
+  "promptMediaGridPlayVideo": "Reproduzir vídeo",
+  "promptMediaGridPlayGif": "Reproduzir GIF",
   "promptProfileSetRole": "Definir cargo",
   "labelProfilePickRoleFor": "Escolher cargo para {user}",
   "promptProfileKick": "Expulsar",

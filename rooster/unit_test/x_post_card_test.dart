@@ -37,6 +37,21 @@ final _elevenPhotosFixture =
     File('unit_test/fixtures/x_status_eleven_photos_fxtwitter.json')
         .readAsStringSync();
 
+// SpaceX's post of two videos of the first Starship catch, trimmed from a
+// real api.fxtwitter.com reply (2026-11-27).
+final _twoVideosFixture =
+    File('unit_test/fixtures/x_status_two_videos_fxtwitter.json')
+        .readAsStringSync();
+
+// CazéTV's post of a photo followed by a video, trimmed from a real
+// api.fxtwitter.com reply (2026-11-27).
+final _photoVideoFixture =
+    File('unit_test/fixtures/x_status_photo_video_fxtwitter.json')
+        .readAsStringSync();
+
+XPost _postOf(String fixture) =>
+    XPost.fromFxJson(jsonDecode(fixture)['tweet'] as Map<String, dynamic>)!;
+
 /// A picture told apart by [name], so a test can ask which copy of a photo
 /// (the grid's or the lightbox's) a widget was given.
 class _NamedImage extends ImageProvider<_NamedImage> {
@@ -776,6 +791,468 @@ void main() {
       expect(find.text('+16'), findsOneWidget);
       expect(find.bySemanticsLabel('Mostrar mais 16 fotos'), findsOneWidget);
       expect(find.bySemanticsLabel('Foto 2 de 20'), findsOneWidget);
+      semantics.dispose();
+    });
+  });
+
+  test('parses both videos of a post with two', () {
+    final post = _postOf(_twoVideosFixture);
+
+    expect(post.handle, 'SpaceX');
+    expect(post.media.map((item) => item.type),
+        [XMediaType.video, XMediaType.video]);
+    expect(post.photos, isEmpty);
+    expect(post.media[0].url.path, contains('/2122421373616185344/'));
+    expect(post.media[1].url.path, contains('/2122421396441554944/'),
+        reason: 'the second video is its own file, not the first again');
+    expect(post.media[1].thumbnailUrl?.path, contains('/2122421396441554944/'));
+    expect(post.media[0].duration, const Duration(milliseconds: 35500));
+    expect(post.media[1].duration, const Duration(milliseconds: 29679));
+    expect(post.hasVideoGrid, isTrue);
+  });
+
+  test('parses a photo and a video in the order they were posted', () {
+    final post = _postOf(_photoVideoFixture);
+
+    expect(post.handle, 'CazeTVOficial');
+    expect(post.media.map((item) => item.type),
+        [XMediaType.photo, XMediaType.video]);
+    expect(post.photos.single.url.path, '/media/HYFqYLpXoAAIc3n.jpg');
+    expect(post.video?.url.host, 'video.twimg.com');
+    expect(post.hasVideoGrid, isTrue);
+    expect(
+        post.cellImageUrl(post.photos.single)?.queryParameters['name'], 'small',
+        reason: 'the photo shares a grid with the video');
+  });
+
+  test('a GIF has no length, and a video without a variant no file', () {
+    // fxtwitter's shapes: a GIF is an MP4 with `duration: 0`, and a video
+    // it finds no variant of has `url: ""`.
+    final gif = XMedia.fromFxJson({
+      'type': 'gif',
+      'url': 'https://video.twimg.com/tweet_video/HWgLNSFW4AAf41A.mp4',
+      'thumbnail_url':
+          'https://pbs.twimg.com/tweet_video_thumb/HWgLNSFW4AAf41A.jpg',
+      'width': 500,
+      'height': 214,
+      'duration': 0,
+      'format': 'video/mp4',
+    })!;
+    expect(gif.type, XMediaType.gif);
+    expect(gif.duration, isNull);
+    expect(gif.canPlay, isTrue);
+
+    final withheld = XMedia.fromFxJson({
+      'type': 'video',
+      'url': '',
+      'thumbnail_url': 'https://pbs.twimg.com/amplify_video_thumb/1/img/a.jpg',
+      'width': 1280,
+      'height': 720,
+      'duration': 12.5,
+    })!;
+    expect(withheld.canPlay, isFalse);
+    expect(withheld.thumbnailUrl?.host, 'pbs.twimg.com');
+
+    expect(XMedia.fromFxJson({'type': 'video', 'url': ''}), isNull,
+        reason: 'neither a file nor a poster: nothing to draw');
+    expect(XMedia.fromFxJson({'type': 'photo', 'url': ''}), isNull);
+    expect(XMedia.fromFxJson({'type': 'mosaic_photo'}), isNull);
+    expect(
+        XMedia.fromFxJson({
+          'type': 'photo',
+          'url': 'https://pbs.twimg.com/media/a.jpg',
+          'width': 0,
+          'height': 0,
+        })?.aspectRatio,
+        isNull);
+  });
+
+  test('only a grid with a video in it is a video grid', () {
+    XMedia item(XMediaType type) =>
+        XMedia(type: type, url: Uri.parse('https://example.com/${type.name}'));
+    XPost post(List<XMediaType> types) => XPost(
+        url: Uri.parse('https://x.com/a/status/1'),
+        authorName: 'a',
+        handle: 'a',
+        media: [for (final type in types) item(type)]);
+
+    expect(post([]).hasVideoGrid, isFalse);
+    expect(post([XMediaType.photo, XMediaType.photo]).hasVideoGrid, isFalse,
+        reason: 'photos alone are the photo grid');
+    expect(post([XMediaType.video]).hasVideoGrid, isFalse,
+        reason: 'one video is the video thumbnail');
+    expect(post([XMediaType.gif]).hasVideoGrid, isFalse);
+    expect(post([XMediaType.video, XMediaType.video]).hasVideoGrid, isTrue);
+    expect(post([XMediaType.gif, XMediaType.gif]).hasVideoGrid, isTrue);
+    expect(post([XMediaType.photo, XMediaType.video]).hasVideoGrid, isTrue);
+    expect(post([XMediaType.photo, XMediaType.gif]).hasVideoGrid, isTrue);
+    expect(post([XMediaType.video, XMediaType.gif]).hasVideoGrid, isTrue);
+  });
+
+  group('a post whose media holds videos next to other items', () {
+    // One test image per URL, so a test can ask which pictures were drawn.
+    late Map<String, ImageProvider> imagesByUrl;
+    late ui.Image testImage;
+    late List<VideoEmbedInfo> played;
+    late int openedPost;
+
+    setUp(() {
+      imagesByUrl = {};
+      played = [];
+      openedPost = 0;
+    });
+
+    ImageProvider imageFor(Uri url) => imagesByUrl.putIfAbsent(
+        url.toString(), () => FixedImageProvider(testImage));
+
+    XMedia photo(int i) => XMedia(
+          type: XMediaType.photo,
+          url: Uri.parse('https://pbs.twimg.com/media/p$i.jpg'),
+          thumbnailUrl: Uri.parse('https://pbs.twimg.com/media/p$i.jpg'),
+          aspectRatio: 1.5,
+        );
+
+    XMedia video(int i, {Duration duration = const Duration(seconds: 65)}) =>
+        XMedia(
+          type: XMediaType.video,
+          url: Uri.parse('https://video.twimg.com/amplify_video/v$i.mp4'),
+          thumbnailUrl:
+              Uri.parse('https://pbs.twimg.com/amplify_video_thumb/v$i.jpg'),
+          aspectRatio: 9 / 16,
+          duration: duration,
+        );
+
+    XMedia gif(int i) => XMedia(
+          type: XMediaType.gif,
+          url: Uri.parse('https://video.twimg.com/tweet_video/g$i.mp4'),
+          thumbnailUrl:
+              Uri.parse('https://pbs.twimg.com/tweet_video_thumb/g$i.jpg'),
+        );
+
+    XPost posting(List<XMedia> media, {XPost? quote}) => XPost(
+          url: Uri.parse('https://x.com/SpaceX/status/1'),
+          authorName: 'SpaceX',
+          handle: 'SpaceX',
+          text: 'Views from the tower',
+          media: media,
+          quote: quote,
+        );
+
+    Future<void> pumpCard(WidgetTester tester, XPost post,
+        {VideoEmbedInfo? video,
+        double textScale = 1,
+        Size size = const Size(900, 1400)}) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      testImage = (await tester
+          .runAsync(() => createTestImage(width: 600, height: 600)))!;
+      await tester.pumpWidget(_testApp(MediaQuery(
+        data: MediaQueryData(
+            size: size, textScaler: TextScaler.linear(textScale)),
+        child: UrlPreviewWidget(
+          UrlPreviewData(
+            post.url,
+            title: '${post.authorName} (@${post.handle})',
+            type: UrlDestinationType.video,
+            videoEmbedInfo: video,
+            xPost: post,
+          ),
+          networkImage: imageFor,
+          onOpenVideo: (context, video, autoplay) async {
+            expect(autoplay, isTrue);
+            played.add(video);
+          },
+          onOpenLink: () => openedPost++,
+        ),
+      )));
+      await tester.pump();
+    }
+
+    // The post's media, not its author's avatar.
+    Finder inGrid(Finder finder) => find.descendant(
+        of: find.byKey(const ValueKey('x-post-media')), matching: finder);
+
+    Rect cellRect(WidgetTester tester, String key) =>
+        tester.getRect(find.byKey(ValueKey(key)));
+
+    testWidgets('two videos both show, and each plays its own file',
+        (tester) async {
+      final post = _postOf(_twoVideosFixture);
+      await pumpCard(tester, post);
+
+      expect(inGrid(find.byType(Image)), findsNWidgets(2),
+          reason: 'both videos\' posters, not just the first');
+      expect(
+          imagesByUrl.keys,
+          containsAll([
+            'https://pbs.twimg.com/amplify_video_thumb/2122421373616185344/'
+                'img/bAtIv1xqa27PK-pH.jpg',
+            'https://pbs.twimg.com/amplify_video_thumb/2122421396441554944/'
+                'img/GUvXcXDO1BJ99TtB.jpg',
+          ]));
+      expect(find.text('0:35'), findsOneWidget);
+      expect(find.text('0:29'), findsOneWidget);
+      expect(find.byKey(const ValueKey('url-preview-play')), findsNothing,
+          reason: 'the one-video thumbnail would hold only the first');
+
+      // Two equal squares, side by side, within the card.
+      final first = cellRect(tester, 'x-post-play-0');
+      final second = cellRect(tester, 'x-post-play-1');
+      expect(first.size, second.size);
+      expect(first.width, first.height);
+      expect(first.top, second.top);
+      expect(second.left, closeTo(first.right + 4, 0.5));
+      final card =
+          tester.getSize(find.byKey(const ValueKey('url-preview-card')));
+      expect(card.width, lessThanOrEqualTo(480 + 24));
+
+      await tester.tap(find.byKey(const ValueKey('x-post-play-1')));
+      await tester.pump();
+      expect(played.single.streamUrl, post.media[1].url,
+          reason: 'the second cell plays the second video');
+      expect((played.single.playbackSource as NativeVideoSource).uri,
+          post.media[1].url);
+      expect(played.single.originalUrl, post.url);
+      expect(played.single.duration, const Duration(milliseconds: 29679));
+
+      await tester.tap(find.byKey(const ValueKey('x-post-play-0')));
+      await tester.pump();
+      expect(played.last.streamUrl, post.media[0].url);
+      expect(openedPost, 0, reason: 'a cell plays; it does not open the post');
+    });
+
+    testWidgets('a photo and a video both show: one opens, the other plays',
+        (tester) async {
+      final post = _postOf(_photoVideoFixture);
+      await pumpCard(tester, post);
+
+      expect(inGrid(find.byType(Image)), findsNWidgets(2),
+          reason: 'the video next to the photo is not left out');
+      expect(find.byKey(const ValueKey('x-post-photo-0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('x-post-play-1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('url-preview-photo-0')), findsNothing);
+      expect(
+          imagesByUrl.keys,
+          containsAll([
+            'https://pbs.twimg.com/media/HYFqYLpXoAAIc3n.jpg?name=small',
+            'https://pbs.twimg.com/amplify_video_thumb/2126097470576877568/'
+                'img/KbHQuqL3BQGjOu7H.jpg',
+          ]));
+      expect(find.text('0:59'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('x-post-play-1')));
+      await tester.pump();
+      expect(played.single.streamUrl, post.media[1].url);
+
+      await tester.tap(find.byKey(const ValueKey('x-post-photo-0')));
+      await tester.pumpAndSettle();
+      final lightbox = tester.widget<Lightbox>(find.byType(Lightbox));
+      expect(lightbox.gallery, hasLength(1),
+          reason: 'the lightbox pages the post\'s photos');
+      expect(
+          imagesByUrl.keys,
+          contains(
+              'https://pbs.twimg.com/media/HYFqYLpXoAAIc3n.jpg?name=large'));
+    });
+
+    testWidgets('three items: one large next to two stacked', (tester) async {
+      await pumpCard(tester, posting([video(0), photo(1), gif(2)]));
+
+      expect(inGrid(find.byType(Image)), findsNWidgets(3));
+      final big = cellRect(tester, 'x-post-play-0');
+      final top = cellRect(tester, 'x-post-photo-1');
+      final bottom = cellRect(tester, 'x-post-play-2');
+      expect(top.left, greaterThan(big.right));
+      expect(bottom.left, top.left);
+      expect(bottom.top, greaterThan(top.bottom));
+      expect(big.height, closeTo(top.height + bottom.height + 4, 0.5));
+    });
+
+    testWidgets('four videos: a 2x2 grid, each with its own play',
+        (tester) async {
+      final post = posting([for (var i = 0; i < 4; i++) video(i)]);
+      await pumpCard(tester, post);
+
+      expect(inGrid(find.byType(Image)), findsNWidgets(4));
+      final rects = [
+        for (var i = 0; i < 4; i++) cellRect(tester, 'x-post-play-$i'),
+      ];
+      expect(rects[1].top, rects[0].top);
+      expect(rects[2].left, rects[0].left);
+      expect(rects[3].top, rects[2].top);
+      expect(rects[2].top, greaterThan(rects[0].bottom));
+      for (final rect in rects) {
+        expect(rect.size, rects[0].size);
+      }
+
+      for (var i = 0; i < 4; i++) {
+        await tester.tap(find.byKey(ValueKey('x-post-play-$i')));
+        await tester.pump();
+      }
+      expect([for (final video in played) video.streamUrl],
+          [for (final item in post.media) item.url]);
+    });
+
+    testWidgets('a GIF says what it is, a video how long it runs',
+        (tester) async {
+      final semantics = tester.ensureSemantics();
+      await pumpCard(tester, posting([gif(0), video(1)]));
+
+      expect(
+          find.descendant(
+              of: find.byKey(const ValueKey('x-post-badge-0')),
+              matching: find.text('GIF')),
+          findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.byKey(const ValueKey('x-post-badge-1')),
+              matching: find.text('1:05')),
+          findsOneWidget);
+      expect(find.text('0:00'), findsNothing);
+      expect(find.bySemanticsLabel('Play GIF'), findsOneWidget);
+      expect(find.bySemanticsLabel('Play video'), findsOneWidget);
+      semantics.dispose();
+    });
+
+    testWidgets('more than four: "+N" opens the lightbox when photos hide',
+        (tester) async {
+      final semantics = tester.ensureSemantics();
+      await pumpCard(
+          tester, posting([video(0), for (var i = 1; i < 6; i++) photo(i)]));
+
+      expect(inGrid(find.byType(Image)), findsNWidgets(4),
+          reason: 'only the four cells download');
+      expect(find.text('+2'), findsOneWidget);
+      expect(find.bySemanticsLabel('Show 2 more photos'), findsOneWidget);
+      expect(find.byKey(const ValueKey('x-post-play-0')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('x-post-more')));
+      await tester.pumpAndSettle();
+
+      final lightbox = tester.widget<Lightbox>(find.byType(Lightbox));
+      expect(lightbox.gallery, hasLength(5));
+      expect(lightbox.initialIndex, 2,
+          reason: 'the fourth cell is the post\'s third photo');
+      semantics.dispose();
+    });
+
+    testWidgets('more than four: "+N" opens the post when a video hides',
+        (tester) async {
+      final semantics = tester.ensureSemantics();
+      await pumpCard(
+          tester, posting([for (var i = 0; i < 4; i++) photo(i), video(4)]));
+
+      expect(find.text('+1'), findsOneWidget);
+      expect(find.bySemanticsLabel('Open the post to see 1 more item'),
+          findsOneWidget,
+          reason: 'the lightbox pages photos only, so it could not show the '
+              'video the count promises');
+      expect(find.bySemanticsLabel('Show 1 more photo'), findsNothing);
+      semantics.dispose();
+    });
+
+    testWidgets('a video with no file is its poster, and opens the post',
+        (tester) async {
+      final withheld = XMedia(
+        type: XMediaType.video,
+        url: Uri(),
+        thumbnailUrl:
+            Uri.parse('https://pbs.twimg.com/amplify_video_thumb/w.jpg'),
+      );
+      await pumpCard(tester, posting([video(0), withheld]));
+
+      expect(inGrid(find.byType(Image)), findsNWidgets(2));
+      expect(find.byKey(const ValueKey('x-post-play-0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('x-post-play-1')), findsNothing,
+          reason: 'nothing to play');
+
+      await tester.tap(inGrid(find.byType(Image)).at(1));
+      await tester.pump();
+      expect(played, isEmpty);
+      expect(openedPost, 1);
+    });
+
+    testWidgets('the post\'s videos and its quote\'s media all show',
+        (tester) async {
+      await pumpCard(
+        tester,
+        posting(
+          [video(0), video(1)],
+          quote: XPost(
+            url: Uri.parse('https://x.com/TIDAL/status/2'),
+            authorName: 'TIDAL',
+            handle: 'TIDAL',
+            text: 'The quoted post',
+            media: [photo(7), video(8)],
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      for (final key in [
+        'x-post-play-0',
+        'x-post-play-1',
+        'x-quote-photo-0',
+        'x-quote-play-1',
+      ]) {
+        expect(find.byKey(ValueKey(key)), findsOneWidget, reason: key);
+      }
+
+      await tester.tap(find.byKey(const ValueKey('x-quote-play-1')));
+      await tester.pump();
+      expect(played.single.streamUrl.toString(),
+          'https://video.twimg.com/amplify_video/v8.mp4');
+      expect(
+          played.single.originalUrl.toString(), 'https://x.com/TIDAL/status/2');
+    });
+
+    testWidgets('a post of one video keeps the video thumbnail',
+        (tester) async {
+      final only = video(0);
+      final post = posting([only]);
+      await pumpCard(tester, post, video: TwitterProvider.videoOf(post, only));
+
+      expect(find.byKey(const ValueKey('url-preview-play')), findsOneWidget);
+      expect(find.byKey(const ValueKey('x-post-media')), findsNothing);
+      expect(
+          find.descendant(
+              of: find.byKey(const ValueKey('url-preview-duration')),
+              matching: find.text('1:05')),
+          findsOneWidget);
+    });
+
+    testWidgets('a post of one GIF is marked GIF instead of "0:00"',
+        (tester) async {
+      final only = gif(0);
+      final post = posting([only]);
+      await pumpCard(tester, post, video: TwitterProvider.videoOf(post, only));
+
+      expect(find.byKey(const ValueKey('url-preview-play')), findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.byKey(const ValueKey('url-preview-duration')),
+              matching: find.text('GIF')),
+          findsOneWidget);
+      expect(find.text('0:00'), findsNothing);
+    });
+
+    testWidgets('in Portuguese, with larger text, on a phone', (tester) async {
+      await initializeMessages('pt');
+      intl.Intl.defaultLocale = 'pt';
+      addTearDown(() => intl.Intl.defaultLocale = null);
+      final semantics = tester.ensureSemantics();
+
+      await pumpCard(
+          tester, posting([video(0), photo(1), gif(2), photo(3), video(4)]),
+          textScale: 1.3, size: const Size(360, 700));
+
+      expect(tester.takeException(), isNull, reason: 'nothing overflows');
+      expect(find.bySemanticsLabel('Reproduzir vídeo'), findsOneWidget);
+      expect(find.bySemanticsLabel('Reproduzir GIF'), findsOneWidget);
+      expect(find.bySemanticsLabel('Foto 1 de 2'), findsOneWidget);
+      expect(find.bySemanticsLabel('Abrir a publicação para ver mais 1 item'),
+          findsOneWidget);
       semantics.dispose();
     });
   });

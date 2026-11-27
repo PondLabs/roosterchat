@@ -101,9 +101,14 @@ class TwitterProvider implements VideoProvider, PhotoPostProvider {
       return null;
     }
 
+    // The first one: this is the plain video preview, which holds one
+    // video. The X card draws every item from [resolveXPost] instead.
     final video = videos.first as Map<String, dynamic>;
-    final vUrl = video['url'] as String?;
-    final streamUrl = vUrl != null ? Uri.tryParse(vUrl) : null;
+    // fxtwitter sends an empty `url` for a video it finds no variant of,
+    // and an empty link still parses, so it is checked for a scheme.
+    final parsedUrl = Uri.tryParse(video['url'] as String? ?? '');
+    final streamUrl =
+        parsedUrl != null && parsedUrl.hasScheme ? parsedUrl : null;
     final thumbUrl = video['thumbnail_url'] as String?;
 
     double? aspectRatio;
@@ -113,9 +118,11 @@ class TwitterProvider implements VideoProvider, PhotoPostProvider {
       aspectRatio = width / height;
     }
 
+    // fxtwitter writes 0 where X gives no length (every GIF), and a "0:00"
+    // badge would say nothing.
     Duration? duration;
     final durSeconds = (video['duration'] as num?)?.toDouble();
-    if (durSeconds != null) {
+    if (durSeconds != null && durSeconds > 0 && video['type'] != 'gif') {
       duration = Duration(milliseconds: (durSeconds * 1000).round());
     }
 
@@ -179,8 +186,9 @@ class TwitterProvider implements VideoProvider, PhotoPostProvider {
   }
 
   /// [media], a video or GIF of [post], as the video dialog plays it. The X
-  /// card uses it for the quoted post's videos, which [resolve] (the linked
-  /// status only) does not cover.
+  /// card uses it for each video of a post that holds several, or photos
+  /// next to them, and for the quoted post's videos; [resolve] covers only
+  /// the linked status's first video.
   static VideoEmbedInfo videoOf(XPost post, XMedia media,
       {ImageProvider? thumbnail}) {
     final author = '${post.authorName} (@${post.handle})';
@@ -191,8 +199,8 @@ class TwitterProvider implements VideoProvider, PhotoPostProvider {
       author: author,
       thumbnailUrl: media.thumbnailUrl?.toString(),
       thumbnail: thumbnail,
-      streamUrl: media.url,
-      playbackSource: NativeVideoSource(media.url),
+      streamUrl: media.canPlay ? media.url : null,
+      playbackSource: media.canPlay ? NativeVideoSource(media.url) : null,
       aspectRatio: aspectRatio ?? 16.0 / 9.0,
       duration: media.duration,
       platformName: 'X (Twitter)',
