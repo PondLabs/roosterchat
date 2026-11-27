@@ -174,6 +174,18 @@ Scaffold for snack bars.
   (yt-dlp.exe, for one, is a launcher whose Python child would go on
   downloading otherwise).
 
+- The seek bar stays usable while the player buffers (its audio runs dry
+  whenever a growing file hasn't caught up, and after a seek past what
+  arrived): it used to switch off then, which hid the thumb and dropped
+  the drag.
+- The scissors button under the song opens the Space's soundboard editor
+  on it (`showSpaceSoundboardDialog` with a `SoundboardSnip`), its window
+  starting where the song is now and the sound named after it. The DJ's own
+  file is read where it is; any other song goes through its page link, so
+  the soundboard downloads it again (through the same source extension).
+  Shown on desktop to someone who can add sounds to a Space with the call
+  (the first such Space).
+
 ## Known gaps
 
 - The queue lives only in the call: when everyone leaves, it is gone.

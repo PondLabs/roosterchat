@@ -50,6 +50,10 @@ class _NativeDjPlatform implements DjPlatform {
     ];
   }
 
+  @override
+  Future<String?> localPath(DjTrack track) =>
+      DjLocalFiles.instance.pathOf(track.source);
+
   /// Desktop adds files by path ([localTracks]).
   @override
   Future<List<DjTrack>> pickedTracks(

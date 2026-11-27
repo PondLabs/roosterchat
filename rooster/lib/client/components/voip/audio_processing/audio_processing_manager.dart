@@ -180,6 +180,37 @@ abstract class AudioProcessingManager {
 
   bool _recoveryLogged = false;
 
+  // The model (DeepFilterNet) is what takes knocks and claps out; RNNoise,
+  // which suppresses without it, lets them through. It sits out while the
+  // computer is too busy for it (dfn::CostMeter in rust/audio_dsp), which
+  // nobody can see: say so in the log, and when it is back.
+  bool _modelSeen = false;
+  DateTime? _modelOffSince;
+  bool _modelOffLogged = false;
+
+  void _watchModel(AudioDspReport report, DateTime now) {
+    if (!report.noiseSuppressionActive) {
+      _modelOffSince = null;
+      return;
+    }
+    if (report.deepFilterActive) {
+      if (_modelOffLogged) {
+        Log.i("Voice DSP: the model is suppressing again");
+      }
+      _modelSeen = true;
+      _modelOffLogged = false;
+      _modelOffSince = null;
+      return;
+    }
+    if (!_modelSeen || _modelOffLogged) return;
+    // Not the fifth of a second it warms up for after the capture restarts.
+    final since = _modelOffSince ??= now;
+    if (now.difference(since) < const Duration(seconds: 1)) return;
+    _modelOffLogged = true;
+    Log.w("Voice DSP: the model gave way to RNNoise (this computer was too "
+        "busy for it); knocks and claps get through until it is back");
+  }
+
   void publishReport(AudioDspReport report) {
     if (report.recovered && !_recoveryLogged) {
       _recoveryLogged = true;
@@ -197,6 +228,11 @@ abstract class AudioProcessingManager {
         final now = DateTime.now();
         _framesAdvancedAt = now;
         if (report.gateOpen) _gateOpenAt = now;
+        _watchModel(report, now);
+      } else {
+        _modelSeen = false;
+        _modelOffSince = null;
+        _modelOffLogged = false;
       }
     }
 

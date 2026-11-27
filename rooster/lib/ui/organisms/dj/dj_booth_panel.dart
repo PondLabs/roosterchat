@@ -7,9 +7,11 @@ import 'dart:async';
 import 'package:rooster/client/components/dj/dj_links.dart';
 import 'package:rooster/client/components/dj/dj_models.dart';
 import 'package:rooster/client/components/dj/dj_session.dart';
+import 'package:rooster/client/components/soundboard/soundboard_component.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/matrix/components/dj/dj_platform.dart';
+import 'package:rooster/client/matrix/components/soundboard/soundboard_import_platform.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_voip_stream.dart';
 import 'package:rooster/client/member.dart';
 import 'package:rooster/config/layout_config.dart';
@@ -21,6 +23,7 @@ import 'package:rooster/ui/organisms/dj/dj_member_ui.dart';
 import 'package:rooster/ui/molecules/desktop_app_notice.dart';
 import 'package:rooster/ui/organisms/dj/dj_prompts.dart';
 import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
+import 'package:rooster/ui/pages/settings/categories/space/space_soundboard_settings_page.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/links/link_utils.dart';
 import 'package:desktop_drop/desktop_drop.dart';
@@ -664,6 +667,13 @@ class _NowPlaying extends StatefulWidget {
       desc: "Button and menu entry in the DJ booth that opens the web page a "
           "song came from");
 
+  static String get tooltipDjMakeSound =>
+      Intl.message("Make a soundboard sound from this song",
+          name: "tooltipDjMakeSound",
+          desc: "Tooltip on the scissors button in the DJ booth: it opens the "
+              "soundboard's editor on the playing song, where the song is now, "
+              "to cut a piece of it into a sound");
+
   @override
   State<_NowPlaying> createState() => _NowPlayingState();
 }
@@ -730,6 +740,41 @@ class _NowPlayingState extends State<_NowPlaying> {
     );
   }
 
+  /// The soundboard a piece of [track] can become a sound in: one of a
+  /// Space with this call that the user adds sounds to, on a computer that
+  /// makes sounds, for a song it can get (a file only the DJ who added it
+  /// has).
+  // ponytail: the first such Space; a menu of them if a room in several
+  // Spaces turns out to matter.
+  SpaceSoundboardComponent? _soundboard(DjTrack track) {
+    if (!SoundboardImportPlatform.instance.canImport) return null;
+    if (track.isLocalFile
+        ? track.addedBy != dj.selfUserId
+        : track.pageUrl == null) {
+      return null;
+    }
+    final roomId = widget.session.roomId;
+    for (final space in widget.session.client.spaces) {
+      if (!space.containsRoom(roomId)) continue;
+      final soundboard = space.getComponent<SpaceSoundboardComponent>();
+      if (soundboard != null && soundboard.canManage) return soundboard;
+    }
+    return null;
+  }
+
+  Future<void> _snip(
+      SpaceSoundboardComponent soundboard, DjTrack track, int atMs) async {
+    final path =
+        track.isLocalFile ? await DjPlatform.instance.localPath(track) : null;
+    if (!mounted) return;
+    await showSpaceSoundboardDialog(context, soundboard, snip: (
+      path: path,
+      link: path == null ? track.pageUrl : null,
+      startMs: atMs,
+      name: track.title,
+    ));
+  }
+
   Widget _playing(BuildContext context, DjTrack track) {
     final duration = dj.durationMs ?? track.durationMs ?? 0;
     final position = _dragging?.round() ?? dj.positionMs;
@@ -785,13 +830,16 @@ class _NowPlayingState extends State<_NowPlaying> {
           child: Slider(
             value: duration > 0 ? position.clamp(0, duration).toDouble() : 0,
             max: duration > 0 ? duration.toDouble() : 1,
-            onChanged: controls && duration > 0 && !dj.isBuffering
+            // Not off while buffering: the player buffers whenever its audio
+            // runs dry (a song still downloading, a seek past what arrived),
+            // and a bar switched off then drops the thumb and the drag.
+            onChanged: controls && duration > 0
                 ? (v) => setState(() {
                       _dragging = v;
                       _draggingTrack = track.id;
                     })
                 : null,
-            onChangeEnd: controls && duration > 0 && !dj.isBuffering
+            onChangeEnd: controls && duration > 0
                 ? (v) {
                     if (_draggingTrack == dj.current?.id) dj.seek(v.round());
                     setState(() {
@@ -815,8 +863,7 @@ class _NowPlayingState extends State<_NowPlaying> {
               IconButton(
                 tooltip: _NowPlaying.tooltipDjRestart,
                 icon: const Icon(Icons.replay_rounded),
-                onPressed:
-                    controls && !dj.isBuffering ? () => dj.seek(0) : null,
+                onPressed: controls ? () => dj.seek(0) : null,
               ),
               IconButton.filled(
                 style: filledIconButtonStyle(context),
@@ -838,6 +885,12 @@ class _NowPlayingState extends State<_NowPlaying> {
               ),
             ],
             const Spacer(),
+            if (_soundboard(track) case final soundboard?)
+              IconButton(
+                tooltip: _NowPlaying.tooltipDjMakeSound,
+                icon: const Icon(Icons.content_cut_rounded, size: 18),
+                onPressed: () => _snip(soundboard, track, position),
+              ),
             if (track.pageUrl case final page?)
               IconButton(
                 tooltip: _NowPlaying.promptDjOpenSongPage,

@@ -5514,6 +5514,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "tooltipDjMakeSound": "Make a soundboard sound from this song",
+  "@tooltipDjMakeSound": {
+    "description": "Tooltip on the scissors button in the DJ booth: it opens the soundboard's editor on the playing song, where the song is now, to cut a piece of it into a sound",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelDjSourceFile": "File",
   "@labelDjSourceFile": {
     "description": "Tag on a song in the DJ booth that plays from a file on the DJ's computer",

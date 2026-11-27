@@ -51,8 +51,12 @@ import 'package:tiamat/tiamat.dart' as tiamat;
 /// Opens a Space's soundboard page (add a sound, edit the ones there) in a
 /// popup, for the places a user reaches it from outside Space settings: the
 /// call's soundboard and the entrance sound setting.
+///
+/// [snip] opens it on a song already, from [SoundboardSnip.startMs]: the DJ
+/// booth's "make a sound" button.
 Future<void> showSpaceSoundboardDialog(
-    BuildContext context, SpaceSoundboardComponent soundboard) {
+    BuildContext context, SpaceSoundboardComponent soundboard,
+    {SoundboardSnip? snip}) {
   return AdaptiveDialog.show(
     context,
     title: SpaceSoundboardSettingsPage.labelSoundboardDialogTitle(
@@ -64,15 +68,26 @@ Future<void> showSpaceSoundboardDialog(
       return SizedBox(
         width: desktop ? math.min(680, size.width - 80) : size.width,
         height: math.min(640, size.height * (desktop ? 0.8 : 0.7)),
-        child: SpaceSoundboardSettingsPage(soundboard: soundboard),
+        child: SpaceSoundboardSettingsPage(soundboard: soundboard, snip: snip),
       );
     },
   );
 }
 
+/// A song to cut a sound from: a file on this computer ([path]) or a link
+/// ([link]), opened at [startMs] with [name] as the sound's name.
+typedef SoundboardSnip = ({
+  String? path,
+  String? link,
+  int startMs,
+  String name,
+});
+
 class SpaceSoundboardSettingsPage extends StatefulWidget {
   final SpaceSoundboardComponent soundboard;
-  const SpaceSoundboardSettingsPage({super.key, required this.soundboard});
+  final SoundboardSnip? snip;
+  const SpaceSoundboardSettingsPage(
+      {super.key, required this.soundboard, this.snip});
 
   static String labelSoundboardDialogTitle(String space) => Intl.message(
       "Soundboard · $space",
@@ -316,6 +331,23 @@ class _SpaceSoundboardSettingsPageState
   void initState() {
     super.initState();
     _linkCtrl.addListener(_onLinkChanged);
+    if (widget.snip case final snip?) {
+      final name = snip.name.trim();
+      _nameCtrl.text = name.length > SoundboardConstraints.maxNameLength
+          ? name.substring(0, SoundboardConstraints.maxNameLength)
+          : name;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (snip.path case final path?) {
+          _loadWith(() async =>
+              _open(await _import.fromFile(path), startMs: snip.startMs));
+        } else if (snip.link case final link?) {
+          _linkCtrl.text = link;
+          _autoLoad?.cancel();
+          _loadLink(startMs: snip.startMs);
+        }
+      });
+    }
   }
 
   /// A different link than the loaded one drops what was loaded, so "Add
@@ -639,7 +671,7 @@ class _SpaceSoundboardSettingsPageState
     }
   }
 
-  Future<void> _loadLink() => _loadWith(() async {
+  Future<void> _loadLink({int? startMs}) => _loadWith(() async {
         final link = _linkCtrl.text.trim();
         if (link.isEmpty) {
           throw SoundboardImportError(
@@ -648,7 +680,7 @@ class _SpaceSoundboardSettingsPageState
         final source = await _import.fromLink(link,
             onStatus: (status) =>
                 mounted ? setState(() => _status = status) : null);
-        await _open(source);
+        await _open(source, startMs: startMs);
       });
 
   Future<void> _chooseFile() async {
@@ -666,10 +698,11 @@ class _SpaceSoundboardSettingsPageState
     });
   }
 
-  /// Makes [source] the one being trimmed, opened where it asks to start.
-  Future<void> _open(SoundboardSourceFile source) async {
+  /// Makes [source] the one being trimmed, opened at [startMs] or where it
+  /// asks to start.
+  Future<void> _open(SoundboardSourceFile source, {int? startMs}) async {
     try {
-      await _openWindow(source, source.startMs);
+      await _openWindow(source, startMs ?? source.startMs);
     } catch (_) {
       await _import.discard(source);
       rethrow;
