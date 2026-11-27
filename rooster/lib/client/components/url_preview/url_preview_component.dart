@@ -35,27 +35,37 @@ abstract class UrlPreviewComponent<T extends Client> implements Component<T> {
   void warmUpPreviews(Timeline timeline, Iterable<TimelineEvent> events) {}
 
   /// What the card draws first, as the card asks for it: the grid's four
-  /// cells at most (never the photos past them, nor the lightbox's larger
+  /// cells at most (never the items past them, nor the lightbox's larger
   /// copies), or the one image or video thumbnail; an X author's avatar;
-  /// and a quoted post's avatar and first four cells.
+  /// and a quoted post's avatar and first four cells. An X post with a
+  /// video or GIF among several items draws a cell for each, so its cells
+  /// are the photos and the videos' posters, in post order.
   static Iterable<ImageProvider> cardImages(UrlPreviewData data) sync* {
-    if (data.images.isNotEmpty) {
+    final post = data.xPost;
+    if (post != null && post.hasVideoGrid) {
+      yield* _xGridCells(post);
+    } else if (data.images.isNotEmpty) {
       yield* data.images.take(4).map((photo) => photo.image);
     } else if (data.image != null) {
       yield data.image!;
     }
 
-    final avatar = data.xPost?.avatarUrl;
+    final avatar = post?.avatarUrl;
     if (avatar != null) yield NetworkImage(avatar.toString());
 
-    final quote = data.xPost?.quote;
+    final quote = post?.quote;
     if (quote != null) {
       final quoteAvatar = quote.avatarUrl;
       if (quoteAvatar != null) yield NetworkImage(quoteAvatar.toString());
-      for (final item in quote.media.take(4)) {
-        final cell = quote.cellImageUrl(item);
-        if (cell != null) yield NetworkImage(cell.toString());
-      }
+      yield* _xGridCells(quote);
+    }
+  }
+
+  /// The first four cells of [post]'s media grid, as the X card draws them.
+  static Iterable<ImageProvider> _xGridCells(XPost post) sync* {
+    for (final item in post.media.take(4)) {
+      final cell = post.cellImageUrl(item);
+      if (cell != null) yield NetworkImage(cell.toString());
     }
   }
 
@@ -128,7 +138,9 @@ class UrlPreviewData {
   final List<UrlPreviewImage> images;
 
   /// Set for an X status, which shows as an X card instead (author, text,
-  /// [images] or the [videoEmbedInfo] video, quote, counts).
+  /// media, quote, counts). Its media is [images] for a post of photos,
+  /// the [videoEmbedInfo] video for a post of one video, and the post's
+  /// own list for a grid that holds a video ([XPost.hasVideoGrid]).
   final XPost? xPost;
 
   const UrlPreviewData(

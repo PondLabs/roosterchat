@@ -533,12 +533,25 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
     try {
       final post = await provider.resolveXPost(uri);
       if (post == null) return null;
-      final images = _toPreviewImages([
+      // Each photo at the size its cell draws, which the post knows: a
+      // photo next to a video shares a grid, so it is not the only item.
+      final images = [
         for (final photo in post.photos)
-          PostPhoto(photo.url, aspectRatio: photo.aspectRatio),
-      ]);
-      // Same fetch, cached: the video as the player wants it.
-      final video = images.isEmpty ? await provider.resolve(uri) : null;
+          UrlPreviewImage(
+            NetworkImage(post.cellImageUrl(photo).toString()),
+            aspectRatio: photo.aspectRatio,
+            full: NetworkImage(XPhotoSize.large.of(photo.url).toString()),
+          ),
+      ];
+      // Same fetch, cached: the video as the player wants it, for a post
+      // whose one item is a video. With more items (several videos, photos
+      // next to a video) the card draws a cell for each from [post], and
+      // this one video would stand for only the first of them.
+      final video = images.isEmpty && !post.hasVideoGrid
+          ? await provider.resolve(uri)
+          : null;
+      final hasVideo = video != null ||
+          post.media.any((item) => item.type != XMediaType.photo);
       return UrlPreviewData(
         uri,
         siteName: 'X',
@@ -548,10 +561,10 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
         imageAspectRatio: images.firstOrNull?.aspectRatio,
         images: images,
         videoEmbedInfo: video,
-        type: video != null
-            ? UrlDestinationType.video
-            : images.isNotEmpty
-                ? UrlDestinationType.image
+        type: images.isNotEmpty
+            ? UrlDestinationType.image
+            : hasVideo
+                ? UrlDestinationType.video
                 : UrlDestinationType.page,
         xPost: post,
       );

@@ -1,0 +1,62 @@
+{
+  "code": 200,
+  "message": "OK",
+  "tweet": {
+    "url": "https://x.com/CazeTVOficial/status/2126097547685253279",
+    "id": "2126097547685253279",
+    "text": "O COMEÇO DA FURIA NOVORIZONTINO SERÁ COM OS PÉS NO CHÃO 👀\n\nAndré Akkari, CEO da FURIA, foi HONESTO e também reconheceu a dificuldade do Brasileirão na hora de falar sobre o que a FURIA Novorizontino espera para o Brasileirão de 2027 ⚽🇧🇷",
+    "author": {
+      "name": "CazéTV",
+      "screen_name": "CazeTVOficial",
+      "avatar_url": "https://pbs.twimg.com/profile_images/2079696581566029824/H4wZylCo_200x200.jpg",
+      "verification": {
+        "verified": true,
+        "verified_at": null,
+        "type": "individual"
+      }
+    },
+    "replies": 25,
+    "retweets": 12,
+    "likes": 905,
+    "created_at": "Thu Nov 26 23:35:31 +0000 2026",
+    "created_timestamp": 1795736131,
+    "media": {
+      "all": [
+        {
+          "type": "photo",
+          "url": "https://pbs.twimg.com/media/HYFqYLpXoAAIc3n.jpg?name=orig",
+          "width": 1080,
+          "height": 1350
+        },
+        {
+          "type": "video",
+          "url": "https://video.twimg.com/amplify_video/2126097470576877568/vid/avc1/720x900/geFrMnJDvBI6mNvF.mp4?tag=29",
+          "thumbnail_url": "https://pbs.twimg.com/amplify_video_thumb/2126097470576877568/img/KbHQuqL3BQGjOu7H.jpg",
+          "width": 720,
+          "height": 900,
+          "duration": 59.141,
+          "format": "video/mp4"
+        }
+      ],
+      "photos": [
+        {
+          "type": "photo",
+          "url": "https://pbs.twimg.com/media/HYFqYLpXoAAIc3n.jpg?name=orig",
+          "width": 1080,
+          "height": 1350
+        }
+      ],
+      "videos": [
+        {
+          "type": "video",
+          "url": "https://video.twimg.com/amplify_video/2126097470576877568/vid/avc1/720x900/geFrMnJDvBI6mNvF.mp4?tag=29",
+          "thumbnail_url": "https://pbs.twimg.com/amplify_video_thumb/2126097470576877568/img/KbHQuqL3BQGjOu7H.jpg",
+          "width": 720,
+          "height": 900,
+          "duration": 59.141,
+          "format": "video/mp4"
+        }
+      ]
+    }
+  }
+}

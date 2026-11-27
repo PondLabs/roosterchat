@@ -4425,11 +4425,23 @@
   },
   "promptXQuoteOpenForMore": "{howMany,plural, =1{Open the post to see 1 more item}other{Open the post to see {howMany} more items}}",
   "@promptXQuoteOpenForMore": {
-    "description": "Read by screen readers for the last cell of a quoted X post's media grid when what did not fit includes videos: it opens the post on X, where every photo and video is",
+    "description": "Read by screen readers for the last cell of an X post's media grid (the linked post's or the quoted post's) when what did not fit includes videos: it opens the post on X, where every photo and video is",
     "type": "text",
     "placeholders": {
       "howMany": {}
     }
+  },
+  "promptMediaGridPlayVideo": "Play video",
+  "@promptMediaGridPlayVideo": {
+    "description": "Read by screen readers for a video in the media grid of an X post's link preview, next to its photos or other videos: activating it plays that video",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptMediaGridPlayGif": "Play GIF",
+  "@promptMediaGridPlayGif": {
+    "description": "Read by screen readers for an animated GIF in the media grid of an X post's link preview: activating it plays that GIF",
+    "type": "text",
+    "placeholders": {}
   },
   "promptProfileSetRole": "Set Role",
   "@promptProfileSetRole": {

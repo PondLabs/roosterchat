@@ -43,9 +43,18 @@ class XPost {
           if (m.type == XMediaType.photo) m
       ];
 
-  /// The first video or GIF; the card shows one.
+  /// The first video or GIF. A post can hold several, and photos next to
+  /// them: [hasVideoGrid].
   XMedia? get video =>
       media.where((m) => m.type != XMediaType.photo).firstOrNull;
+
+  /// Whether the post's media is a grid with a video or GIF in it: two or
+  /// more items, not all of them photos. Photos alone go through the
+  /// preview's photo grid and a lone video through its video thumbnail, so
+  /// this is the case where every item needs a cell of its own. The X card
+  /// and the warm-up both ask here.
+  bool get hasVideoGrid =>
+      media.length > 1 && media.any((m) => m.type != XMediaType.photo);
 
   /// What a cell of this post's media grid draws for [item], one of
   /// [media]: a photo at [XPhotoSize.medium] when it is the post's only
@@ -126,12 +135,15 @@ enum XPhotoSize {
 class XMedia {
   final XMediaType type;
 
-  /// The photo, or the video's MP4.
+  /// The photo, or the video's MP4. Empty for a video that came with no
+  /// file: [canPlay].
   final Uri url;
 
   /// The photo itself, or the video's poster frame.
   final Uri? thumbnailUrl;
   final double? aspectRatio;
+
+  /// A video's length. Null for a photo, and for a GIF, which has none.
   final Duration? duration;
 
   const XMedia({
@@ -142,6 +154,13 @@ class XMedia {
     this.duration,
   });
 
+  /// Whether this is a video or GIF with a file to play. fxtwitter sends
+  /// an empty `url` for a video it finds no variant of; the card then
+  /// shows the poster and leaves the tap to open the post.
+  bool get canPlay => type != XMediaType.photo && url.hasScheme;
+
+  /// Null for what the card cannot draw: an unknown type, a photo without
+  /// a link, a video with neither a file nor a poster.
   static XMedia? fromFxJson(Map<String, dynamic> json) {
     final type = switch (json['type']) {
       'photo' => XMediaType.photo,
@@ -149,22 +168,34 @@ class XMedia {
       'gif' => XMediaType.gif,
       _ => null,
     };
-    final url = Uri.tryParse(json['url'] as String? ?? '');
-    if (type == null || url == null) return null;
+    if (type == null) return null;
+    final url = _link(json['url']);
+    final poster = _link(json['thumbnail_url']);
+    if (url == null && (type == XMediaType.photo || poster == null)) {
+      return null;
+    }
     final width = json['width'];
     final height = json['height'];
     final seconds = json['duration'];
     return XMedia(
       type: type,
-      url: url,
-      thumbnailUrl: type == XMediaType.photo
-          ? url
-          : Uri.tryParse(json['thumbnail_url'] as String? ?? ''),
-      aspectRatio:
-          width is num && height is num && height > 0 ? width / height : null,
-      duration: seconds is num
+      url: url ?? Uri(),
+      thumbnailUrl: type == XMediaType.photo ? url : poster,
+      aspectRatio: width is num && height is num && width > 0 && height > 0
+          ? width / height
+          : null,
+      // fxtwitter writes 0 where X gives no length: every GIF, a live
+      // broadcast. "0:00" would say nothing.
+      duration: type == XMediaType.video && seconds is num && seconds > 0
           ? Duration(milliseconds: (seconds * 1000).round())
           : null,
     );
+  }
+
+  /// [value] as a link, or null when it is missing, empty or not one.
+  static Uri? _link(Object? value) {
+    if (value is! String || value.isEmpty) return null;
+    final uri = Uri.tryParse(value);
+    return uri != null && uri.hasScheme ? uri : null;
   }
 }

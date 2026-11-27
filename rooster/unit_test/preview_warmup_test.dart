@@ -106,11 +106,13 @@ class _Sites {
             200,
             headers: {'content-type': 'application/json'});
       case 'api.fxtwitter.com' when request.url.path.endsWith(_manyId):
-        return http.Response.bytes(
-            File('unit_test/fixtures/x_status_eleven_photos_fxtwitter.json')
-                .readAsBytesSync(),
-            200,
-            headers: {'content-type': 'application/json'});
+        return _fixture('x_status_eleven_photos_fxtwitter.json');
+      case 'api.fxtwitter.com' when request.url.path.endsWith(_twoVideosId):
+        return _fixture('x_status_two_videos_fxtwitter.json');
+      case 'api.fxtwitter.com' when request.url.path.endsWith(_photoVideoId):
+        return _fixture('x_status_photo_video_fxtwitter.json');
+      case 'api.fxtwitter.com' when request.url.path.endsWith(_oneVideoId):
+        return _fixture('x_status_fxtwitter.json');
       case 'api.fxtwitter.com':
         return http.Response(
             '{"tweet":{"url":"https://x.com/rickastleyco/status/123",'
@@ -142,6 +144,21 @@ final _post = Uri.parse('https://x.com/rickastleyco/status/123');
 // A real post with eleven photos (unit_test/fixtures).
 const _manyId = '2120946118267732158';
 final _manyPhotos = Uri.parse('https://x.com/dinkin_flickaa/status/$_manyId');
+
+// Real posts with two videos, with a photo followed by a video, and with
+// one video (unit_test/fixtures).
+const _twoVideosId = '2122427170328883425';
+final _twoVideos = Uri.parse('https://x.com/SpaceX/status/$_twoVideosId');
+const _photoVideoId = '2126097547685253279';
+final _photoVideo =
+    Uri.parse('https://x.com/CazeTVOficial/status/$_photoVideoId');
+const _oneVideoId = '1732824684683784516';
+final _oneVideo = Uri.parse('https://x.com/SpaceX/status/$_oneVideoId');
+
+/// fxtwitter's reply for a status, from a file trimmed from a real one.
+http.Response _fixture(String name) =>
+    http.Response.bytes(File('unit_test/fixtures/$name').readAsBytesSync(), 200,
+        headers: {'content-type': 'application/json'});
 
 /// Lets the microtasks of warming (fetches, cache writes, queue pumps) run.
 Future<void> drain() async {
@@ -367,7 +384,137 @@ void main() {
     });
   });
 
+  group('X posts with several videos, or photos next to one', () {
+    String url(ImageProvider image) => (image as NetworkImage).url;
+
+    test('a post of two videos keeps both, and warms both posters', () async {
+      final preview = (await component.getPreviewForUrl(room, _twoVideos))!;
+
+      expect(preview.xPost!.media, hasLength(2));
+      expect(preview.videoEmbedInfo, isNull,
+          reason: 'one video would stand for the first of them only; the '
+              'card draws a cell for each');
+      expect(preview.type, UrlDestinationType.video);
+      expect(UrlPreviewComponent.cardImages(preview).map(url), [
+        'https://pbs.twimg.com/amplify_video_thumb/2122421373616185344/img/'
+            'bAtIv1xqa27PK-pH.jpg',
+        'https://pbs.twimg.com/amplify_video_thumb/2122421396441554944/img/'
+            'GUvXcXDO1BJ99TtB.jpg',
+        'https://pbs.twimg.com/profile_images/1697749409851985920/'
+            'HbrI04tM_200x200.jpg',
+      ]);
+    });
+
+    test('a photo next to a video is drawn small, and both are warmed',
+        () async {
+      final preview = (await component.getPreviewForUrl(room, _photoVideo))!;
+
+      expect(preview.xPost!.media.map((item) => item.type),
+          [XMediaType.photo, XMediaType.video]);
+      expect(url(preview.images.single.image),
+          'https://pbs.twimg.com/media/HYFqYLpXoAAIc3n.jpg?name=small',
+          reason: 'it shares a grid with the video, so it is not the '
+              'post\'s only item');
+      expect(url(preview.images.single.full),
+          'https://pbs.twimg.com/media/HYFqYLpXoAAIc3n.jpg?name=large');
+      expect(preview.videoEmbedInfo, isNull);
+      expect(UrlPreviewComponent.cardImages(preview).map(url).take(2), [
+        'https://pbs.twimg.com/media/HYFqYLpXoAAIc3n.jpg?name=small',
+        'https://pbs.twimg.com/amplify_video_thumb/2126097470576877568/img/'
+            'KbHQuqL3BQGjOu7H.jpg',
+      ]);
+    });
+
+    test('a post of one video still plays through the video thumbnail',
+        () async {
+      final preview = (await component.getPreviewForUrl(room, _oneVideo))!;
+
+      expect(preview.xPost!.hasVideoGrid, isFalse);
+      expect(preview.videoEmbedInfo?.streamUrl?.host, 'video.twimg.com');
+      expect(preview.videoEmbedInfo?.duration,
+          const Duration(milliseconds: 114322));
+      expect(preview.type, UrlDestinationType.video);
+      expect(preview.image, isA<NetworkImage>());
+    });
+
+    test('a GIF has no length, and a video without a variant no stream',
+        () async {
+      // fxtwitter's shapes: `duration: 0` for a GIF, `url: ""` for a video
+      // it finds no variant of.
+      Future<UrlPreviewData?> previewOf(String media) {
+        final client = MockClient((request) async => http.Response(
+            '{"tweet":{"url":"https://x.com/a/status/9",'
+            '"author":{"name":"A","screen_name":"a"},"text":"",'
+            '"media":{"all":[$media],"videos":[$media]}}}',
+            200));
+        final component = _Component(
+            providers: CompositeVideoProvider(
+                providers: [TwitterProvider(httpClient: client)]));
+        return component.getPreviewForUrl(
+            room, Uri.parse('https://x.com/a/status/9'));
+      }
+
+      final gif = await previewOf('{"type":"gif",'
+          '"url":"https://video.twimg.com/tweet_video/HWgLNSFW4AAf41A.mp4",'
+          '"thumbnail_url":'
+          '"https://pbs.twimg.com/tweet_video_thumb/HWgLNSFW4AAf41A.jpg",'
+          '"width":500,"height":214,"duration":0}');
+      expect(gif!.videoEmbedInfo?.streamUrl?.path,
+          '/tweet_video/HWgLNSFW4AAf41A.mp4');
+      expect(gif.videoEmbedInfo?.duration, isNull);
+      expect(gif.xPost!.video?.type, XMediaType.gif);
+
+      final withheld = await previewOf('{"type":"video","url":"",'
+          '"thumbnail_url":"https://pbs.twimg.com/amplify_video_thumb/w.jpg",'
+          '"width":1280,"height":720,"duration":12.5}');
+      expect(withheld!.videoEmbedInfo, isNotNull);
+      expect(withheld.videoEmbedInfo?.streamUrl, isNull,
+          reason: 'an empty link is no stream');
+      expect(withheld.videoEmbedInfo?.playbackSource, isNull);
+    });
+  });
+
   group('warmImages', () {
+    test('a grid that holds a video warms its four cells, posters included',
+        () {
+      XMedia photo(int i) => XMedia(
+          type: XMediaType.photo,
+          url: Uri.parse('https://pbs.twimg.com/media/m$i.jpg?name=orig'));
+      XMedia video(int i) => XMedia(
+          type: XMediaType.video,
+          url: Uri.parse('https://video.twimg.com/m$i.mp4'),
+          thumbnailUrl:
+              Uri.parse('https://pbs.twimg.com/amplify_video_thumb/m$i.jpg'));
+      final behindGrid = _RecordingImage('a-photo-the-photo-grid-would-draw');
+
+      UrlPreviewComponent.warmImages(UrlPreviewData(
+        _twoVideos,
+        // The post's photos, which a photo-only post's grid would draw.
+        images: [UrlPreviewImage(behindGrid)],
+        xPost: XPost(
+          url: _twoVideos,
+          authorName: 'SpaceX',
+          handle: 'SpaceX',
+          media: [video(0), photo(1), video(2), photo(3), video(4)],
+        ),
+      ));
+
+      bool warmed(String url) => PaintingBinding.instance.imageCache
+          .statusForKey(NetworkImage(url))
+          .tracked;
+      expect(
+          warmed('https://pbs.twimg.com/amplify_video_thumb/m0.jpg'), isTrue);
+      expect(warmed('https://pbs.twimg.com/media/m1.jpg?name=small'), isTrue);
+      expect(
+          warmed('https://pbs.twimg.com/amplify_video_thumb/m2.jpg'), isTrue);
+      expect(warmed('https://pbs.twimg.com/media/m3.jpg?name=small'), isTrue);
+      expect(
+          warmed('https://pbs.twimg.com/amplify_video_thumb/m4.jpg'), isFalse,
+          reason: 'the fifth is behind the "+1"');
+      expect(_RecordingImage.loaded, isEmpty,
+          reason: 'the cells come from the post, in post order');
+    });
+
     test('loads every picture the card draws first', () {
       final photo = _RecordingImage('photo');
       final main = _RecordingImage('main');
